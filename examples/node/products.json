@@ -1,0 +1,402 @@
+[
+  {
+    "sku": 1,
+    "name": "Recycled Concrete Salad",
+    "category": "Baby",
+    "price": "ick",
+    "stock": 6656,
+    "description": "The blue Cheese combines Haiti aesthetics with Scandium-based durability"
+  },
+  {
+    "sku": 2,
+    "name": "Unbranded Plastic Computer",
+    "category": "Toys",
+    "price": "guacamole",
+    "stock": 2028,
+    "description": "Discover the whale-like agility of our Pants, perfect for pessimistic users"
+  },
+  {
+    "sku": 3,
+    "name": "Electronic Granite Shoes",
+    "category": "Grocery",
+    "price": "frilly",
+    "stock": 7415,
+    "description": "The teal Pants combines Colombia aesthetics with Selenium-based durability"
+  },
+  {
+    "sku": 4,
+    "name": "Luxurious Concrete Cheese",
+    "category": "Books",
+    "price": "urban",
+    "stock": 6293,
+    "description": "Our crispy-inspired Chair brings a taste of luxury to your ambitious lifestyle"
+  },
+  {
+    "sku": 5,
+    "name": "Recycled Plastic Pants",
+    "category": "Shoes",
+    "price": "foot",
+    "stock": 1609,
+    "description": "Our hamster-friendly Bike ensures minor comfort for your pets"
+  },
+  {
+    "sku": 6,
+    "name": "Awesome Granite Hat",
+    "category": "Toys",
+    "price": "boohoo",
+    "stock": 6395,
+    "description": "Sleek Tuna designed with Ceramic for oval performance"
+  },
+  {
+    "sku": 7,
+    "name": "Luxurious Plastic Chicken",
+    "category": "Toys",
+    "price": "loyally",
+    "stock": 112,
+    "description": "Stylish Keyboard designed to make you stand out with hot looks"
+  },
+  {
+    "sku": 8,
+    "name": "Soft Aluminum Towels",
+    "category": "Clothing",
+    "price": "concerning",
+    "stock": 1519,
+    "description": "Stylish Cheese designed to make you stand out with zealous looks"
+  },
+  {
+    "sku": 9,
+    "name": "Handmade Bamboo Ball",
+    "category": "Jewelry",
+    "price": "train",
+    "stock": 686,
+    "description": "New Chicken model with 54 GB RAM, 668 GB storage, and steep features"
+  },
+  {
+    "sku": 10,
+    "name": "Soft Wooden Ball",
+    "category": "Sports",
+    "price": "loyally",
+    "stock": 5785,
+    "description": "Ergonomic Computer made with Bamboo for all-day free support"
+  },
+  {
+    "sku": 11,
+    "name": "Practical Granite Soap",
+    "category": "Movies",
+    "price": "when",
+    "stock": 7974,
+    "description": "Our fresh-inspired Computer brings a taste of luxury to your fruitful lifestyle"
+  },
+  {
+    "sku": 12,
+    "name": "Fantastic Steel Shoes",
+    "category": "Beauty",
+    "price": "like",
+    "stock": 5364,
+    "description": "The Nathaniel Chicken is the latest in a series of thorough products from Altenwerth Inc"
+  },
+  {
+    "sku": 13,
+    "name": "Ergonomic Granite Towels",
+    "category": "Outdoors",
+    "price": "switchboard",
+    "stock": 3048,
+    "description": "The sleek and vast Hat comes with red LED lighting for smart functionality"
+  },
+  {
+    "sku": 14,
+    "name": "Licensed Plastic Computer",
+    "category": "Shoes",
+    "price": "nor",
+    "stock": 1136,
+    "description": "Savor the creamy essence in our Hat, designed for unusual culinary adventures"
+  },
+  {
+    "sku": 15,
+    "name": "Unbranded Granite Fish",
+    "category": "Clothing",
+    "price": "if",
+    "stock": 5522,
+    "description": "Experience the fuchsia brilliance of our Hat, perfect for musty environments"
+  },
+  {
+    "sku": 16,
+    "name": "Luxurious Bronze Ball",
+    "category": "Shoes",
+    "price": "hm",
+    "stock": 6318,
+    "description": "Discover the utter new Table with an exciting mix of Cotton ingredients"
+  },
+  {
+    "sku": 17,
+    "name": "Awesome Bronze Hat",
+    "category": "Baby",
+    "price": "never",
+    "stock": 5450,
+    "description": "Ortiz Group's most advanced Salad technology increases fragrant capabilities"
+  },
+  {
+    "sku": 18,
+    "name": "Ergonomic Bamboo Mouse",
+    "category": "Beauty",
+    "price": "embarrassment",
+    "stock": 4455,
+    "description": "Professional-grade Cheese perfect for baggy training and recreational use"
+  },
+  {
+    "sku": 19,
+    "name": "Licensed Aluminum Ball",
+    "category": "Beauty",
+    "price": "sashay",
+    "stock": 4161,
+    "description": "Experience the gold brilliance of our Towels, perfect for whimsical environments"
+  },
+  {
+    "sku": 20,
+    "name": "Generic Concrete Car",
+    "category": "Shoes",
+    "price": "charlatan",
+    "stock": 4693,
+    "description": "Experience the magenta brilliance of our Sausages, perfect for negligible environments"
+  },
+  {
+    "sku": 21,
+    "name": "Oriental Rubber Fish",
+    "category": "Home",
+    "price": "that",
+    "stock": 466,
+    "description": "The turquoise Chair combines American Samoa aesthetics with Chlorine-based durability"
+  },
+  {
+    "sku": 22,
+    "name": "Elegant Rubber Pizza",
+    "category": "Shoes",
+    "price": "aged",
+    "stock": 1612,
+    "description": "Introducing the Monaco-inspired Computer, blending scientific style with local craftsmanship"
+  },
+  {
+    "sku": 23,
+    "name": "Handmade Gold Pizza",
+    "category": "Beauty",
+    "price": "mosh",
+    "stock": 4435,
+    "description": "The black Keyboard combines Gibraltar aesthetics with Promethium-based durability"
+  },
+  {
+    "sku": 24,
+    "name": "Generic Plastic Table",
+    "category": "Health",
+    "price": "factorise",
+    "stock": 4769,
+    "description": "Experience the white brilliance of our Chicken, perfect for blank environments"
+  },
+  {
+    "sku": 25,
+    "name": "Fantastic Concrete Table",
+    "category": "Industrial",
+    "price": "vice",
+    "stock": 7413,
+    "description": "Introducing the Ireland-inspired Computer, blending writhing style with local craftsmanship"
+  },
+  {
+    "sku": 26,
+    "name": "Bespoke Steel Sausages",
+    "category": "Grocery",
+    "price": "scent",
+    "stock": 8403,
+    "description": "Experience the orchid brilliance of our Ball, perfect for personal environments"
+  },
+  {
+    "sku": 27,
+    "name": "Elegant Granite Table",
+    "category": "Home",
+    "price": "forenenst",
+    "stock": 2573,
+    "description": "Discover the giraffe-like agility of our Shirt, perfect for usable users"
+  },
+  {
+    "sku": 28,
+    "name": "Recycled Concrete Hat",
+    "category": "Shoes",
+    "price": "how",
+    "stock": 1566,
+    "description": "Ergonomic Bacon made with Rubber for all-day blue support"
+  },
+  {
+    "sku": 29,
+    "name": "Handcrafted Plastic Pants",
+    "category": "Grocery",
+    "price": "fail",
+    "stock": 9525,
+    "description": "New Chair model with 68 GB RAM, 318 GB storage, and well-lit features"
+  },
+  {
+    "sku": 30,
+    "name": "Fresh Granite Pizza",
+    "category": "Beauty",
+    "price": "from",
+    "stock": 1484,
+    "description": "Innovative Shoes featuring faint technology and Ceramic construction"
+  },
+  {
+    "sku": 31,
+    "name": "Rustic Silk Computer",
+    "category": "Beauty",
+    "price": "given",
+    "stock": 1732,
+    "description": "Hintz - Gorczany's most advanced Bacon technology increases idealistic capabilities"
+  },
+  {
+    "sku": 32,
+    "name": "Intelligent Marble Soap",
+    "category": "Games",
+    "price": "fellow",
+    "stock": 4474,
+    "description": "Stylish Car designed to make you stand out with pleased looks"
+  },
+  {
+    "sku": 33,
+    "name": "Oriental Plastic Towels",
+    "category": "Beauty",
+    "price": "hold",
+    "stock": 9980,
+    "description": "The sleek and junior Chips comes with olive LED lighting for smart functionality"
+  },
+  {
+    "sku": 34,
+    "name": "Modern Concrete Chicken",
+    "category": "Toys",
+    "price": "repeatedly",
+    "stock": 544,
+    "description": "The sleek and smart Chair comes with violet LED lighting for smart functionality"
+  },
+  {
+    "sku": 35,
+    "name": "Elegant Wooden Pants",
+    "category": "Tools",
+    "price": "round",
+    "stock": 5884,
+    "description": "Collins - Kuhn's most advanced Car technology increases genuine capabilities"
+  },
+  {
+    "sku": 36,
+    "name": "Frozen Steel Towels",
+    "category": "Jewelry",
+    "price": "scarily",
+    "stock": 7777,
+    "description": "Stylish Table designed to make you stand out with muted looks"
+  },
+  {
+    "sku": 37,
+    "name": "Rustic Concrete Pants",
+    "category": "Sports",
+    "price": "drat",
+    "stock": 2769,
+    "description": "New Car model with 77 GB RAM, 155 GB storage, and dull features"
+  },
+  {
+    "sku": 38,
+    "name": "Licensed Cotton Cheese",
+    "category": "Grocery",
+    "price": "whereas",
+    "stock": 8067,
+    "description": "New Ball model with 54 GB RAM, 633 GB storage, and valuable features"
+  },
+  {
+    "sku": 39,
+    "name": "Intelligent Wooden Car",
+    "category": "Kids",
+    "price": "which",
+    "stock": 6344,
+    "description": "The sleek and unwilling Hat comes with maroon LED lighting for smart functionality"
+  },
+  {
+    "sku": 40,
+    "name": "Awesome Aluminum Gloves",
+    "category": "Electronics",
+    "price": "inside",
+    "stock": 3336,
+    "description": "Featuring Neptunium-enhanced technology, our Ball offers unparalleled realistic performance"
+  },
+  {
+    "sku": 41,
+    "name": "Handcrafted Aluminum Chair",
+    "category": "Shoes",
+    "price": "possession",
+    "stock": 5112,
+    "description": "The Mallie Pants is the latest in a series of woeful products from Jones - Huel"
+  },
+  {
+    "sku": 42,
+    "name": "Rustic Concrete Shirt",
+    "category": "Beauty",
+    "price": "courageously",
+    "stock": 1173,
+    "description": "Savor the crunchy essence in our Pants, designed for hopeful culinary adventures"
+  },
+  {
+    "sku": 43,
+    "name": "Refined Bamboo Mouse",
+    "category": "Clothing",
+    "price": "debut",
+    "stock": 2364,
+    "description": "Experience the maroon brilliance of our Chips, perfect for hungry environments"
+  },
+  {
+    "sku": 44,
+    "name": "Handmade Gold Shoes",
+    "category": "Games",
+    "price": "till",
+    "stock": 9828,
+    "description": "Savor the smoky essence in our Bacon, designed for lumbering culinary adventures"
+  },
+  {
+    "sku": 45,
+    "name": "Luxurious Concrete Shoes",
+    "category": "Beauty",
+    "price": "through",
+    "stock": 5384,
+    "description": "Professional-grade Gloves perfect for rusty training and recreational use"
+  },
+  {
+    "sku": 46,
+    "name": "Refined Gold Sausages",
+    "category": "Grocery",
+    "price": "than",
+    "stock": 5097,
+    "description": "The sleek and fond Chicken comes with tan LED lighting for smart functionality"
+  },
+  {
+    "sku": 47,
+    "name": "Generic Concrete Soap",
+    "category": "Sports",
+    "price": "ill-fated",
+    "stock": 2774,
+    "description": "Discover the idolized new Shirt with an exciting mix of Gold ingredients"
+  },
+  {
+    "sku": 48,
+    "name": "Tasty Plastic Ball",
+    "category": "Games",
+    "price": "as",
+    "stock": 6333,
+    "description": "Our hippopotamus-friendly Table ensures hopeful comfort for your pets"
+  },
+  {
+    "sku": 49,
+    "name": "Gorgeous Silk Chips",
+    "category": "Games",
+    "price": "thigh",
+    "stock": 7107,
+    "description": "Ergonomic Bacon made with Granite for all-day corrupt support"
+  },
+  {
+    "sku": 50,
+    "name": "Tasty Concrete Salad",
+    "category": "Sports",
+    "price": "who",
+    "stock": 2008,
+    "description": "New Sausages model with 43 GB RAM, 572 GB storage, and vivacious features"
+  }
+]

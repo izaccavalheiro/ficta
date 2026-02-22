@@ -1,0 +1,22 @@
+{
+  "name": "ficta-node-example",
+  "version": "1.0.0",
+  "description": "Example of using Ficta in Node.js",
+  "type": "module",
+  "main": "basic-usage.js",
+  "scripts": {
+    "start": "node basic-usage.js",
+    "advanced": "node advanced-usage.js"
+  },
+  "keywords": [
+    "ficta",
+    "test-data",
+    "faker",
+    "generator"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "ficta": "^1.0.0"
+  }
+}
