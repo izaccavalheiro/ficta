@@ -1,6 +1,6 @@
 {
   "name": "ficta",
-  "version": "1.1.0",
+  "version": "1.1.2",
   "type": "module",
   "main": "./src/node.js",
   "browser": "./dist/ficta.browser.js",
