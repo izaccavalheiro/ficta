@@ -188,12 +188,37 @@ export function generateRow(columns, index) {
  * Generate data as array of objects
  * @param {Object} options - Generation options
  * @param {string} options.columns - Column definitions
+ * @param {string} options.template - Template name (optional)
  * @param {number} options.rows - Number of rows to generate
  * @returns {Object} Object with records and metadata
  */
 export function generateData(options) {
-  const columns = parseColumns(options.columns);
-  const rows = options.rows || 100;
+  // Resolve template if provided
+  let columnString = options.columns;
+  let rowCount = options.rows;
+  
+  if (options.template) {
+    const template = templates[options.template];
+    if (!template) {
+      throw new Error(`Unknown template: ${options.template}. Available templates: ${Object.keys(templates).join(', ')}`);
+    }
+    // Use template columns if columns not explicitly provided
+    if (!columnString) {
+      columnString = template.columns;
+    }
+    // Use template rows as default if rows not specified
+    if (!rowCount) {
+      rowCount = template.rows;
+    }
+  }
+  
+  // Ensure we have columns
+  if (!columnString) {
+    throw new Error('Either columns or template must be provided');
+  }
+  
+  const columns = parseColumns(columnString);
+  const rows = rowCount || 100;
   const records = [];
   
   for (let i = 0; i < rows; i++) {
