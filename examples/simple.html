@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ficta - Simple Example</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #333;
+        }
+        .container {
+            margin-top: 30px;
+        }
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>Ficta - Browser Example</h1>
+    <p>This example demonstrates using the Ficta library with a simple script tag (IIFE bundle).</p>
+    
+    <div id="app-container" class="container"></div>
+
+    <!-- Include the Ficta bundle -->
+    <script src="../dist/ficta.browser.js"></script>
+    
+    <script>
+        // The library is available as Ficta global variable
+        // Initialize Faker (bundled with the library)
+        
+        // Create the UI
+        const ui = Ficta.createUI('#app-container');
+        
+        // Optional: Programmatically set some defaults
+        ui.setColumns('id:autoIncrement,email:pattern:user+{COUNTER}@example.com,name:fullName');
+        ui.setRows(50);
+        
+        console.log('Ficta UI ready!');
+        console.log('Available methods:', Object.keys(Ficta));
+    </script>
+</body>
+</html>

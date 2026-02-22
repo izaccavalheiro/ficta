@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ficta - ES Module Example</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 1000px;
+            margin: 40px auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #333;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 30px;
+        }
+        .section {
+            border: 1px solid #ddd;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        pre {
+            background: #f4f4f4;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+        .status {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 4px;
+            display: none;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+    </style>
+</head>
+<body>
+    <h1>Ficta - ES Module Example</h1>
+    <p>This example demonstrates using Ficta as an ES module with programmatic control.</p>
+    
+    <div class="container">
+        <div class="section">
+            <h2>Built-in UI</h2>
+            <div id="ui-container"></div>
+        </div>
+        
+        <div class="section">
+            <h2>Programmatic Usage</h2>
+            <p>Generate custom CSV with JavaScript:</p>
+            <button id="generate-users">Generate 100 Users</button>
+            <button id="generate-products">Generate 50 Products</button>
+            <button id="generate-custom">Generate Custom (Email Pattern)</button>
+            <div id="custom-status" class="status"></div>
+        </div>
+    </div>
+
+    <div class="section" style="margin-top: 20px;">
+        <h2>Preview (Last Generated)</h2>
+        <pre id="preview">Generate a CSV to see preview here...</pre>
+    </div>
+
+    <!-- Using ES Module -->
+    <script type="module">
+        // Import the ES module bundle
+        import * as Ficta from '../dist/ficta.esm.js';
+        
+        // Initialize Faker (included in the bundle)
+        console.log('Ficta loaded:', Object.keys(Ficta));
+        
+        // Create the built-in UI
+        const ui = Ficta.createUI('#ui-container');
+        
+        // Get DOM elements
+        const generateUsersBtn = document.getElementById('generate-users');
+        const generateProductsBtn = document.getElementById('generate-products');
+        const generateCustomBtn = document.getElementById('generate-custom');
+        const customStatus = document.getElementById('custom-status');
+        const preview = document.getElementById('preview');
+        
+        // Helper to show status
+        function showStatus(message) {
+            customStatus.textContent = message;
+            customStatus.className = 'status success';
+            customStatus.style.display = 'block';
+            setTimeout(() => {
+                customStatus.style.display = 'none';
+            }, 3000);
+        }
+        
+        // Helper to show preview
+        function showPreview(result) {
+            const lines = result.csv.split('\n');
+            const previewLines = lines.slice(0, 6).join('\n');
+            preview.textContent = previewLines + '\n... (' + result.rowCount + ' rows total)';
+        }
+        
+        // Generate users
+        generateUsersBtn.addEventListener('click', () => {
+            const result = Ficta.generateCSV({
+                columns: Ficta.templates.users.columns,
+                rows: 100
+            });
+            Ficta.downloadCSV(result.csv, 'users.csv');
+            showStatus('✓ Generated 100 users!');
+            showPreview(result);
+        });
+        
+        // Generate products
+        generateProductsBtn.addEventListener('click', () => {
+            const result = Ficta.generateCSV({
+                columns: Ficta.templates.products.columns,
+                rows: 500
+            });
+            Ficta.downloadCSV(result.csv, 'products.csv');
+            showStatus('✓ Generated 50 products!');
+            showPreview(result);
+        });
+        
+        // Generate custom with email pattern
+        generateCustomBtn.addEventListener('click', () => {
+            const result = Ficta.generateCSV({
+                columns: 'id:autoIncrement,email:pattern:user+{COUNTER}@test.com,name:fullName,status:enum:active|inactive,score:range:0-100',
+                rows: 25
+            });
+            Ficta.downloadCSV(result.csv, 'custom-data.csv');
+            showStatus('✓ Generated 25 rows with email counter pattern!');
+            showPreview(result);
+        });
+        
+        // Make it available in console for experimenting
+        window.Ficta = Ficta;
+        console.log('Try: Ficta.generateCSV({ columns: "id:autoIncrement,name:fullName,email", rows: 10 })');
+    </script>
+</body>
+</html>
