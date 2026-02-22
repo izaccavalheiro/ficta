@@ -1,6 +1,6 @@
 {
   "name": "ficta",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "main": "./src/node.js",
   "browser": "./dist/ficta.browser.js",
@@ -21,7 +21,8 @@
     "src/",
     "dist/",
     "cli.js",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "node build.js",
@@ -29,10 +30,35 @@
     "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
     "prepublishOnly": "npm run build"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "fake-data",
+    "test-data",
+    "faker",
+    "mock-data",
+    "csv-generator",
+    "data-generator",
+    "test-data-generator",
+    "json-generator",
+    "xml-generator",
+    "excel-generator",
+    "sql-generator",
+    "yaml-generator",
+    "toml-generator",
+    "cli",
+    "browser",
+    "nodejs"
+  ],
+  "author": "Izac Cavaheiro <izac@izaccavalheiro.com>",
   "license": "ISC",
-  "description": "",
+  "description": "Universal test data generator for Node.js, browsers, and CLI. Generate realistic test data in multiple formats (CSV, JSON, XML, Excel, TSV, SQL, YAML, TOML) using Faker.js.",
+  "homepage": "https://github.com/izaccavalheiro/ficta#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/izaccavalheiro/ficta.git"
+  },
+  "bugs": {
+    "url": "https://github.com/izaccavalheiro/ficta/issues"
+  },
   "dependencies": {
     "@faker-js/faker": "^10.1.0",
     "@iarna/toml": "^2.2.5",
