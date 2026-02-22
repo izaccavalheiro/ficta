@@ -33,6 +33,9 @@ Universal test data generator that works in Node.js, browsers, and CLI. Generate
 - **Smart detection**: Format auto-detection from file extension
 - **Templates**: Predefined schemas (users, products, transactions)
 - **Special types**: auto-increment, enums, ranges, patterns with counters
+- **SQL Schema Generation**: DDL, foreign keys, 4 dialects (PostgreSQL, MySQL, SQLite, generic)
+- **DDL Import**: Parse existing `.sql` schema files and generate FK-aware test data
+- **Multi-table orchestration**: Topological FK ordering, parent-to-child generation
 
 ### Tech Stack
 - **Language**: JavaScript (ES Modules)
@@ -46,7 +49,7 @@ Universal test data generator that works in Node.js, browsers, and CLI. Generate
   - `@iarna/toml` - TOML formatting
   - `yargs` - CLI argument parsing
 - **Build**: esbuild (browser bundles)
-- **Testing**: Jest with 100% coverage
+- **Testing**: Jest — 596 tests, 100% overall coverage
 
 ---
 
@@ -57,14 +60,24 @@ Universal test data generator that works in Node.js, browsers, and CLI. Generate
 ```
 ficta/
 ├── src/
-│   ├── core.js              # Core generation logic (universal)
+│   ├── core.js              # Core generation logic (universal — no env deps)
 │   ├── formatters.js        # Format converters (Node.js)
 │   ├── formatters.browser.js # Format converters (browser)
-│   ├── node.js              # Node.js entry point
-│   └── browser.js           # Browser entry point
+│   ├── node.js              # Node.js entry point + generateFromDDL()
+│   ├── browser.js           # Browser entry point
+│   ├── sql-schema.js        # SQL DDL/DML generator with dialect support (universal)
+│   ├── ddl-parser.js        # SQL DDL → TableDef parser (universal, pure)
+│   └── schema-generator.js  # Multi-table FK-aware data orchestrator (universal)
 ├── cli.js                   # CLI entry point
-├── tests/                   # Test files
+├── tests/                   # Test files (596 tests, 100% coverage)
+│   ├── sql-schema.test.js   # SQL schema generator tests (73+ tests)
+│   ├── ddl-parser.test.js   # DDL parser tests (762 lines)
+│   └── schema-generator.test.js # Orchestrator tests
 ├── examples/                # Usage examples
+│   ├── sql-schema.html      # Interactive browser SQL demo
+│   └── node/
+│       ├── sql-simple.js          # Basic SQL examples
+│       └── sql-schema-examples.js # Advanced multi-table examples
 └── dist/                    # Built browser bundles
 ```
 
@@ -78,6 +91,7 @@ ficta/
 
 ### Data Flow
 
+**Standard generation (column definitions):**
 ```
 User Input → Parse Columns → Generate Rows → Format Data → Output
      ↓            ↓               ↓              ↓           ↓
@@ -87,6 +101,22 @@ User Input → Parse Columns → Generate Rows → Format Data → Output
                                Types         toExcel()
                                               toYAML()
                                               toTOML()
+                                              toSQL()
+```
+
+**DDL-driven generation (schema import):**
+```
+DDL String / .sql File
+     ↓
+parseDDL()          — extracts tables, columns, PKs, FKs
+     ↓
+orderByDependencies() — topological sort (FK order)
+     ↓
+generateTableData()   — FK-aware row generation with pkStore
+     ↓
+generateDDL() / generateInserts() / generateUpserts()
+     ↓
+Complete SQL script
 ```
 
 ---
@@ -124,11 +154,23 @@ handlePattern(options, counter) → string
 **Exports:**
 - `generateData(options)` - Generate data in specified format
 - `generateAndSave(options)` - Generate and save to file
+- `generateFromDDL(options)` - Read a `.sql` file, generate test data, optionally save
 - `listTypes()` - Export from core
 - `listTemplates()` - Export from core
 - `templates` - Export from core
 
-**Options Object:**
+**`generateFromDDL` options:**
+```javascript
+{
+  schemaFile: string,   // Required: path to DDL .sql file
+  rows: number,         // Rows per table (default: 10)
+  outputMode: string,   // 'insert' | 'upsert' | 'truncate+insert' | 'ddl+insert'
+  dialect: string,      // 'postgres' | 'mysql' | 'sqlite' | 'generic'
+  output: string        // Optional: write generated SQL to this file path
+}
+```
+
+**`generateAndSave` options:**
 ```javascript
 {
   columns: string | Array,  // Column definitions
@@ -163,10 +205,55 @@ handlePattern(options, counter) → string
 - `toXML(records, rootElement, recordElement)` - Convert to XML (async)
 - `toExcel(records, columns, sheetName)` - Create Excel buffer (async)
 - `toTSV(records, columns)` - Convert to TSV string
-- `toSQL(records, columns, tableName)` - Generate SQL INSERT statements
+- `toSQL(records, columns, tableNameOrOptions)` - INSERT statements (legacy) or full schema (options object)
 - `toYAML(records)` - Convert to YAML string
 - `toTOML(records)` - Convert to TOML string
 - `formatColumnName(name)` - Convert camelCase to Title Case
+
+### SQL Schema Module (`src/sql-schema.js`)
+
+Universal (no runtime env dependencies). Handles DDL and DML generation.
+
+**Exports:**
+- `sqlTypeMap` - Mapping of 40+ Faker types → SQL types per dialect
+- `getSQLType(column, dialect)` - Resolve SQL type for a column
+- `generateDDL(tableName, columns, options)` - CREATE TABLE statement
+- `generateInserts(tableName, records, columns, options)` - INSERT statements
+- `generateUpserts(tableName, records, columns, options)` - UPSERT statements (dialect-aware)
+- `resolveTableDependencies(tables)` - Topological sort (legacy helper)
+- `generateSchema(schema)` - Complete schema generator (multi-table)
+- `buildInsertStatements(options)` — *see schema-generator.js*
+
+### DDL Parser (`src/ddl-parser.js`)
+
+Pure module. Converts raw SQL DDL strings into structured `TableDef` objects. Zero side effects; works in both Node.js and browsers.
+
+**Exports:**
+- `parseDDL(ddlString)` - Parse one or more `CREATE TABLE` statements
+  - Returns `Array<TableDef>` where each entry has `{ tableName, columns, primaryKey, foreignKeys }`
+  - `columns[i]` fields: `name`, `sqlType`, `fictaType`, `nullable`, `autoIncrement`, `defaultValue`, `enumValues`
+- `orderByDependencies(tables)` - Topological sort using Kahn's algorithm
+  - Throws `Error` if circular FK dependencies are detected
+
+**Two-layer type resolution in `parseDDL`:**
+1. Column **name hints** (e.g., column named `email` → `email` type regardless of SQL type)
+2. SQL **type fallback** (e.g., `SERIAL` → `autoIncrement`, `BOOLEAN` → `boolean`)
+
+### Schema Generator (`src/schema-generator.js`)
+
+Orchestrates multi-table generation from DDL. Pure module; Faker must be initialised via `setFaker()` from `core.js` before use.
+
+**Exports:**
+- `generateFromSchema(options)` - Main entry point
+  - `options.ddl` — raw DDL string (mutually exclusive with `options.tables`)
+  - `options.tables` — pre-parsed `TableDef[]` array
+  - `options.rows` — rows per table (default `10`)
+  - `options.outputMode` — `'insert'` | `'upsert'` | `'truncate+insert'` | `'ddl+insert'`
+  - `options.dialect` — `'mysql'` | `'postgres'` | `'sqlite'` | `'generic'`
+- `buildInsertStatements(options)` - Pure helper for INSERT/UPSERT on a single table
+  - `options.tableName`, `options.records`, `options.columns`, `options.dialect`, `options.outputMode`, `options.conflictColumns`
+
+**FK-aware data generation:** When generating child-table rows the orchestrator samples parent PK values stored in `pkStore`, so referential integrity is maintained across generated data.
 
 ---
 
@@ -352,7 +439,61 @@ function generateValue(column, counter) {
 }
 ```
 
-### Task 5: Modify CSV Escaping Logic
+### Task 5: Generate Test Data from an Existing SQL Schema
+
+**Use case**: You have a `.sql` file with `CREATE TABLE` statements and want realistic test data.
+
+**Node.js (reads file from disk):**
+```javascript
+import { generateFromDDL } from './src/node.js';
+
+// Reads schema.sql, generates data, optionally writes seed.sql
+const sql = await generateFromDDL({
+  schemaFile: './schema.sql',
+  rows: 20,
+  outputMode: 'ddl+insert', // 'insert' | 'upsert' | 'truncate+insert' | 'ddl+insert'
+  dialect: 'postgres',       // 'postgres' | 'mysql' | 'sqlite' | 'generic'
+  output: './seed.sql'
+});
+```
+
+**Universal (browser + Node.js):**
+```javascript
+import { setFaker } from './src/core.js';
+import { faker } from '@faker-js/faker';
+import { generateFromSchema } from './src/schema-generator.js';
+
+setFaker(faker);
+
+const sql = generateFromSchema({
+  ddl: `
+    CREATE TABLE users (
+      id SERIAL PRIMARY KEY,
+      email VARCHAR(255) NOT NULL
+    );
+    CREATE TABLE posts (
+      id SERIAL PRIMARY KEY,
+      user_id INT REFERENCES users(id),
+      title VARCHAR(255)
+    );
+  `,
+  rows: 10,
+  outputMode: 'ddl+insert',
+  dialect: 'postgres'
+});
+```
+
+**Parse DDL into table definitions manually:**
+```javascript
+import { parseDDL, orderByDependencies } from './src/ddl-parser.js';
+
+const tables = parseDDL(rawDDL);
+// tables[0] = { tableName, columns, primaryKey, foreignKeys }
+const ordered = orderByDependencies(tables);
+// ordered = tables sorted so parent tables precede child tables
+```
+
+### Task 6: Modify CSV Escaping Logic
 
 **Location**: `src/formatters.js` → `toCSV()` function
 
@@ -389,7 +530,10 @@ tests/
 ├── formatters.browser.test.js # Browser formatters
 ├── node.test.js              # Node.js API
 ├── browser.test.js           # Browser API
-└── cli.test.js               # CLI interface
+├── cli.test.js               # CLI interface
+├── sql-schema.test.js        # SQL schema generator (73+ tests)
+├── ddl-parser.test.js        # DDL parser (762-line test suite)
+└── schema-generator.test.js  # Multi-table orchestrator
 ```
 
 ### Running Tests
@@ -459,9 +603,9 @@ test('uses custom faker configuration', () => {
 
 ### Coverage Goals
 
-- **Target**: 100% code coverage
-- **Critical paths**: Core generation, formatters, special types
-- **Edge cases**: Empty data, special characters, large datasets
+- **Target**: Maintain 100% overall coverage
+- **Critical paths**: Core generation, formatters, special types, DDL parser, schema orchestrator
+- **Edge cases**: Empty data, special characters, large datasets, circular FK dependencies
 
 ---
 
@@ -855,6 +999,9 @@ if (value.includes(',') || value.includes('"')) {
 - Node API: `src/node.js`
 - Browser API: `src/browser.js`
 - Formatters: `src/formatters.js`
+- SQL DDL/DML generator: `src/sql-schema.js`
+- DDL parser: `src/ddl-parser.js`
+- Multi-table orchestrator: `src/schema-generator.js`
 - CLI: `cli.js`
 - Tests: `tests/*.test.js`
 
@@ -907,6 +1054,6 @@ node cli.js --help         # CLI help
 
 ---
 
-**Last Updated:** 2026-02-21
-**Agent Version:** 1.0.0
+**Last Updated:** 2026-02-22
+**Agent Version:** 2.0.0
 **Project Version:** 1.0.0

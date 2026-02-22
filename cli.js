@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
-import { generateAndSave, listTypes, listTemplates, templates } from './src/node.js';
+import { generateAndSave, generateFromDDL, listTypes, listTemplates, templates } from './src/node.js';
 
 // CLI setup
 function setupCLI() {
@@ -13,6 +13,8 @@ function setupCLI() {
     .example('$0 -t users -r 500 -f xml -o myusers.xml', 'Generate XML file using template')
     .example('$0 -c "status:enum:active|inactive,score:range:0-100"', 'Use special types')
     .example('$0 -c "email:pattern:user+{COUNTER}@example.com" -r 50', 'Generate emails with counter pattern')
+    .example('$0 -o schema.sql --sql-mode ddl+insert --sql-dialect postgres -t users', 'Generate PostgreSQL schema with data')
+    .example('$0 -o data.sql --sql-mode upsert --sql-dialect mysql -c "id,name,email" -r 100', 'Generate MySQL upsert statements')
     .option('output', {
       alias: 'o',
       describe: 'Output filename (extension determines format if -f not specified)',
@@ -68,8 +70,28 @@ function setupCLI() {
       describe: 'SQL table name (default: data_table)',
       type: 'string'
     })
+    .option('sql-dialect', {
+      describe: 'SQL dialect for DDL generation',
+      type: 'string',
+      choices: ['postgres', 'mysql', 'sqlite', 'generic']
+    })
+    .option('sql-mode', {
+      describe: 'SQL generation mode',
+      type: 'string',
+      choices: ['insert', 'ddl', 'ddl+insert', 'upsert', 'truncate+insert'],
+      default: 'insert'
+    })
+    .option('sql-batch', {
+      describe: 'Use batch INSERT statements (multiple VALUES)',
+      type: 'boolean',
+      default: false
+    })
     .check((argv) => {
       if (argv.listTypes || argv.listTemplates) {
+        return true;
+      }
+      // 'schema' subcommand has its own required positional arg — skip check
+      if (argv._[0] === 'schema') {
         return true;
       }
       if (!argv.columns && !argv.template) {
@@ -84,6 +106,11 @@ function setupCLI() {
 
 // Main execution function
 async function main(argv) {
+  // 'schema' subcommand is handled by its own yargs command handler — skip
+  if (argv._ && argv._[0] === 'schema') {
+    return;
+  }
+
   if (argv.listTypes) {
     listTypes();
     return;
@@ -112,6 +139,15 @@ async function main(argv) {
   }
   if (argv.tableName) {
     options.formatOptions.tableName = argv.tableName;
+  }
+  if (argv.sqlDialect) {
+    options.formatOptions.dialect = argv.sqlDialect;
+  }
+  if (argv.sqlMode) {
+    options.formatOptions.mode = argv.sqlMode;
+  }
+  if (argv.sqlBatch) {
+    options.formatOptions.batch = argv.sqlBatch;
   }
 
   // Use template if specified

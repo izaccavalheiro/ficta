@@ -808,5 +808,17 @@ describe('Core Module', () => {
       expect(typeof result.records[0].uid).toBe('string');
       expect(typeof result.records[0].nid).toBe('string');
     });
+
+    test('should generate data with json type', () => {
+      const result = generateData({
+        columns: 'j:json',
+        rows: 1
+      });
+
+      expect(result.records[0]).toHaveProperty('j');
+      expect(typeof result.records[0].j).toBe('string');
+      // Should be parseable JSON
+      expect(() => JSON.parse(result.records[0].j)).not.toThrow();
+    });
   });
 });

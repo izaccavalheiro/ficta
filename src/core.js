@@ -91,6 +91,12 @@ export const fakerTypes = {
   
   // Boolean
   boolean: () => getFaker().datatype.boolean(),
+
+  // JSON
+  json: () => JSON.stringify(getFaker().helpers.multiple(() => ({
+    key: getFaker().word.sample(),
+    value: getFaker().word.sample()
+  }), { count: { min: 1, max: 3 } })),
   
   // Special
   color: () => getFaker().color.human(),

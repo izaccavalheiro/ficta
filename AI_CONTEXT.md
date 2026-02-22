@@ -36,10 +36,14 @@ ficta -t users -r 1000 -o users.xlsx
 src/
   core.js              ← 🎯 Core logic: parseColumns, generateRows
   formatters.js        ← Format converters (CSV, JSON, XML, Excel, etc.)
-  node.js              ← Node.js API wrapper
+  formatters.browser.js ← Browser-safe format converters
+  node.js              ← Node.js API wrapper + generateFromDDL()
   browser.js           ← Browser API wrapper
+  sql-schema.js        ← SQL DDL/DML generator (universal)
+  ddl-parser.js        ← SQL DDL → TableDef parser (universal, pure)
+  schema-generator.js  ← Multi-table FK-aware orchestrator (universal)
 cli.js                 ← CLI interface with yargs
-tests/*.test.js        ← 100% test coverage
+tests/*.test.js        ← 596 tests, 100% overall coverage
 ```
 
 ## 🔑 Core Concepts
@@ -77,6 +81,8 @@ Input String → Parse → Generate → Format → Output
                                  toXML()
                                  toYAML()
                                  toTOML()
+
+DDL String / .sql file → parseDDL() → orderByDependencies() → generateFromSchema() → SQL
 ```
 
 **Key principle:** Core is universal (no Node/browser deps), adapters add environment-specific features.
@@ -98,6 +104,30 @@ myTemplate: "field1:type1,field2:type2,..."
 ### Task: Add Output Format
 **Files:** 
 1. `src/formatters.js` → Add `toFormatName()` function
+
+### Task: Generate Data from SQL DDL Schema
+**Node.js API:**
+```javascript
+import { generateFromDDL } from 'ficta';
+const sql = await generateFromDDL({
+  schemaFile: './schema.sql',
+  rows: 20,
+  outputMode: 'ddl+insert', // 'insert' | 'upsert' | 'truncate+insert' | 'ddl+insert'
+  dialect: 'postgres',
+  output: './seed.sql'
+});
+```
+**Universal API (browser + Node.js):**
+```javascript
+import { generateFromSchema } from 'ficta/src/schema-generator.js';
+const sql = generateFromSchema({ ddl: rawDDLString, rows: 10, dialect: 'postgres' });
+```
+**Parse DDL manually:**
+```javascript
+import { parseDDL, orderByDependencies } from 'ficta/src/ddl-parser.js';
+const tables = parseDDL(rawDDLString);
+const ordered = orderByDependencies(tables);
+```
 2. `src/node.js` → Add case to switch statement
 3. `cli.js` → Add to format choices
 
@@ -137,11 +167,15 @@ jest              // Testing
 | CSV formatting | `src/formatters.js` → `toCSV()` |
 | JSON formatting | `src/formatters.js` → `toJSON()` |
 | Excel formatting | `src/formatters.js` → `toExcel()` |
-| Special types (enum, range) | `src/core.js` → `handleEnum()`, `handleRange()` |
+| Special types (enum, range) | `src/core.js` → `generateRow()` |
 | Templates | `src/core.js` → `templates` object |
 | CLI logic | `cli.js` → `setupCLI()` |
 | Node.js API | `src/node.js` → `generateAndSave()` |
+| DDL file import | `src/node.js` → `generateFromDDL()` |
 | Browser API | `src/browser.js` → `generateData()`, `downloadFile()` |
+| SQL DDL/DML generation | `src/sql-schema.js` → `generateDDL()`, `generateInserts()` |
+| Parse SQL schema | `src/ddl-parser.js` → `parseDDL()` |
+| Multi-table FK generation | `src/schema-generator.js` → `generateFromSchema()` |
 
 ## 🎨 Code Patterns
 
@@ -231,12 +265,14 @@ if (typeof window !== 'undefined') {
 
 ## 📊 Project Stats
 
-- **Lines of Code**: ~2,200
-- **Test Coverage**: 100%
-- **Number of Tests**: 266
+- **Lines of Code**: ~4,500+
+- **Test Coverage**: 100% (statements, branches, functions, lines)
+- **Number of Tests**: 596
 - **Supported Formats**: 9
 - **Data Types**: 40+
 - **Templates**: 5
+- **SQL Dialects**: 4 (PostgreSQL, MySQL, SQLite, Generic)
+- **SQL Output Modes**: 5 (insert, upsert, ddl, ddl+insert, truncate+insert)
 - **Dependencies**: 12
 - **Complexity**: Low-Medium
 

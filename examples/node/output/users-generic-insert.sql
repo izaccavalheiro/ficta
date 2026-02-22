@@ -1,0 +1,10 @@
+INSERT INTO users (id, username, email, active, createdAt) VALUES (1, 'forceful', 'lest', 0, '2026-02-22T06:47:29.666Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (2, 'like', 'surprisingly', 1, '2026-02-22T07:59:25.965Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (3, 'forecast', 'why', 1, '2026-02-22T07:40:10.520Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (4, 'gah', 'inasmuch', 1, '2026-02-22T04:53:11.081Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (5, 'up', 'like', 0, '2026-02-22T08:24:55.221Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (6, 'beyond', 'with', 0, '2026-02-22T09:48:35.732Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (7, 'why', 'proselytise', 1, '2026-02-22T16:07:11.511Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (8, 'pantyhose', 'physical', 0, '2026-02-22T15:24:49.182Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (9, 'an', 'which', 1, '2026-02-22T19:43:42.966Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (10, 'vol', 'concerning', 0, '2026-02-21T22:26:41.484Z');

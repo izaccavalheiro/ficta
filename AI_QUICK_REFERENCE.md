@@ -13,10 +13,14 @@ Universal test data generator: Node.js + Browser + CLI → CSV/JSON/XML/Excel/TS
 |------|---------|
 | `src/core.js` | Data generation (universal - NO Node/browser deps) |
 | `src/formatters.js` | Format converters (Node.js) |
-| `src/node.js` | Node.js API |
+| `src/formatters.browser.js` | Format converters (browser) |
+| `src/node.js` | Node.js API + `generateFromDDL()` |
 | `src/browser.js` | Browser API |
+| `src/sql-schema.js` | SQL DDL/DML generator (universal) |
+| `src/ddl-parser.js` | SQL schema → TableDef parser (universal, pure) |
+| `src/schema-generator.js` | Multi-table FK-aware orchestrator (universal) |
 | `cli.js` | CLI interface |
-| `tests/*.test.js` | Tests (100% coverage required) |
+| `tests/*.test.js` | 596 tests, 100% coverage |
 
 ---
 
@@ -59,14 +63,32 @@ myTemplate: "id:autoIncrement,field1:type1,field2:type2"
 export function toCSV(records, columns) { ... }
 ```
 
+### Generate from SQL DDL Schema
+```javascript
+// Node.js: read .sql file
+import { generateFromDDL } from './src/node.js';
+await generateFromDDL({ schemaFile: 'schema.sql', rows: 20, dialect: 'postgres' });
+
+// Universal: DDL string
+import { generateFromSchema } from './src/schema-generator.js';
+generateFromSchema({ ddl: createTableSQL, rows: 10 });
+
+// Parse-only
+import { parseDDL, orderByDependencies } from './src/ddl-parser.js';
+const tables = orderByDependencies(parseDDL(ddlString));
+```
+
 ---
 
 ## 🧪 Testing
 
 ```bash
-npm test                    # All tests
-npm test -- core.test.js   # Specific file
-npm run test:coverage      # With coverage
+npm test                             # All tests
+npm test -- core.test.js            # Specific file
+npm test -- ddl-parser.test.js      # DDL parser tests
+npm test -- schema-generator.test.js # FK orchestrator tests
+npm test -- sql-schema.test.js      # SQL DDL/DML tests
+npm run test:coverage               # With coverage
 ```
 
 **Required**: 100% coverage, all tests pass
@@ -93,7 +115,7 @@ Every change must:
 - ❌ Node.js/browser code in `src/core.js`
 - ❌ Direct `faker` access (use `getFaker()`)
 - ❌ Submit without tests
-- ❌ Break 100% coverage
+- ❌ Submit without maintaining 100% coverage
 
 ---
 
@@ -152,6 +174,10 @@ if (value.includes(',') || value.includes('"') || value.includes('\n')) {
 | Templates | `src/core.js` → `templates` |
 | CSV format | `src/formatters.js` → `toCSV()` |
 | JSON format | `src/formatters.js` → `toJSON()` |
+| SQL DDL/DML | `src/sql-schema.js` → `generateDDL()`, `generateInserts()` |
+| Parse SQL schema | `src/ddl-parser.js` → `parseDDL()`, `orderByDependencies()` |
+| FK-aware generation | `src/schema-generator.js` → `generateFromSchema()` |
+| DDL file import | `src/node.js` → `generateFromDDL()` |
 
 ---
 
@@ -171,11 +197,12 @@ if (value.includes(',') || value.includes('"') || value.includes('\n')) {
 
 ## 🔑 Key Principles
 
-1. **Universal Core** - core.js = no deps
+1. **Universal Core** - core.js = no env deps
 2. **ES Modules** - import/export only
 3. **Pure Functions** - no side effects
 4. **100% Coverage** - all code tested
 5. **Options Objects** - destructured params
+6. **FK Integrity** - `schema-generator.js` `pkStore` ensures valid FK references
 
 ---
 
@@ -215,4 +242,4 @@ node cli.js --list-types   # Show types
 
 ---
 
-**Version**: 1.0.0 | **Updated**: 2026-02-21 | **Status**: ✅ Ready
+**Version**: 1.1.0 | **Updated**: 2026-02-22 | **Status**: ✅ Ready

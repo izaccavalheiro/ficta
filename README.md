@@ -10,9 +10,11 @@ A universal test data generator that works in **Node.js**, **browsers**, and as 
 - ✅ **Smart Auto-Detection**: Format detected from file extension
 - ✅ **Special Types**: Auto-increment, enums, ranges, patterns with counters
 - ✅ **Predefined Templates**: Users, products, transactions, addresses, contacts
+- ✅ **SQL Schema Generation**: DDL, foreign keys, multi-dialect support (PostgreSQL, MySQL, SQLite)
+- ✅ **Advanced SQL Modes**: INSERT, UPSERT, DDL+INSERT, batch inserts, TRUNCATE+INSERT
 - ✅ **Zero Config Browser**: Just include a script tag
 - ✅ **TypeScript Ready**: Full type definitions included
-- ✅ **100% Test Coverage**: Fully tested and reliable
+- ✅ **High Test Coverage**: 100% coverage with 596 tests across all modules
 - ✅ **Preview Mode**: See data before saving
 
 ## Table of Contents
@@ -71,7 +73,10 @@ ficta -c "id:autoIncrement,name:fullName,email" -r 100 -o users.json
 # Excel
 ficta -t users -r 500 -o users.xlsx
 
-# SQL with custom table name
+# SQL schema with DDL (PostgreSQL)
+ficta -t users -r 100 -o schema.sql --sql-mode ddl+insert --sql-dialect postgres
+
+# SQL with custom table name (legacy INSERT mode)
 ficta -c "id,name,email" -r 100 -o users.sql --table-name my_users
 ```
 
@@ -154,7 +159,10 @@ ficta --list-templates
 | `--preview` | `-p` | Show preview of first 3 rows | `false` |
 | `--list-types` | - | List all available data types | - |
 | `--list-templates` | - | List all available templates | - |
-| `--table-name` | - | SQL table name (for SQL format) | `data` |
+| `--table-name` | - | SQL table name (for SQL format) | `data_table` |
+| `--sql-dialect` | - | SQL dialect (postgres, mysql, sqlite, generic) | `generic` |
+| `--sql-mode` | - | SQL mode (insert, ddl, ddl+insert, upsert, truncate+insert) | `insert` |
+| `--sql-batch` | - | Use batch INSERT statements | `false` |
 | `--sheet-name` | - | Excel worksheet name (for XLSX format) | `Sheet1` |
 | `--pretty` | - | Pretty-print JSON (for JSON format) | `true` |
 | `--help` | `-h` | Show help | - |
@@ -284,7 +292,7 @@ Generate test data in 9 popular file formats:
 | **XML** | `.xml` | Extensible Markup Language with configurable elements | ✅ | ✅ |
 | **Excel** | `.xlsx` | Microsoft Excel workbook with formatting | ✅ | ❌ |
 | **TSV** | `.tsv` | Tab-separated values | ✅ | ✅ |
-| **SQL** | `.sql` | SQL INSERT statements for database seeding | ✅ | ✅ |
+| **SQL** | `.sql` | SQL DDL (CREATE TABLE) and DML (INSERT, UPSERT) statements | ✅ | ✅ |
 | **YAML** | `.yaml` | YAML Ain't Markup Language - human-readable data format | ✅ | ✅ |
 | **YML** | `.yml` | YAML format with shorter extension | ✅ | ✅ |
 | **TOML** | `.toml` | Tom's Obvious, Minimal Language - config file format | ✅ | ✅ |
@@ -482,16 +490,244 @@ ficta -t users -r 100 -o users.xlsx --sheet-name "User Data"
 
 ### SQL
 
+Generate SQL INSERT statements or complete database schemas with DDL.
+
+#### Basic INSERT Statements (Legacy)
+
 ```bash
-# Specify table name
+# Simple INSERT statements
 ficta -c "id,name,email" -r 100 -o users.sql --table-name my_users
 ```
 
+#### Advanced SQL Schema Generation
+
+**Generate PostgreSQL schema with DDL:**
+```bash
+ficta -t users -r 100 -o schema.sql \
+  --sql-dialect postgres \
+  --sql-mode ddl+insert \
+  --table-name users
+```
+
+**Generate MySQL upsert statements:**
+```bash
+ficta -c "id:autoIncrement,username,email" -r 50 -o data.sql \
+  --sql-dialect mysql \
+  --sql-mode upsert \
+  --table-name users
+```
+
+**Batch inserts for better performance:**
+```bash
+ficta -t products -r 1000 -o products.sql \
+  --sql-batch \
+  --table-name products
+```
+
+#### SQL Dialect Options
+
+| Dialect | Description | Special Features |
+|---------|-------------|------------------|
+| `postgres` | PostgreSQL | SERIAL, JSONB, ON CONFLICT |
+| `mysql` | MySQL/MariaDB | AUTO_INCREMENT, ENUM types, ON DUPLICATE KEY |
+| `sqlite` | SQLite | Simplified types, INTEGER PRIMARY KEY AUTOINCREMENT |
+| `generic` | Generic SQL | Standard SQL (default) |
+
+#### SQL Generation Modes
+
+| Mode | Description | Output |
+|------|-------------|--------|
+| `insert` | INSERT statements only (default) | `INSERT INTO table ...` |
+| `ddl` | CREATE TABLE statements only | `CREATE TABLE ...` |
+| `ddl+insert` | Schema + data | `CREATE TABLE ...` + `INSERT INTO ...` |
+| `upsert` | UPSERT statements | `ON CONFLICT` (Postgres) / `ON DUPLICATE KEY` (MySQL) |
+| `truncate+insert` | Clear data first | `TRUNCATE TABLE ...` + `INSERT INTO ...` |
+
+**Node.js API:**
+
+```javascript
+import { generateAndSave } from 'ficta';
+
+// Generate PostgreSQL schema with DDL
+await generateAndSave({
+  template: 'users',
+  rows: 100,
+  output: 'users-postgres.sql',
+  formatOptions: {
+    dialect: 'postgres',
+    mode: 'ddl+insert',
+    tableName: 'users'
+  }
+});
+
+// Generate MySQL upserts
+await generateAndSave({
+  columns: 'id:autoIncrement,sku:pattern:PRD-{COUNTER},name:product,price',
+  rows: 50,
+  output: 'products-upsert.sql',
+  formatOptions: {
+    dialect: 'mysql',
+    mode: 'upsert',
+    tableName: 'products'
+  }
+});
+
+// Batch inserts (more efficient)
+await generateAndSave({
+  columns: 'id,name,email',
+  rows: 10000,
+  output: 'users-batch.sql',
+  formatOptions: {
+    tableName: 'users',
+    batch: true  // Single INSERT with multiple VALUES
+  }
+});
+```
+
+**Advanced: Multi-Table Schema with Foreign Keys:**
+
+```javascript
+import { generateSchema } from 'ficta/src/sql-schema.js';
+import { generateData } from 'ficta';
+
+// Generate sample data
+const customers = generateData({
+  columns: 'id:autoIncrement,firstName,lastName,email',
+  rows: 10
+});
+
+const orders = generateData({
+  columns: 'id:autoIncrement,customerId:range:1-10,amount:price,status:word',
+  rows: 30
+});
+
+// Create multi-table schema
+const schema = {
+  schema: 'ecommerce',
+  dialect: 'postgres',
+  mode: 'ddl+insert',
+  insertOrder: 'auto',  // Resolve FK dependencies automatically
+  tables: [
+    {
+      table: 'customers',
+      columns: [
+        { name: 'id', type: 'autoIncrement', primaryKey: true },
+        { name: 'firstName', type: 'firstName' },
+        { name: 'lastName', type: 'lastName' },
+        { name: 'email', type: 'email', unique: true, nullable: false }
+      ],
+      records: customers.records
+    },
+    {
+      table: 'orders',
+      columns: [
+        { name: 'id', type: 'autoIncrement', primaryKey: true },
+        {
+          name: 'customerId',
+          type: 'number',
+          references: { table: 'customers', column: 'id' },
+          onDelete: 'CASCADE'
+        },
+        { name: 'amount', type: 'price' },
+        { name: 'status', type: 'string' }
+      ],
+      records: orders.records
+    }
+  ]
+};
+
+const sql = generateSchema(schema);
+// Outputs complete schema with proper table ordering
+```
+
 **Features:**
-- Proper string escaping
-- NULL handling
-- Boolean conversion (1/0)
-- Compatible with most databases
+- **DDL Generation**: CREATE TABLE statements with proper column types
+- **Type Mapping**: Automatic conversion from Faker types to SQL types
+- **Constraints**: PRIMARY KEY, UNIQUE, NOT NULL, DEFAULT, FOREIGN KEY
+- **Multi-Dialect**: PostgreSQL, MySQL, SQLite support
+- **Foreign Keys**: Automatic dependency resolution and insert ordering
+- **Batch Mode**: Multiple VALUES in single INSERT for performance
+- **Upserts**: Dialect-aware UPSERT/MERGE statements
+- **Proper Escaping**: Single quotes, NULL values, boolean conversion
+
+**See Examples:**
+- `examples/node/sql-simple.js` - Basic SQL generation
+- `examples/node/sql-schema-examples.js` - Advanced multi-table schemas
+- `examples/sql-schema.html` - Interactive browser demo
+
+---
+
+### SQL from Existing Schema (DDL Import)
+
+Import an existing `.sql` schema file and automatically generate realistic test data that respects your table structure, column types, and foreign key relationships.
+
+**Node.js programmatic API:**
+
+```javascript
+import { generateFromDDL } from 'ficta';
+
+// Read schema.sql and generate test data
+const sql = await generateFromDDL({
+  schemaFile: './schema.sql',   // Path to your DDL file
+  rows: 20,                     // Rows per table
+  outputMode: 'ddl+insert',     // 'insert' | 'upsert' | 'truncate+insert' | 'ddl+insert'
+  dialect: 'postgres',          // 'postgres' | 'mysql' | 'sqlite' | 'generic'
+  output: './seed.sql'          // Optional: write output to file
+});
+
+console.log(sql); // Complete SQL script ready to execute
+```
+
+**Universal API (`generateFromSchema`) — works in browsers too:**
+
+```javascript
+import { generateFromSchema } from 'ficta/src/schema-generator.js';
+
+// Pass a DDL string directly (browser-compatible)
+const sql = generateFromSchema({
+  ddl: `
+    CREATE TABLE users (
+      id SERIAL PRIMARY KEY,
+      email VARCHAR(255) NOT NULL,
+      created_at TIMESTAMP
+    );
+    CREATE TABLE posts (
+      id SERIAL PRIMARY KEY,
+      user_id INT REFERENCES users(id),
+      title VARCHAR(255)
+    );
+  `,
+  rows: 10,
+  outputMode: 'ddl+insert',
+  dialect: 'postgres'
+});
+```
+
+**Low-level: Parse DDL then inspect or modify before generating:**
+
+```javascript
+import { parseDDL, orderByDependencies } from 'ficta/src/ddl-parser.js';
+import { generateFromSchema } from 'ficta/src/schema-generator.js';
+
+// Parse DDL into structured table definitions
+const tables = parseDDL(rawDDLString);
+// tables → [{ tableName, columns, primaryKey, foreignKeys }, ...]
+
+// Sort tables in FK dependency order
+const ordered = orderByDependencies(tables);
+
+// Generate data from pre-parsed tables
+const sql = generateFromSchema({ tables: ordered, rows: 5, dialect: 'mysql' });
+```
+
+**What `ddl-parser` understands:**
+- `AUTO_INCREMENT`, `SERIAL`, `IDENTITY` auto-increment variants
+- Inline and table-level `FOREIGN KEY … REFERENCES` syntax
+- `ENUM('a','b','c')` column types → maps to `enum:a|b|c`
+- `NOT NULL`, `DEFAULT`, `UNIQUE`, `PRIMARY KEY` modifiers
+- SQL comments (`--` single-line and `/* */` block)
+- Quoted identifiers (backtick and double-quote)
+- Two-layer type resolution: column name hints first, SQL type fallback second
 
 ### JSON
 
@@ -584,6 +820,62 @@ const records = generateData({
     rows: 100
 });
 // Returns: Array of objects
+```
+
+#### `generateFromDDL(options)` *(Node.js only)*
+
+Read a `.sql` DDL file and generate test data for all tables, respecting column types and foreign key relationships.
+
+```javascript
+import { generateFromDDL } from 'ficta';
+
+const sql = await generateFromDDL({
+  schemaFile: './schema.sql',  // Required: path to DDL file
+  rows: 10,                    // Rows per table (default: 10)
+  outputMode: 'insert',        // 'insert' | 'upsert' | 'truncate+insert' | 'ddl+insert'
+  dialect: 'generic',          // 'postgres' | 'mysql' | 'sqlite' | 'generic'
+  output: './seed.sql'         // Optional: write to this file
+});
+```
+
+#### `generateFromSchema(options)` *(universal)*
+
+Generate test data from a DDL string or pre-parsed table definitions. Works in both Node.js and browsers.
+
+```javascript
+import { generateFromSchema } from 'ficta/src/schema-generator.js';
+
+const sql = generateFromSchema({
+  ddl: '...',          // Raw DDL string (or provide tables:)
+  tables: [...],       // Pre-parsed TableDef array (from parseDDL)
+  rows: 10,            // Rows per table
+  outputMode: 'insert',
+  dialect: 'postgres'
+});
+```
+
+#### `parseDDL(ddlString)` *(universal)*
+
+Parse SQL CREATE TABLE statements into structured table definitions.
+
+```javascript
+import { parseDDL } from 'ficta/src/ddl-parser.js';
+
+const tables = parseDDL(`
+  CREATE TABLE users (id SERIAL PRIMARY KEY, email VARCHAR(255) NOT NULL);
+`);
+// Returns: [{ tableName: 'users', columns: [...], primaryKey: ['id'], foreignKeys: [] }]
+```
+
+#### `orderByDependencies(tables)` *(universal)*
+
+Sort parsed table definitions in foreign key dependency order (topological sort). Throws on circular dependencies.
+
+```javascript
+import { orderByDependencies } from 'ficta/src/ddl-parser.js';
+
+const ordered = orderByDependencies(parseDDL(ddlString));
+// Parent tables always appear before child tables
 ```
 
 #### `parseColumns(columnString)`
@@ -776,20 +1068,31 @@ npm run build
 ```
 ficta/
 ├── src/
-│   ├── core.js              # Core generator (universal)
+│   ├── core.js              # Core generator (universal — no Node/browser deps)
 │   ├── formatters.js        # Format converters (Node.js)
 │   ├── formatters.browser.js # Format converters (browser)
-│   ├── node.js              # Node.js-specific exports
-│   └── browser.js           # Browser-specific exports
+│   ├── node.js              # Node.js-specific exports + generateFromDDL()
+│   ├── browser.js           # Browser-specific exports
+│   ├── sql-schema.js        # SQL DDL/DML generator (universal)
+│   ├── ddl-parser.js        # SQL DDL → TableDef parser (universal)
+│   └── schema-generator.js  # Multi-table data generation orchestrator (universal)
 ├── tests/
-│   ├── core.test.js         # Core tests
-│   ├── formatters.test.js   # Formatter tests
-│   ├── node.test.js         # Node.js tests
-│   ├── browser.test.js      # Browser tests
-│   └── cli.test.js          # CLI tests
+│   ├── core.test.js         # Core generation tests
+│   ├── formatters.test.js   # Node.js formatter tests
+│   ├── formatters.browser.test.js # Browser formatter tests
+│   ├── node.test.js         # Node.js API tests
+│   ├── browser.test.js      # Browser API tests
+│   ├── cli.test.js          # CLI interface tests
+│   ├── sql-schema.test.js   # SQL schema generator tests
+│   ├── ddl-parser.test.js   # DDL parser tests
+│   └── schema-generator.test.js # Schema orchestrator tests
 ├── examples/
 │   ├── simple.html          # Simple browser example
-│   └── esmodule.html        # ES module example
+│   ├── esmodule.html        # ES module browser example
+│   ├── sql-schema.html      # Interactive SQL schema browser demo
+│   └── node/
+│       ├── sql-simple.js          # Basic SQL generation examples
+│       └── sql-schema-examples.js # Advanced multi-table SQL examples
 ├── cli.js                   # CLI entry point
 ├── build.js                 # Build script for browser bundles
 └── package.json
@@ -814,8 +1117,6 @@ npm run test:coverage
 
 ### Test Coverage
 
-**100% code coverage achieved!**
-
 | Metric     | Coverage |
 |------------|----------|
 | Statements | 100%     |
@@ -825,9 +1126,8 @@ npm run test:coverage
 
 ### Test Statistics
 
-- **Total Tests**: 67
-- **Passing**: 67 (100%)
-- **Test Suites**: 6
+- **Total Tests**: 596
+- **Test Suites**: 9
 
 ### Test Categories
 
@@ -857,15 +1157,18 @@ open coverage/lcov-report/index.html
 
 ✅ All Faker data types (40+ types)  
 ✅ Special types: static, enum, range, pattern  
-✅ Pattern with {COUNTER} placeholder  
-✅ Pattern with # for random digits  
+✅ Pattern with {COUNTER} placeholder and # for random digits  
 ✅ All predefined templates  
 ✅ Column parsing with complex type definitions  
 ✅ All file format generation (CSV, JSON, XML, XLSX, TSV, SQL, YAML, TOML)  
 ✅ CLI argument parsing and error handling  
-✅ Preview mode  
-✅ Format auto-detection  
-✅ Browser and Node.js environments
+✅ Preview mode and format auto-detection  
+✅ Browser and Node.js environments  
+✅ SQL DDL generation (CREATE TABLE, PK, FK, constraints, 4 dialects)  
+✅ SQL DML generation (INSERT, batch INSERT, UPSERT, TRUNCATE+INSERT)  
+✅ DDL parsing from raw SQL (parseDDL, orderByDependencies)  
+✅ Multi-table FK-aware data generation (schema-generator)  
+✅ Topological sort and circular dependency detection
 
 ---
 

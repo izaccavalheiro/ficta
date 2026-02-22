@@ -2,6 +2,7 @@
 import { faker } from '@faker-js/faker';
 import * as core from './core.js';
 import * as formatters from './formatters.js';
+import { generateFromSchema } from './schema-generator.js';
 
 // Initialize faker for the core module
 core.setFaker(faker);
@@ -135,4 +136,54 @@ export function listTemplates() {
   const output = lines.join('\n');
   console.log(output);
   return output;
+}
+
+/**
+ * Generate test data from a SQL DDL file and optionally save to disk.
+ *
+ * This function is Node.js-only (reads files from disk). For browser usage
+ * call `generateFromSchema()` from `src/schema-generator.js` directly with
+ * a pre-loaded DDL string.
+ *
+ * @param {Object}  options
+ * @param {string}  options.schemaFile            - Path to the DDL .sql file
+ * @param {number}  [options.rows=10]             - Rows to generate per table
+ * @param {string}  [options.outputMode='insert'] - SQL output mode
+ *   ('insert' | 'upsert' | 'truncate+insert' | 'ddl+insert')
+ * @param {string}  [options.dialect='generic']   - SQL dialect
+ *   ('mysql' | 'postgres' | 'sqlite' | 'generic')
+ * @param {string}  [options.output]              - If set, write SQL to this file path
+ * @returns {Promise<string>} Generated SQL string
+ *
+ * @example
+ * const sql = await generateFromDDL({
+ *   schemaFile: './schema.sql',
+ *   rows: 20,
+ *   outputMode: 'ddl+insert',
+ *   dialect: 'postgres',
+ *   output: './seed.sql',
+ * });
+ */
+export async function generateFromDDL({
+  schemaFile,
+  rows = 10,
+  outputMode = 'insert',
+  dialect = 'generic',
+  output,
+}) {
+  if (!schemaFile) {
+    throw new Error('generateFromDDL: schemaFile is required');
+  }
+
+  const fs = await import('fs');
+  const ddl = await fs.promises.readFile(schemaFile, 'utf-8');
+
+  const sql = generateFromSchema({ ddl, rows, outputMode, dialect });
+
+  if (output) {
+    await fs.promises.writeFile(output, sql, 'utf-8');
+    console.log(`✓ Generated ${output} from schema ${schemaFile} (${outputMode}, ${dialect})`);
+  }
+
+  return sql;
 }

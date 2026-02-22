@@ -1,0 +1,3 @@
+INSERT INTO products (id, sku, name) VALUES (1, 'PRD-1', 'Tasty Rubber Computer') ON DUPLICATE KEY UPDATE sku = VALUES(sku), name = VALUES(name);
+INSERT INTO products (id, sku, name) VALUES (2, 'PRD-2', 'Practical Marble Hat') ON DUPLICATE KEY UPDATE sku = VALUES(sku), name = VALUES(name);
+INSERT INTO products (id, sku, name) VALUES (3, 'PRD-3', 'Practical Steel Towels') ON DUPLICATE KEY UPDATE sku = VALUES(sku), name = VALUES(name);

@@ -13,7 +13,6 @@ import { exec } from 'child_process';
 
 const readFile = promisify(fs.readFile);
 const unlink = promisify(fs.unlink);
-const exists = promisify(fs.exists);
 const execPromise = promisify(exec);
 
 describe('CLI Module', () => {
@@ -21,7 +20,7 @@ describe('CLI Module', () => {
 
   afterEach(async () => {
     // Clean up test files
-    if (await exists(testFile)) {
+    if (fs.existsSync(testFile)) {
       await unlink(testFile);
     }
   });
@@ -310,6 +309,49 @@ describe('CLI Module', () => {
         await unlink(sqlFile);
       }
     });
+
+    test('should pass sqlDialect option to formatOptions', async () => {
+      const sqlFile = 'test-dialect.sql';
+      await main({
+        output: sqlFile,
+        columns: 'id:autoIncrement,name:fullName',
+        rows: 2,
+        format: 'sql',
+        sqlDialect: 'postgres',
+        sqlMode: 'ddl'
+      });
+      
+      const content = await readFile(sqlFile, 'utf-8');
+      expect(content).toContain('CREATE TABLE');
+      expect(content).toContain('SERIAL'); // PostgreSQL-specific
+      
+      // Clean up
+      if (fs.existsSync(sqlFile)) {
+        await unlink(sqlFile);
+      }
+    });
+
+    test('should pass sqlBatch option to formatOptions', async () => {
+      const sqlFile = 'test-batch.sql';
+      await main({
+        output: sqlFile,
+        columns: 'id:autoIncrement,name:fullName',
+        rows: 5,
+        format: 'sql',
+        sqlBatch: true
+      });
+      
+      const content = await readFile(sqlFile, 'utf-8');
+      expect(content).toContain('INSERT INTO');
+      // Batch mode should create fewer INSERT statements
+      const insertCount = (content.match(/INSERT INTO/g) || []).length;
+      expect(insertCount).toBe(1); // Single batch INSERT for all rows
+      
+      // Clean up
+      if (fs.existsSync(sqlFile)) {
+        await unlink(sqlFile);
+      }
+    });
   });
 
   describe('runCLI', () => {
@@ -403,6 +445,30 @@ describe('CLI Module', () => {
     });
   });
 
+  describe('schema subcommand branch', () => {
+    let originalArgv;
+
+    beforeEach(() => {
+      originalArgv = process.argv;
+    });
+
+    afterEach(() => {
+      process.argv = originalArgv;
+    });
+
+    test('setupCLI should accept schema positional arg without columns/template', () => {
+      // Covers cli.js line 95: the `if (argv._[0] === 'schema') return true` branch in .check()
+      process.argv = ['node', 'cli.js', 'schema'];
+      // Should NOT throw even though no --columns or --template is given
+      expect(() => setupCLI()).not.toThrow();
+    });
+
+    test('main should return immediately when schema subcommand is used', async () => {
+      // Covers cli.js line 111: the `if (argv._ && argv._[0] === 'schema') return` branch in main()
+      await expect(main({ _: ['schema'] })).resolves.toBeUndefined();
+    });
+  });
+
   describe('checkIsMainModule', () => {
     test('should return false when called from test', () => {
       const isMain = checkIsMainModule(import.meta.url);
@@ -475,6 +541,52 @@ describe('CLI Module', () => {
       
       expect(stdout).toContain('Preview');
       expect(stdout).toContain('Generated');
+    }, 10000);
+
+    test('should generate SQL with --sql-dialect option', async () => {
+      const sqlFile = 'test-cli-sql.sql';
+      await execPromise(`node cli.js -c "id:autoIncrement,name:fullName" -o ${sqlFile} -r 2 --sql-dialect postgres --sql-mode ddl`);
+      
+      const content = await readFile(sqlFile, 'utf-8');
+      expect(content).toContain('CREATE TABLE');
+      expect(content).toContain('SERIAL');
+      
+      await unlink(sqlFile);
+    }, 10000);
+
+    test('should generate SQL with --sql-batch option', async () => {
+      const sqlFile = 'test-cli-batch.sql';
+      await execPromise(`node cli.js -c "id:autoIncrement,name:fullName" -o ${sqlFile} -r 5 --sql-batch`);
+      
+      const content = await readFile(sqlFile, 'utf-8');
+      expect(content).toContain('INSERT INTO');
+      expect(content).toContain('VALUES');
+      
+      await unlink(sqlFile);
+    }, 10000);
+
+    test('should generate SQL with --sql-mode option', async () => {
+      const sqlFile = 'test-cli-mode.sql';
+      await execPromise(`node cli.js -c "id:autoIncrement,name:fullName" -o ${sqlFile} -r 2 --sql-mode ddl+insert --sql-dialect mysql`);
+      
+      const content = await readFile(sqlFile, 'utf-8');
+      expect(content).toContain('CREATE TABLE');
+      expect(content).toContain('INSERT INTO');
+      
+      await unlink(sqlFile);
+    }, 10000);
+
+    test('should generate SQL with all SQL options combined', async () => {
+      const sqlFile = 'test-cli-all-sql.sql';
+      await execPromise(`node cli.js -c "id:autoIncrement,name:fullName" -o ${sqlFile} -r 10 --sql-dialect postgres --sql-mode insert --sql-batch --table-name test_users`);
+      
+      const content = await readFile(sqlFile, 'utf-8');
+      expect(content).toContain('INSERT INTO test_users');
+      // Batch mode should have fewer INSERT statements
+      const insertCount = (content.match(/INSERT INTO/g) || []).length;
+      expect(insertCount).toBeLessThan(10); // With batch, should be 1 statement for 10 rows
+      
+      await unlink(sqlFile);
     }, 10000);
   });
 });

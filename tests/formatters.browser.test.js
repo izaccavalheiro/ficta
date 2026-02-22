@@ -242,6 +242,200 @@ describe('Formatters Browser Module', () => {
       const sql = formatters.toSQL([], sampleColumns);
       expect(sql).toBe('');
     });
+
+    test('uses default table name when called without table parameter', () => {
+      const sql = formatters.toSQL(sampleRecords, sampleColumns, undefined);
+      
+      expect(sql).toContain('INSERT INTO data_table');
+    });
+    
+    test('supports schema mode with DDL generation', () => {
+      const columns = [
+        { name: 'id', type: 'number' },
+        { name: 'name', type: 'fullName' },
+        { name: 'email', type: 'email' }
+      ];
+      const options = {
+        tableName: 'users',
+        mode: 'ddl',
+        dialect: 'postgres'
+      };
+      const sql = formatters.toSQL(sampleRecords, columns, options);
+      
+      expect(sql).toContain('CREATE TABLE users');
+      expect(sql).toContain('id INTEGER');
+      expect(sql).toContain('name VARCHAR(100)');
+      expect(sql).toContain('email VARCHAR(255)');
+    });
+    
+    test('supports schema mode with DDL+INSERT', () => {
+      const columns = [
+        { name: 'id', type: 'autoIncrement', primaryKey: true },
+        { name: 'name', type: 'fullName' },
+        { name: 'email', type: 'email' }
+      ];
+      const options = {
+        tableName: 'users',
+        mode: 'ddl+insert',
+        dialect: 'postgres'
+      };
+      const sql = formatters.toSQL(sampleRecords, columns, options);
+      
+      expect(sql).toContain('CREATE TABLE users');
+      expect(sql).toContain('id SERIAL PRIMARY KEY');
+      expect(sql).toContain('INSERT INTO users');
+    });
+    
+    test('supports batch inserts', () => {
+      const options = {
+        tableName: 'users',
+        mode: 'insert',
+        batch: true
+      };
+      const sql = formatters.toSQL(sampleRecords, sampleColumns, options);
+      
+      expect(sql).toContain('INSERT INTO users');
+      expect(sql).toContain('VALUES');
+      // Should have only one INSERT statement for batch mode
+      expect(sql.match(/INSERT INTO/g).length).toBe(1);
+    });
+    
+    test('supports upsert mode for PostgreSQL', () => {
+      const columns = [
+        { name: 'id', type: 'autoIncrement', primaryKey: true },
+        { name: 'name', type: 'fullName' },
+        { name: 'email', type: 'email' }
+      ];
+      const options = {
+        tableName: 'users',
+        mode: 'upsert',
+        dialect: 'postgres'
+      };
+      const sql = formatters.toSQL(sampleRecords, columns, options);
+      
+      expect(sql).toContain('INSERT INTO users');
+      expect(sql).toContain('ON CONFLICT');
+      expect(sql).toContain('DO UPDATE SET');
+    });
+    
+    test('backward compatibility: string table name still works', () => {
+      const sql = formatters.toSQL(sampleRecords, sampleColumns, 'custom_table');
+      expect(sql).toContain('INSERT INTO custom_table');
+      expect(sql).not.toContain('CREATE TABLE');
+    });
+
+    test('uses default options when options is null', () => {
+      const sql = formatters.toSQL(sampleRecords, sampleColumns, null);
+      expect(sql).toContain('INSERT INTO data_table');
+    });
+
+    test('uses default options when options is undefined', () => {
+      const sql = formatters.toSQL(sampleRecords, sampleColumns, undefined);
+      expect(sql).toContain('INSERT INTO data_table');
+    });
+
+    test('uses default dialect when dialect not specified', () => {
+      const columns = [{ name: 'id', type: 'number' }];
+      const records = [{ id: 1 }];
+      const options = { tableName: 'test', mode: 'ddl' };
+      const sql = formatters.toSQL(records, columns, options);
+      expect(sql).toContain('CREATE TABLE test');
+      expect(sql).toContain('INTEGER'); // Generic SQL type
+    });
+
+    test('uses options.table as fallback for table name', () => {
+      const columns = [{ name: 'id', type: 'number' }];
+      const records = [{ id: 1 }];
+      const options = { table: 'test_table', mode: 'insert' };
+      const sql = formatters.toSQL(records, columns, options);
+      expect(sql).toContain('INSERT INTO test_table');
+    });
+
+    test('handles empty records with schema mode', () => {
+      const columns = [{ name: 'id', type: 'number' }];
+      const options = { tableName: 'test', mode: 'ddl' };
+      const sql = formatters.toSQL([], columns, options);
+      expect(sql).toContain('CREATE TABLE test');
+      expect(sql).not.toContain('INSERT');
+    });
+
+    test('handles empty records with legacy mode', () => {
+      const sql = formatters.toSQL([], sampleColumns, 'test_table');
+      expect(sql).toBe('');
+    });
+
+    test('legacy mode handles numeric values in records', () => {
+      const cols = [{ name: 'id', type: 'number' }, { name: 'value', type: 'number' }];
+      const records = [{ id: 1, value: 42 }];
+      const sql = formatters.toSQL(records, cols, 'test_table');
+      expect(sql).toContain('VALUES (1, 42)');
+    });
+
+    test('legacy mode handles float values', () => {
+      const cols = [{ name: 'id', type: 'number' }, { name: 'price', type: 'float' }];
+      const records = [{ id: 1, price: 19.99 }];
+      const sql = formatters.toSQL(records, cols, 'test_table');
+      expect(sql).toContain('VALUES (1, 19.99)');
+    });
+
+    test('legacy mode handles all value types in single record', () => {
+      const cols = [
+        { name: 'id', type: 'number' },
+        { name: 'name', type: 'text' },
+        { name: 'active', type: 'boolean' },
+        { name: 'score', type: 'float' }
+      ];
+      const records = [{ id: 123, name: "Test", active: true, score: 88.5 }];
+      const sql = formatters.toSQL(records, cols, 'test_table');
+      expect(sql).toContain("'Test'");
+      expect(sql).toContain('1');
+      expect(sql).toContain('88.5');
+    });
+
+    test('legacy mode handles multiple single quotes in string', () => {
+      const cols = [{ name: 'id', type: 'number' }, { name: 'text', type: 'text' }];
+      const records = [{ id: 1, text: "It's a 'test' string" }];
+      const sql = formatters.toSQL(records, cols, 'custom_table');
+      expect(sql).toContain("It''s a ''test'' string");
+    });
+
+    test('legacy mode with custom table name in object still uses string parameter', () => {
+      const cols = [{ name: 'id', type: 'number' }];
+      const records = [{ id: 1 }];
+      const sql = formatters.toSQL(records, cols, 'my_table');
+      expect(sql).toContain('INSERT INTO my_table');
+    });
+
+    test('legacy mode handles undefined values', () => {
+      const cols = [{ name: 'id', type: 'number' }, { name: 'data', type: 'text' }];
+      const records = [{ id: 1, data: undefined }];
+      const sql = formatters.toSQL(records, cols, 'test_table');
+      expect(sql).toContain('NULL');
+    });
+
+    test('legacy mode handles false boolean values', () => {
+      const cols = [{ name: 'id', type: 'number' }, { name: 'active', type: 'boolean' }];
+      const records = [{ id: 1, active: false }, { id: 2, active: true }];
+      const sql = formatters.toSQL(records, cols, 'test_table');
+      expect(sql).toContain('1, 0');
+      expect(sql).toContain('2, 1');
+    });
+
+    test('legacy mode with all edge case values in one record', () => {
+      const cols = [
+        { name: 'id', type: 'number' },
+        { name: 'text', type: 'text' },
+        { name: 'nullVal', type: 'text' },
+        { name: 'active', type: 'boolean' },
+        { name: 'cost', type: 'number' }
+      ];
+      const records = [{ id: 10, text: 'Test', nullVal: null, active: false, cost: 0 }];
+      const sql = formatters.toSQL(records, cols, 'edge_cases');
+      expect(sql).toContain('INSERT INTO edge_cases');
+      expect(sql).toContain("'Test'");
+      expect(sql).toContain('NULL');
+      expect(sql).toContain('0');
+    });
   });
 
   describe('formatData', () => {

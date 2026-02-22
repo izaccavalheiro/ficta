@@ -3,6 +3,8 @@ import ExcelJS from 'exceljs';
 import xml2js from 'xml2js';
 import yaml from 'js-yaml';
 import TOML from '@iarna/toml';
+import * as sqlSchema from './sql-schema.js';
+import { generateFromSchema } from './schema-generator.js';
 
 /**
  * Format column name to Title Case
@@ -155,13 +157,70 @@ export function toTSV(records, columns) {
 }
 
 /**
- * Convert array of objects to SQL INSERT statements
+ * Convert array of objects to SQL INSERT statements or generate schema
+ * 
+ * Supports two modes:
+ * 1. Legacy mode (backward compatible): toSQL(records, columns, tableName)
+ * 2. Schema mode: toSQL(records, columns, schemaOptions)
+ * 
  * @param {Array} records - Array of row objects
  * @param {Array} columns - Column definitions
- * @param {string} tableName - Table name
- * @returns {string} SQL INSERT statements
+ * @param {string|Object} tableNameOrOptions - Table name (string) or schema options (object)
+ * @returns {string} SQL statements (INSERT, DDL, or both)
+ * 
+ * @example
+ * // Legacy mode
+ * toSQL(records, columns, 'users')
+ * 
+ * @example
+ * // Schema mode with DDL
+ * toSQL(records, columns, {
+ *   tableName: 'users',
+ *   mode: 'ddl+insert',
+ *   dialect: 'postgres'
+ * })
  */
-export function toSQL(records, columns, tableName = 'data_table') {
+export function toSQL(records, columns, tableNameOrOptions = 'data_table') {
+  // DDL / multi-table schema overload:
+  // If first arg is an object with a 'ddl' or 'tables' key, delegate to
+  // generateFromSchema() which handles full multi-table orchestration.
+  if (records !== null && typeof records === 'object' && !Array.isArray(records)) {
+    if ('ddl' in records || 'tables' in records) {
+      const { ddl, tables, rows = 10, outputMode = 'insert', dialect = 'generic' } = records;
+      return generateFromSchema({ ddl, tables, rows, outputMode, dialect });
+    }
+  }
+
+  // Backward compatibility: if third param is a string, use legacy mode
+  if (typeof tableNameOrOptions === 'string') {
+    return toSQLLegacy(records, columns, tableNameOrOptions);
+  }
+  
+  // New schema mode
+  const options = tableNameOrOptions || {};
+  const tableName = options.tableName || options.table || 'data_table';
+  const mode = options.mode || 'insert';
+  const dialect = options.dialect || 'generic';
+  
+  // Build schema object for generator
+  const schema = {
+    table: tableName,
+    columns: columns,
+    records: records,
+    dialect: dialect,
+    mode: mode,
+    batch: options.batch,
+    conflictColumns: options.conflictColumns,
+  };
+  
+  return sqlSchema.generateSchema(schema);
+}
+
+/**
+ * Legacy SQL INSERT generation (backward compatible)
+ * @private
+ */
+function toSQLLegacy(records, columns, tableName) {
   if (records.length === 0) {
     return '';
   }
@@ -249,7 +308,15 @@ export async function formatData(records, columns, format, options = {}) {
       return toTSV(records, columns);
     
     case 'sql':
-      return toSQL(records, columns, options.tableName || 'data_table');
+      // Pass through all SQL-specific options
+      const sqlOptions = {
+        tableName: options.tableName || 'data_table',
+        dialect: options.dialect,
+        mode: options.mode,
+        batch: options.batch,
+        conflictColumns: options.conflictColumns,
+      };
+      return toSQL(records, columns, sqlOptions);
     
     case 'yaml':
     case 'yml':

@@ -3,7 +3,8 @@ import {
   generateAndSave,
   writeFile,
   listTypes,
-  listTemplates
+  listTemplates,
+  generateFromDDL
 } from '../src/node.js';
 import fs from 'fs';
 import { promisify } from 'util';
@@ -11,14 +12,13 @@ import { parse } from 'csv-parse/sync';
 
 const readFile = promisify(fs.readFile);
 const unlink = promisify(fs.unlink);
-const exists = promisify(fs.exists);
 
 describe('Node.js Module', () => {
   const testFile = 'test-output.csv';
 
   afterEach(async () => {
     // Clean up test files
-    if (await exists(testFile)) {
+    if (fs.existsSync(testFile)) {
       await unlink(testFile);
     }
   });
@@ -28,8 +28,8 @@ describe('Node.js Module', () => {
       const csv = 'id,name\n1,John\n2,Jane';
       await writeFile(csv, testFile);
       
-      const exists = fs.existsSync(testFile);
-      expect(exists).toBe(true);
+      const fileExists = fs.existsSync(testFile);
+      expect(fileExists).toBe(true);
       
       const content = await readFile(testFile, 'utf-8');
       expect(content).toBe(csv);
@@ -47,8 +47,8 @@ describe('Node.js Module', () => {
       const buffer = Buffer.from('id,name\n1,John', 'utf-8');
       await writeFile(buffer, testFile);
       
-      const exists = fs.existsSync(testFile);
-      expect(exists).toBe(true);
+      const fileExists = fs.existsSync(testFile);
+      expect(fileExists).toBe(true);
       
       const content = await readFile(testFile, 'utf-8');
       expect(content).toBe('id,name\n1,John');
@@ -177,8 +177,8 @@ describe('Node.js Module', () => {
           rows: 1
         });
         
-        const exists = fs.existsSync(defaultFile);
-        expect(exists).toBe(true);
+        const fileExists = fs.existsSync(defaultFile);
+        expect(fileExists).toBe(true);
         
         // Clean up
         await unlink(defaultFile);
@@ -249,6 +249,45 @@ describe('Node.js Module', () => {
       expect(templates).toContain('Columns');
       expect(templates).toContain('products');
       expect(templates).toContain('transactions');
+    });
+  });
+
+  describe('generateFromDDL', () => {
+    const outputDDLFile = 'test-from-ddl-output.sql';
+
+    afterEach(async () => {
+      if (fs.existsSync(outputDDLFile)) {
+        await unlink(outputDDLFile);
+      }
+    });
+
+    test('throws when schemaFile is not provided', async () => {
+      await expect(generateFromDDL({})).rejects.toThrow('schemaFile is required');
+    });
+
+    test('generates SQL from a schema file', async () => {
+      const sql = await generateFromDDL({
+        schemaFile: 'test-schema.sql',
+        rows: 2,
+      });
+      expect(typeof sql).toBe('string');
+      expect(sql).toContain('INSERT INTO');
+    });
+
+    test('writes output file when output option provided', async () => {
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      try {
+        const sql = await generateFromDDL({
+          schemaFile: 'test-schema.sql',
+          rows: 2,
+          output: outputDDLFile,
+        });
+        expect(fs.existsSync(outputDDLFile)).toBe(true);
+        expect(typeof sql).toBe('string');
+        expect(consoleSpy).toHaveBeenCalled();
+      } finally {
+        consoleSpy.mockRestore();
+      }
     });
   });
 });

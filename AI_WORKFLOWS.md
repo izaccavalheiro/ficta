@@ -1144,6 +1144,181 @@ node -e "const { generateRows, parseColumns } = require('./src/core.js'); consol
 
 ---
 
+## Workflow 11: Generate Data from SQL DDL Schema
+
+### Objective
+Import an existing SQL schema (`.sql` file or DDL string) and produce realistic, FK-consistent test data
+
+### Use Cases
+- Seeding a development database from its real schema
+- Generating test fixtures for a relational schema
+- Producing INSERT scripts that respect primary/foreign key relationships
+
+---
+
+### Step 1: Choose Entry Point
+
+| Scenario | API |
+|----------|-----|
+| Node.js, read a `.sql` file | `generateFromDDL()` in `src/node.js` |
+| Universal (browser or Node.js), DDL string | `generateFromSchema()` in `src/schema-generator.js` |
+| Parse only, no generation | `parseDDL()` in `src/ddl-parser.js` |
+
+---
+
+### Step 2A: Node.js — Generate from a `.sql` File
+
+```javascript
+import { generateFromDDL } from './src/node.js';
+
+const sql = await generateFromDDL({
+  schemaFile: './db/schema.sql',   // Required: path to DDL file
+  rows: 20,                        // Rows per table (default: 10)
+  outputMode: 'ddl+insert',        // 'insert' | 'upsert' | 'truncate+insert' | 'ddl+insert'
+  dialect: 'postgres',             // 'postgres' | 'mysql' | 'sqlite' | 'generic'
+  output: './db/seed.sql'          // Optional: write SQL to file
+});
+
+console.log(sql);
+```
+
+**Valid `outputMode` values:**
+- `insert` — only `INSERT INTO` statements
+- `upsert` — dialect-aware `UPSERT` / `ON CONFLICT DO UPDATE`
+- `truncate+insert` — `TRUNCATE` then `INSERT`
+- `ddl+insert` — full `CREATE TABLE` + `INSERT`
+
+---
+
+### Step 2B: Universal — Generate from a DDL String
+
+```javascript
+import { faker } from '@faker-js/faker';
+import { setFaker } from './src/core.js';
+import { generateFromSchema } from './src/schema-generator.js';
+
+setFaker(faker); // Initialize Faker once
+
+const sql = generateFromSchema({
+  ddl: `
+    CREATE TABLE users (
+      id   SERIAL PRIMARY KEY,
+      name VARCHAR(255),
+      email VARCHAR(255) UNIQUE NOT NULL
+    );
+    CREATE TABLE posts (
+      id      SERIAL PRIMARY KEY,
+      user_id INT REFERENCES users(id),
+      title   VARCHAR(255)
+    );
+  `,
+  rows: 15,
+  outputMode: 'ddl+insert',
+  dialect: 'postgres'
+});
+
+console.log(sql);
+```
+
+---
+
+### Step 2C: Parse DDL Manually (no generation)
+
+```javascript
+import { parseDDL, orderByDependencies } from './src/ddl-parser.js';
+
+const tables = parseDDL(rawDDLString);
+// tables[i] = { tableName, columns, primaryKey, foreignKeys }
+// columns[j] = { name, sqlType, fictaType, nullable, autoIncrement, defaultValue, enumValues }
+
+// Sort tables so parents precede children
+const ordered = orderByDependencies(tables);
+ordered.forEach(t => console.log(t.tableName, t.foreignKeys));
+```
+
+---
+
+### Step 3: Understand FK-Aware Generation
+
+The orchestrator (`schema-generator.js`) maintains a `pkStore`:
+
+```
+pkStore = {
+  users:  { id: [1, 2, 3, ...] },
+  orders: { id: [101, 102, ...] }
+}
+```
+
+- After generating each **parent** table, its PK values are saved to `pkStore`.
+- When generating **child** tables, FK columns sample from `pkStore` to ensure valid references.
+- Tables are processed in topological dependency order so parents always precede children.
+
+---
+
+### Step 4: Run Tests for DDL Workflow
+
+```bash
+# DDL parser tests
+npm test -- ddl-parser.test.js
+
+# Schema generator tests
+npm test -- schema-generator.test.js
+
+# SQL DDL/DML generator tests
+npm test -- sql-schema.test.js
+```
+
+---
+
+### Step 5: Add Tests for New DDL Features
+
+When extending `ddl-parser.js`, `schema-generator.js`, or `sql-schema.js`, follow this pattern:
+
+```javascript
+// tests/ddl-parser.test.js
+import { parseDDL } from '../src/ddl-parser.js';
+
+test('parses ENUM column', () => {
+  const [table] = parseDDL(`
+    CREATE TABLE items (
+      status ENUM('active', 'inactive') NOT NULL
+    );
+  `);
+  expect(table.columns[0].enumValues).toEqual(['active', 'inactive']);
+  expect(table.columns[0].fictaType).toMatch(/^enum:/);
+});
+
+// tests/schema-generator.test.js
+import { generateFromSchema } from '../src/schema-generator.js';
+
+test('generates FK-consistent data', () => {
+  const sql = generateFromSchema({
+    ddl: `
+      CREATE TABLE parents (id SERIAL PRIMARY KEY);
+      CREATE TABLE children (id SERIAL PRIMARY KEY, parent_id INT REFERENCES parents(id));
+    `,
+    rows: 3
+  });
+  expect(sql).toContain('INSERT INTO parents');
+  expect(sql).toContain('INSERT INTO children');
+  // parents must appear before children
+  const parentIdx = sql.indexOf('INSERT INTO parents');
+  const childIdx  = sql.indexOf('INSERT INTO children');
+  expect(parentIdx).toBeLessThan(childIdx);
+});
+```
+
+---
+
+### Success Criteria
+- [ ] SQL output passes a linter or can be executed against the target database
+- [ ] Child FK values reference existing parent PKs
+- [ ] Chosen `dialect` and `outputMode` are reflected in the output
+- [ ] All DDL-related tests pass (`npm test -- ddl-parser schema-generator sql-schema`)
+- [ ] Overall coverage stays at 100%
+
+---
+
 ## General Workflow Tips
 
 ### Before Starting Any Task

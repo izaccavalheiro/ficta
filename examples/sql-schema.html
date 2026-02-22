@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SQL Schema Generator - Ficta</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 40px;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 32px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 16px;
+        }
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .control-group {
+            display: flex;
+            flex-direction: column;
+        }
+        label {
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        input, select, textarea {
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        textarea {
+            resize: vertical;
+            font-family: monospace;
+        }
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+        }
+        button {
+            flex: 1;
+            padding: 14px 24px;
+            font-size: 16px;
+            font-weight: 600;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        .btn-secondary {
+            background: #48bb78;
+            color: white;
+        }
+        .btn-secondary:hover {
+            background: #38a169;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(72, 187, 120, 0.4);
+        }
+        .output {
+            background: #f7fafc;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 20px;
+            min-height: 300px;
+            max-height: 600px;
+            overflow: auto;
+        }
+        .output pre {
+            margin: 0;
+            font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            color: #2d3748;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .info {
+            background: #edf2f7;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            color: #4a5568;
+        }
+        .feature-badge {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-right: 8px;
+            margin-bottom: 8px;
+        }
+        .features {
+            margin-bottom: 30px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🗄️ SQL Schema Generator</h1>
+        <p class="subtitle">Generate realistic SQL schemas with test data - powered by Ficta</p>
+        
+        <div class="features">
+            <span class="feature-badge">DDL Generation</span>
+            <span class="feature-badge">Multi-Dialect</span>
+            <span class="feature-badge">Foreign Keys</span>
+            <span class="feature-badge">Upserts</span>
+            <span class="feature-badge">Batch Inserts</span>
+        </div>
+
+        <div class="info">
+            💡 <strong>Tip:</strong> Use format "name:type" for columns. 
+            Example: <code>id:autoIncrement,username,email,active:boolean</code>
+        </div>
+
+        <div class="controls">
+            <div class="control-group">
+                <label for="table-name">Table Name</label>
+                <input type="text" id="table-name" value="users" placeholder="users">
+            </div>
+
+            <div class="control-group">
+                <label for="rows">Number of Rows</label>
+                <input type="number" id="rows" value="10" min="1" max="1000">
+            </div>
+
+            <div class="control-group">
+                <label for="dialect">SQL Dialect</label>
+                <select id="dialect">
+                    <option value="postgres">PostgreSQL</option>
+                    <option value="mysql">MySQL</option>
+                    <option value="sqlite">SQLite</option>
+                    <option value="generic">Generic SQL</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label for="mode">Output Mode</label>
+                <select id="mode">
+                    <option value="ddl+insert">DDL + INSERT</option>
+                    <option value="ddl">DDL Only</option>
+                    <option value="insert">INSERT Only</option>
+                    <option value="upsert">UPSERT</option>
+                    <option value="truncate+insert">TRUNCATE + INSERT</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="control-group" style="margin-bottom: 20px;">
+            <label for="columns">Column Definitions</label>
+            <textarea id="columns" rows="3" 
+placeholder="id:autoIncrement,username,email,fullName,active:boolean,createdAt:timestamp">id:autoIncrement,username,email,fullName,active:boolean,createdAt:timestamp</textarea>
+        </div>
+
+        <div class="button-group">
+            <button class="btn-primary" onclick="generateSQL()">Generate Schema</button>
+            <button class="btn-secondary" onclick="downloadSQL()">Download .sql File</button>
+        </div>
+
+        <div class="output" id="output">
+            <pre>Click "Generate Schema" to create SQL statements...</pre>
+        </div>
+    </div>
+
+    <!-- Load Ficta bundle (Faker is bundled inside) -->
+    <script src="../dist/ficta.browser.js"></script>
+    
+    <script type="module">
+        import * as sqlSchema from '../src/sql-schema.js';
+        
+        // Make sql-schema available globally for inline handlers
+        window.sqlSchema = sqlSchema;
+        
+        window.currentSQL = '';
+        
+        window.generateSQL = function() {
+            const tableName = document.getElementById('table-name').value || 'users';
+            const rows = parseInt(document.getElementById('rows').value) || 10;
+            const dialect = document.getElementById('dialect').value;
+            const mode = document.getElementById('mode').value;
+            const columnsText = document.getElementById('columns').value;
+            
+            try {
+                // Parse columns
+                const columns = Ficta.parseColumns(columnsText);
+                
+                // Generate data
+                const result = Ficta.generateData({
+                    columns: columnsText,
+                    rows: rows
+                });
+                
+                // Enhance columns with schema metadata for DDL generation
+                const enhancedColumns = columns.map(col => {
+                    const enhanced = { ...col };
+                    
+                    // Add primary key for autoIncrement
+                    if (col.type === 'autoIncrement') {
+                        enhanced.primaryKey = true;
+                    }
+                    
+                    // Mark email/username as unique
+                    if (col.name === 'email' || col.name === 'username') {
+                        enhanced.unique = true;
+                        enhanced.nullable = false;
+                    }
+                    
+                    // Add defaults for common patterns
+                    if (col.name === 'active' && col.type === 'boolean') {
+                        enhanced.default = true;
+                    }
+                    if (col.name.includes('createdAt') || col.name.includes('created_at')) {
+                        enhanced.default = 'NOW()';
+                    }
+                    
+                    return enhanced;
+                });
+                
+                // Generate schema
+                const schema = {
+                    table: tableName,
+                    columns: enhancedColumns,
+                    records: result.records,
+                    mode: mode,
+                    dialect: dialect
+                };
+                
+                const sql = sqlSchema.generateSchema(schema);
+                window.currentSQL = sql;
+                
+                document.getElementById('output').innerHTML = 
+                    `<pre>${escapeHtml(sql)}</pre>`;
+                
+            } catch (error) {
+                document.getElementById('output').innerHTML = 
+                    `<pre style="color: #e53e3e;">❌ Error: ${escapeHtml(error.message)}</pre>`;
+            }
+        };
+        
+        window.downloadSQL = function() {
+            if (!window.currentSQL) {
+                alert('Please generate schema first!');
+                return;
+            }
+            
+            const tableName = document.getElementById('table-name').value || 'users';
+            const dialect = document.getElementById('dialect').value;
+            const filename = `${tableName}-${dialect}.sql`;
+            
+            Ficta.downloadFile(window.currentSQL, filename, 'sql');
+        };
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // Load a preset example
+        generateSQL();
+    </script>
+</body>
+</html>

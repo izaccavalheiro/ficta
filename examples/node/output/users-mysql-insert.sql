@@ -1,0 +1,10 @@
+INSERT INTO users (id, username, email, active, createdAt) VALUES (1, 'anenst', 'muted', 1, '2026-02-21T23:08:52.493Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (2, 'bashfully', 'highly', 1, '2026-02-22T18:45:35.882Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (3, 'live', 'phew', 0, '2026-02-22T09:57:58.979Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (4, 'conclude', 'nutritious', 1, '2026-02-22T08:10:27.467Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (5, 'hurtful', 'burgeon', 1, '2026-02-22T13:43:56.109Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (6, 'onto', 'gown', 0, '2026-02-22T15:53:09.125Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (7, 'who', 'ew', 0, '2026-02-22T01:13:34.135Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (8, 'failing', 'oblong', 1, '2026-02-22T11:04:10.619Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (9, 'whoever', 'considerate', 0, '2026-02-22T14:49:55.911Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (10, 'about', 'unit', 0, '2026-02-22T03:18:58.266Z');

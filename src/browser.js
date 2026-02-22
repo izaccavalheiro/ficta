@@ -1,6 +1,10 @@
 // Browser-specific utilities for Ficta
 import * as core from './core.js';
 import * as formatters from './formatters.browser.js';
+import { faker } from '@faker-js/faker';
+
+// Auto-initialize Faker so the bundle is self-contained
+core.setFaker(faker);
 
 // Re-export core functionality
 export * from './core.js';

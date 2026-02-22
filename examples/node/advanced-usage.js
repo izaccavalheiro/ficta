@@ -1,162 +1,278 @@
 /**
  * Ficta Node.js Advanced Usage Example
- * 
- * This example demonstrates advanced features like multiple formats,
- * large datasets, and custom column definitions.
+ *
+ * Run from this directory:
+ *   node advanced-usage.js
+ *
+ * Covers:
+ *   - Large datasets across all formats
+ *   - Complex column definitions with every special type
+ *   - SQL: all four dialects × all output modes
+ *   - UPSERT with conflict resolution
+ *   - generateFromDDL  — FK-aware seed data from a schema file
+ *   - generateFromSchema — inline DDL, multi-table with FK integrity
+ *   - parseDDL + orderByDependencies — inspect parsed table metadata
+ *   - buildInsertStatements — low-level pure SQL builder
  */
 
-import { generateData, generateAndSave } from 'ficta';
+import { faker } from '@faker-js/faker';
+import { setFaker } from '../../src/core.js';
+import { generateData, generateAndSave, generateFromDDL } from '../../src/node.js';
+import { parseDDL, orderByDependencies } from '../../src/ddl-parser.js';
+import { generateFromSchema, buildInsertStatements } from '../../src/schema-generator.js';
+import { mkdirSync, writeFileSync } from 'fs';
 
-async function generateMultipleFormats() {
-  console.log('=== Generating Test Data in Multiple Formats ===\n');
+// Faker must be set before any generation (already done in node.js, but explicit
+// here to show how universal code initialises Faker)
+setFaker(faker);
+mkdirSync('output', { recursive: true });
 
-  const columns = 'id:autoIncrement,firstName,lastName,email,phone,city,country';
+// ============================================================================
+// Section 1 — 1 000 rows in every format
+// ============================================================================
+async function allFormats() {
+  console.log('=== 1. All formats — 1 000 rows ===\n');
+
+  const columns = 'id:autoIncrement,firstName,lastName,email,phone,city,country,company,jobTitle';
   const rows = 1000;
 
-  console.log('Generating 1000 rows in multiple formats...\n');
+  await generateAndSave({ columns, rows, output: 'output/data.csv' });
+  await generateAndSave({ columns, rows, output: 'output/data.json' });
+  await generateAndSave({ columns, rows, output: 'output/data.xml',
+    rootElement: 'employees', recordElement: 'employee' });
+  await generateAndSave({ columns, rows, output: 'output/data.xlsx',
+    sheetName: 'Employees' });
+  await generateAndSave({ columns, rows, output: 'output/data.tsv' });
+  await generateAndSave({ columns, rows, output: 'output/data.yaml' });
+  await generateAndSave({ columns, rows, output: 'output/data.toml' });
 
-  // CSV
-  await generateAndSave({
-    columns,
-    rows,
-    output: 'data.csv'
-  });
-  console.log('✓ CSV: data.csv');
+  // SQL — plain INSERT (backward-compatible, works without DDL)
+  await generateAndSave({ columns, rows, output: 'output/data-insert.sql',
+    tableName: 'employees' });
 
-  // JSON
-  await generateAndSave({
-    columns,
-    rows,
-    output: 'data.json'
-  });
-  console.log('✓ JSON: data.json');
-
-  // XML
-  await generateAndSave({
-    columns,
-    rows,
-    output: 'data.xml',
-    rootElement: 'users',
-    recordElement: 'user'
-  });
-  console.log('✓ XML: data.xml');
-
-  // Excel
-  await generateAndSave({
-    columns,
-    rows,
-    output: 'data.xlsx',
-    sheetName: 'Users'
-  });
-  console.log('✓ Excel: data.xlsx');
-
-  // TSV
-  await generateAndSave({
-    columns,
-    rows,
-    output: 'data.tsv'
-  });
-  console.log('✓ TSV: data.tsv');
-
-  // SQL
-  await generateAndSave({
-    columns,
-    rows,
-    output: 'data.sql',
-    tableName: 'users'
-  });
-  console.log('✓ SQL: data.sql');
-
-  // YAML
-  await generateAndSave({
-    columns,
-    rows,
-    output: 'data.yaml'
-  });
-  console.log('✓ YAML: data.yaml');
-
-  // TOML
-  await generateAndSave({
-    columns,
-    rows,
-    output: 'data.toml'
-  });
-  console.log('✓ TOML: data.toml');
-
-  console.log('\nAll formats generated successfully!');
+  console.log('All formats written to output/\n');
 }
 
-async function generateComplexData() {
-  console.log('\n=== Generating Complex Test Data ===\n');
+// ============================================================================
+// Section 2 — complex column definitions using every special type
+// ============================================================================
+async function complexColumns() {
+  console.log('=== 2. Complex columns with all special types ===\n');
 
-  // E-commerce orders with complex relationships
   const orderColumns = [
-    'orderId:autoIncrement',
-    'customerId:number',
-    'productName:productName',
+    'orderId:autoIncrement',            // auto-incrementing integer
+    'sku:pattern:ORD-######',           // 6 random digits
+    'trackingCode:pattern:TRK-{COUNTER}', // sequential suffix
+    'customerId:range:1-500',           // integer between 1 and 500
+    'productName:product',
     'quantity:range:1-10',
     'unitPrice:price',
+    'currency:enum:USD|EUR|GBP|JPY',   // fixed-choice column
     'status:enum:pending|processing|shipped|delivered|cancelled',
-    'orderDate:date',
-    'trackingCode:pattern:TRK-{COUNTER}',
-    'email',
-    'phone',
-    'shippingAddress:street',
-    'city',
-    'state',
-    'zipCode'
+    'env:static:production',            // same value every row
+    'notes:sentence',
+    'orderDate:recentDate',
+    'deliveryDate:futureDate',
+    'metadata:json',                    // embedded JSON blob
   ].join(',');
 
   await generateAndSave({
     columns: orderColumns,
     rows: 500,
-    output: 'orders.json'
+    output: 'output/orders.json',
+    preview: true,
   });
-  console.log('✓ Generated complex orders.json with 500 records');
-
-  // User profiles with additional fields
-  const profileColumns = [
-    'userId:autoIncrement',
-    'username:userName',
-    'email',
-    'firstName',
-    'lastName',
-    'avatar:avatar',
-    'bio:sentence',
-    'website:url',
-    'company:companyName',
-    'jobTitle',
-    'phone',
-    'street',
-    'city',
-    'country',
-    'timezone:timeZone',
-    'accountStatus:enum:active|suspended|pending|inactive',
-    'memberSince:date',
-    'lastLogin:dateTime'
-  ].join(',');
-
-  await generateAndSave({
-    columns: profileColumns,
-    rows: 200,
-    output: 'user-profiles.xlsx',
-    sheetName: 'User Profiles'
-  });
-  console.log('✓ Generated user-profiles.xlsx with 200 records');
-
-  console.log('\nComplex data generation complete!');
+  console.log();
 }
 
+// ============================================================================
+// Section 3 — SQL: all four dialects × all output modes
+// ============================================================================
+async function sqlDialectsAndModes() {
+  console.log('=== 3. SQL: dialects × output modes ===\n');
+
+  const columns = 'id:autoIncrement,username,email,active:boolean,createdAt:timestamp';
+  const rows = 10;
+  const tableName = 'users';
+
+  for (const dialect of ['postgres', 'mysql', 'sqlite', 'generic']) {
+    for (const mode of ['insert', 'upsert', 'truncate+insert', 'ddl+insert']) {
+      const file = `output/users-${dialect}-${mode.replace('+', '_')}.sql`;
+      await generateAndSave({
+        columns, rows, output: file,
+        // upsert mode requires at least one conflict column
+        formatOptions: { mode, dialect, tableName, conflictColumns: ['id'] },
+      });
+    }
+  }
+
+  console.log('16 SQL variants written to output/\n');
+}
+
+// ============================================================================
+// Section 4 — generateFromDDL (Node.js file reader)
+// ============================================================================
+async function fromDDLFile() {
+  console.log('=== 4. generateFromDDL — FK-aware seed from a schema file ===\n');
+
+  // Write a demo schema with 3 tables and two FK relationships
+  writeFileSync('output/blog-schema.sql', `
+    CREATE TABLE users (
+      id         SERIAL PRIMARY KEY,
+      email      VARCHAR(255) NOT NULL,
+      first_name VARCHAR(50),
+      last_name  VARCHAR(50),
+      created_at TIMESTAMP
+    );
+    CREATE TABLE posts (
+      id         SERIAL PRIMARY KEY,
+      user_id    INT NOT NULL REFERENCES users(id),
+      title      VARCHAR(255) NOT NULL,
+      body       TEXT,
+      published  DATE
+    );
+    CREATE TABLE comments (
+      id         SERIAL PRIMARY KEY,
+      post_id    INT NOT NULL REFERENCES posts(id),
+      author_id  INT NOT NULL REFERENCES users(id),
+      content    TEXT,
+      created_at TIMESTAMP
+    );
+  `);
+
+  const sql = await generateFromDDL({
+    schemaFile: 'output/blog-schema.sql',
+    rows: 5,
+    outputMode: 'ddl+insert',
+    dialect: 'postgres',
+    output: 'output/blog-seed.sql',
+  });
+
+  console.log('Generated SQL (first 600 chars):');
+  console.log(sql.slice(0, 600) + '\n...\n');
+}
+
+// ============================================================================
+// Section 5 — generateFromSchema (inline DDL, MySQL upsert)
+// ============================================================================
+async function inlineDDL() {
+  console.log('=== 5. generateFromSchema — inline DDL, MySQL upsert ===\n');
+
+  const sql = generateFromSchema({
+    ddl: `
+      CREATE TABLE categories (
+        id   INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(100) NOT NULL
+      );
+      CREATE TABLE products (
+        id          INT AUTO_INCREMENT PRIMARY KEY,
+        category_id INT NOT NULL REFERENCES categories(id),
+        sku         VARCHAR(50) NOT NULL,
+        name        VARCHAR(255) NOT NULL,
+        price       DECIMAL(10,2),
+        description TEXT
+      );
+    `,
+    rows: 5,
+    outputMode: 'upsert',
+    dialect: 'mysql',
+  });
+
+  console.log(sql);
+}
+
+// ============================================================================
+// Section 6 — parseDDL + orderByDependencies (inspect metadata)
+// ============================================================================
+async function inspectParsed() {
+  console.log('=== 6. parseDDL + orderByDependencies — inspect table metadata ===\n');
+
+  const tables = parseDDL(`
+    CREATE TABLE departments (id SERIAL PRIMARY KEY, name VARCHAR(100));
+    CREATE TABLE employees   (
+      id            SERIAL PRIMARY KEY,
+      department_id INT REFERENCES departments(id),
+      first_name    VARCHAR(50),
+      last_name     VARCHAR(50),
+      salary        DECIMAL(10,2),
+      hired_date    DATE
+    );
+  `);
+
+  const ordered = orderByDependencies(tables);
+
+  for (const t of ordered) {
+    console.log(`Table: ${t.tableName}`);
+    console.log(`  PK : ${JSON.stringify(t.primaryKey)}`);
+    console.log(`  FKs: ${JSON.stringify(t.foreignKeys)}`);
+    for (const col of t.columns) {
+      console.log(`    ${col.name.padEnd(16)} sqlType=${col.sqlType.padEnd(18)} fictaType=${col.fictaType}`);
+    }
+    console.log();
+  }
+}
+
+// ============================================================================
+// Section 7 — buildInsertStatements (low-level pure helper)
+// ============================================================================
+async function pureInsertHelper() {
+  console.log('=== 7. buildInsertStatements — low-level SQL builder ===\n');
+
+  const records = [
+    { id: 1, username: 'alice', email: 'alice@example.com', active: true },
+    { id: 2, username: 'bob',   email: 'bob@example.com',   active: false },
+  ];
+  const columns = [
+    { name: 'id' }, { name: 'username' }, { name: 'email' }, { name: 'active' }
+  ];
+
+  console.log('Generic INSERT:');
+  console.log(buildInsertStatements({ tableName: 'users', records, columns }));
+
+  console.log('\nPostgreSQL UPSERT (conflict on id):');
+  console.log(buildInsertStatements({
+    tableName: 'users', records, columns,
+    dialect: 'postgres',
+    outputMode: 'upsert',
+    conflictColumns: ['id'],
+  }));
+
+  console.log('\nMySQL UPSERT (ON DUPLICATE KEY):');
+  console.log(buildInsertStatements({
+    tableName: 'users', records, columns,
+    dialect: 'mysql',
+    outputMode: 'upsert',
+    conflictColumns: ['id'],
+  }));
+
+  console.log('\nSQLite INSERT OR REPLACE:');
+  console.log(buildInsertStatements({
+    tableName: 'users', records, columns,
+    dialect: 'sqlite',
+    outputMode: 'upsert',
+    conflictColumns: ['id'],
+  }));
+  console.log();
+}
+
+// ============================================================================
+// Main
+// ============================================================================
 async function main() {
   try {
-    await generateMultipleFormats();
-    await generateComplexData();
-    
-    console.log('\n=== All Examples Completed Successfully ===');
-  } catch (error) {
-    console.error('Error:', error.message);
+    await allFormats();
+    await complexColumns();
+    await sqlDialectsAndModes();
+    await fromDDLFile();
+    await inlineDDL();
+    await inspectParsed();
+    await pureInsertHelper();
+    console.log('=== All advanced examples completed ===');
+  } catch (err) {
+    console.error('Error:', err.message);
     process.exit(1);
   }
 }
 
 main();
+

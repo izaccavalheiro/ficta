@@ -174,17 +174,23 @@ ficta/
 │   ├── core.js              # Universal core logic
 │   ├── formatters.js        # Node.js formatters
 │   ├── formatters.browser.js # Browser formatters
-│   ├── node.js              # Node.js adapter
-│   └── browser.js           # Browser adapter
+│   ├── node.js              # Node.js adapter + generateFromDDL()
+│   ├── browser.js           # Browser adapter
+│   ├── sql-schema.js        # SQL DDL/DML generator (universal)
+│   ├── ddl-parser.js        # SQL DDL → TableDef parser (universal, pure)
+│   └── schema-generator.js  # Multi-table FK-aware orchestrator (universal)
 ├── cli.js                   # CLI interface
 ├── build.js                 # Build script for bundles
-├── tests/                   # Test suite
+├── tests/                   # Test suite (596 tests, 100% coverage)
 │   ├── core.test.js
 │   ├── formatters.test.js
 │   ├── formatters.browser.test.js
 │   ├── node.test.js
 │   ├── browser.test.js
-│   └── cli.test.js
+│   ├── cli.test.js
+│   ├── sql-schema.test.js
+│   ├── ddl-parser.test.js
+│   └── schema-generator.test.js
 └── dist/                    # Built browser bundles
     ├── ficta.browser.js    # UMD bundle
     └── csv-generator.esm.js        # ES Module bundle
@@ -197,8 +203,31 @@ ficta/
                     │   Faker.js  │
                     └──────┬──────┘
                            │
-                    ┌──────▼──────┐
-          ┌─────────┤  core.js    ├─────────┐
+                    ┌──────▼──────┐          ┌─────────┤  core.js    ├─────────┐
+          │         └─────────────┘         │
+          │                                 │
+     ┌────┴────┐                       ┌────┴────┐
+     │ node.js │                       │browser.js│
+     └────┬────┘                       └────┬────┘
+          │                                 │
+  ┌───────┴───────┐              ┌─────────┴──────────┐
+  │ formatters.js  │              │formatters.browser.js│
+  └───────┬───────┘              └─────────┬──────────┘
+          │                                 │
+    ┌─────┴─────┐                    ┌──────┴─────┐
+    │  cli.js   │                    │ Web Browser │
+    └───────────┘                    └─────────────┘
+
+  SQL layer (universal — used by both node.js and schema-generator.js):
+
+  ┌────────────────────┐   ┌────────────────────┐
+  │  ddl-parser.js     │→│ schema-generator.js │→ node.js
+  └────────────────────┘   └─────────┬──────────┘
+                                           │
+                             ┌──────────┴────────┐
+                             │  sql-schema.js     │
+                             └──────────────────┘
+```          ┌─────────┤  core.js    ├─────────┐
           │         └─────────────┘         │
           │                                 │
      ┌────▼────┐                       ┌────▼────┐
@@ -269,13 +298,58 @@ ficta/
 - File system operations
 - Format detection from filename
 - Integrate core + formatters
+- DDL file reading and generation (`generateFromDDL`)
 
 **Exports:**
 - `generateData(options)` - Returns formatted data
 - `generateAndSave(options)` - Saves to file
+- `generateFromDDL(options)` - Reads a DDL `.sql` file and writes a seed SQL file
 - Re-exports from core (templates, listTypes, etc.)
 
-**Dependencies:** core.js, formatters.js, fs (Node.js built-in)
+**Dependencies:** core.js, formatters.js, schema-generator.js, fs (Node.js built-in)
+
+#### `sql-schema.js` - SQL DDL/DML Generator
+**Responsibilities:**
+- Generate `CREATE TABLE` DDL statements with column types and constraints
+- Generate `INSERT` (individual and batch) and `UPSERT` DML statements
+- Map 40+ Faker types to SQL column types across 4 dialects
+- Provide legacy `generateSchema()` for object-based schema definitions
+
+**Exports:**
+- `sqlTypeMap` - Faker type → SQL type mapping per dialect
+- `getSQLType(column, dialect)` - Resolve SQL type for a column
+- `generateDDL(tableName, columns, options)` - CREATE TABLE statement
+- `generateInserts(tableName, records, columns, options)` - INSERT statements
+- `generateUpserts(tableName, records, columns, options)` - UPSERT statements
+- `resolveTableDependencies(tables)` - Topological sort (legacy)
+- `generateSchema(schema)` - Complete schema generation (multi-table)
+
+**Dependencies:** None (pure JS, universal)
+
+#### `ddl-parser.js` - SQL DDL Parser
+**Responsibilities:**
+- Parse raw SQL `CREATE TABLE` strings into structured `TableDef` objects
+- Two-layer type resolution: column name hints first, SQL type fallback second
+- Support inline and table-level `FOREIGN KEY … REFERENCES` syntax
+- Handle SQL comments, quoted identifiers, `ENUM`, `AUTO_INCREMENT`, `SERIAL`
+
+**Exports:**
+- `parseDDL(ddlString)` - Parse DDL into `Array<TableDef>`
+- `orderByDependencies(tables)` - Topological sort (Kahn's algorithm)
+
+**Dependencies:** None (pure JS, universal)
+
+#### `schema-generator.js` - Multi-Table Orchestrator
+**Responsibilities:**
+- Coordinate multi-table FK-aware data generation from DDL or pre-parsed tables
+- Maintain a `pkStore` so child-table FK columns reference real parent PKs
+- Assemble the final SQL script (DDL, TRUNCATE, DML in correct order)
+
+**Exports:**
+- `generateFromSchema(options)` - Primary entry point returning a SQL string
+- `buildInsertStatements(options)` - Pure helper for single-table INSERT/UPSERT
+
+**Dependencies:** core.js, ddl-parser.js, sql-schema.js
 
 #### `browser.js` - Browser Adapter
 **Responsibilities:**
@@ -331,6 +405,35 @@ User Input
 │  Output/Save      │ ← fs.writeFile() or Blob download
 └───────────────────┘
 ```
+
+### DDL-Driven Generation Flow
+
+```
+DDL String / .sql File
+    ↓
+parseDDL(ddlString)
+    ↓
+Array<TableDef>: [{ tableName, columns, primaryKey, foreignKeys }]
+    ↓
+orderByDependencies(tables)
+    ↓
+Tables sorted in dependency order (Kahn's topological sort)
+    ↓
+for each table (in FK-safe order):
+    ├─ generateTableData({ tableDef, rows, pkStore })
+    │   ├─ FK columns: look up parent PKs from pkStore
+    │   ├─ autoIncrement columns: use sequential counter
+    │   └─ Other columns: delegate to core.generateRow()
+    ├─ storePKValues(tableDef, records, pkStore)
+    └─ Push { tableDef, records, ddlCols, insertCols } to results
+    ↓
+Assemble output (TRUNCATE → DDL → DML) based on outputMode
+    ↓
+Complete SQL script string
+```
+
+**pkStore** is a live map `{ tableName: { colName: value[] } }` that accumulates
+primary key values as each parent table is generated, ensuring FK integrity.
 
 ### Detailed Flow: generateRows()
 
@@ -878,6 +981,12 @@ function sanitizeFilename(filename) {
 
 ## Future Roadmap
 
+### Implemented (as of 2026-02-22)
+
+1. ✅ **SQL Schema Generation** — DDL, foreign keys, 4 dialects, multi-mode output
+2. ✅ **DDL Import (Schema Import)** — Parse existing `.sql` schemas, generate FK-aware test data
+3. ✅ **Multi-table orchestration** — Topological sort, parent-to-child FK resolution, pkStore
+
 ### Planned Features
 
 1. **Streaming API**
@@ -889,22 +998,19 @@ function sanitizeFilename(filename) {
    - User-defined formatters
    - Middleware hooks
 
-3. **Data Relationships**
-   - Foreign key references
-   - Consistent data across tables
-   - Graph generation
-
-4. **Advanced Types**
+3. **Advanced Types**
    - Conditional values
    - Computed columns
    - Cross-field dependencies
 
-5. **Schema Import**
-   - Generate from database schema
+4. **Schema Import Extensions**
    - Import from JSON Schema
    - OpenAPI integration
+   - PostgreSQL ENUM type creation
+   - Indexes and composite keys
+   - CHECK constraints
 
-6. **Performance Optimizations**
+5. **Performance Optimizations**
    - Worker threads for parallel generation
    - WebAssembly for formatters
    - Streaming Excel generation
@@ -932,5 +1038,5 @@ The universal core with environment adapters pattern allows sharing 80% of code 
 
 ---
 
-**Last Updated:** 2026-02-21
-**Version:** 1.0.0
+**Last Updated:** 2026-02-22
+**Version:** 1.1.0

@@ -1,12 +1,16 @@
 {
   "name": "ficta-node-example",
   "version": "1.0.0",
-  "description": "Example of using Ficta in Node.js",
+  "description": "Examples of using Ficta in Node.js",
   "type": "module",
   "main": "basic-usage.js",
   "scripts": {
-    "start": "node basic-usage.js",
-    "advanced": "node advanced-usage.js"
+    "start":      "node basic-usage.js",
+    "advanced":   "node advanced-usage.js",
+    "ddl":        "node ddl-usage.js",
+    "sql":        "node sql-simple.js",
+    "sql-schema": "node sql-schema-examples.js",
+    "quick":      "node quick-test.js"
   },
   "keywords": [
     "ficta",

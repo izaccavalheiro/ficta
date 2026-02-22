@@ -1,0 +1,10 @@
+INSERT OR REPLACE INTO users (id, username, email, active, createdAt) VALUES (1, 'crystallize', 'for', 0, '2026-02-22T13:54:31.482Z');
+INSERT OR REPLACE INTO users (id, username, email, active, createdAt) VALUES (2, 'because', 'whoa', 0, '2026-02-22T18:54:29.515Z');
+INSERT OR REPLACE INTO users (id, username, email, active, createdAt) VALUES (3, 'frightfully', 'seldom', 1, '2026-02-21T23:41:09.570Z');
+INSERT OR REPLACE INTO users (id, username, email, active, createdAt) VALUES (4, 'omelet', 'guacamole', 1, '2026-02-22T01:38:26.806Z');
+INSERT OR REPLACE INTO users (id, username, email, active, createdAt) VALUES (5, 'next', 'hm', 0, '2026-02-22T10:46:17.043Z');
+INSERT OR REPLACE INTO users (id, username, email, active, createdAt) VALUES (6, 'meh', 'than', 0, '2026-02-22T16:50:18.641Z');
+INSERT OR REPLACE INTO users (id, username, email, active, createdAt) VALUES (7, 'quizzically', 'supposing', 0, '2026-02-22T05:06:20.002Z');
+INSERT OR REPLACE INTO users (id, username, email, active, createdAt) VALUES (8, 'suckle', 'blue', 1, '2026-02-22T08:49:09.790Z');
+INSERT OR REPLACE INTO users (id, username, email, active, createdAt) VALUES (9, 'shyly', 'but', 0, '2026-02-21T20:32:03.046Z');
+INSERT OR REPLACE INTO users (id, username, email, active, createdAt) VALUES (10, 'fragrant', 'properly', 1, '2026-02-22T05:52:55.440Z');

@@ -1,0 +1,10 @@
+INSERT INTO users (id, username, email, active, createdAt) VALUES (1, 'decide', 'apt', 0, '2026-02-22T18:03:59.505Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (2, 'shrilly', 'portray', 0, '2026-02-22T06:34:03.821Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (3, 'ack', 'brr', 0, '2026-02-22T03:23:10.680Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (4, 'bore', 'phew', 0, '2026-02-22T18:34:12.009Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (5, 'excepting', 'gum', 0, '2026-02-21T22:14:47.460Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (6, 'curiously', 'drat', 1, '2026-02-21T22:47:19.237Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (7, 'supposing', 'sans', 0, '2026-02-22T11:03:00.968Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (8, 'short-term', 'broadside', 0, '2026-02-22T08:22:25.064Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (9, 'sure-footed', 'yowza', 0, '2026-02-22T11:27:08.539Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (10, 'till', 'with', 0, '2026-02-21T22:05:18.417Z');

@@ -1,0 +1,82 @@
+[
+  {
+    "sku": 1,
+    "name": "Soft Wooden Keyboard",
+    "category": "Movies",
+    "price": "carelessly",
+    "stock": 9769,
+    "description": "The sleek and foolish Towels comes with violet LED lighting for smart functionality"
+  },
+  {
+    "sku": 2,
+    "name": "Modern Metal Pants",
+    "category": "Sports",
+    "price": "multicolored",
+    "stock": 7128,
+    "description": "Discover the hippopotamus-like agility of our Cheese, perfect for raw users"
+  },
+  {
+    "sku": 3,
+    "name": "Elegant Ceramic Chicken",
+    "category": "Garden",
+    "price": "quicker",
+    "stock": 5815,
+    "description": "Savor the golden essence in our Shirt, designed for private culinary adventures"
+  },
+  {
+    "sku": 4,
+    "name": "Gorgeous Metal Hat",
+    "category": "Industrial",
+    "price": "coordinated",
+    "stock": 3041,
+    "description": "The Self-enabling cohesive benchmark Bacon offers reliable performance and useless design"
+  },
+  {
+    "sku": 5,
+    "name": "Tasty Rubber Ball",
+    "category": "Kids",
+    "price": "outside",
+    "stock": 5859,
+    "description": "New orchid Tuna with ergonomic design for phony comfort"
+  },
+  {
+    "sku": 6,
+    "name": "Oriental Marble Table",
+    "category": "Kids",
+    "price": "ignorance",
+    "stock": 1138,
+    "description": "Ergonomic Chips made with Ceramic for all-day aggressive support"
+  },
+  {
+    "sku": 7,
+    "name": "Rustic Steel Tuna",
+    "category": "Beauty",
+    "price": "worth",
+    "stock": 701,
+    "description": "Stylish Car designed to make you stand out with familiar looks"
+  },
+  {
+    "sku": 8,
+    "name": "Handcrafted Steel Tuna",
+    "category": "Computers",
+    "price": "fooey",
+    "stock": 3351,
+    "description": "The Organic regional access Tuna offers reliable performance and vain design"
+  },
+  {
+    "sku": 9,
+    "name": "Incredible Bronze Chair",
+    "category": "Outdoors",
+    "price": "similar",
+    "stock": 1073,
+    "description": "Discover the thrifty new Fish with an exciting mix of Granite ingredients"
+  },
+  {
+    "sku": 10,
+    "name": "Intelligent Marble Shirt",
+    "category": "Music",
+    "price": "when",
+    "stock": 3985,
+    "description": "Discover the flamingo-like agility of our Bacon, perfect for powerless users"
+  }
+]

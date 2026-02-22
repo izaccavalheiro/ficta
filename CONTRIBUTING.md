@@ -69,16 +69,19 @@ npm run build
 
 ```
 ficta/
-├── src/              # Source code
-│   ├── core.js       # Universal core (no Node/browser deps)
-│   ├── formatters.js # Node.js formatters
+├── src/                     # Source code
+│   ├── core.js              # Universal core (no Node/browser deps)
+│   ├── formatters.js        # Node.js formatters
 │   ├── formatters.browser.js # Browser formatters
-│   ├── node.js       # Node.js adapter
-│   └── browser.js    # Browser adapter
-├── cli.js           # CLI interface
-├── tests/           # Test suite (100% coverage)
-├── examples/        # Usage examples
-└── dist/           # Built browser bundles
+│   ├── node.js              # Node.js adapter + generateFromDDL()
+│   ├── browser.js           # Browser adapter
+│   ├── sql-schema.js        # SQL DDL/DML generator (universal)
+│   ├── ddl-parser.js        # SQL DDL → TableDef parser (universal, pure)
+│   └── schema-generator.js  # Multi-table FK-aware orchestrator (universal)
+├── cli.js                   # CLI interface
+├── tests/                   # Test suite (596 tests, 100% coverage)
+├── examples/                # Usage examples
+└── dist/                    # Built browser bundles
 ```
 
 ---
@@ -91,7 +94,8 @@ ficta/
 2. **Pure Functions**: Core logic is functional and side-effect free
 3. **Environment Adapters**: Platform-specific code in `node.js` and `browser.js`
 4. **ES Modules**: All code uses ES6 import/export
-5. **100% Test Coverage**: All code must be tested
+5. **100% Test Coverage**: All new code must be tested
+6. **SQL Schema Stack**: `ddl-parser.js` → `schema-generator.js` → `sql-schema.js` are universal and dependency-injected
 
 ### Read More
 
@@ -153,7 +157,30 @@ perf/optimize-large-datasets
 6. Add tests in `tests/formatters.test.js`
 7. Update README.md
 
-See [AI_WORKFLOWS.md](AI_WORKFLOWS.md) for detailed step-by-step guides.
+#### Add SQL Column Type Mapping (new dialect or type)
+
+1. Edit `src/sql-schema.js`
+2. Add entry to `sqlTypeMap` for each relevant dialect:
+   ```javascript
+   myType: { postgres: 'TEXT', mysql: 'VARCHAR(255)', sqlite: 'TEXT', generic: 'VARCHAR(255)' }
+   ```
+3. Add test in `tests/sql-schema.test.js`
+4. Run tests: `npm test`
+
+#### Generate Data from a SQL DDL Schema
+
+See [AI_WORKFLOWS.md — Workflow 11](AI_WORKFLOWS.md) for the full step-by-step guide.
+
+Short version:
+```javascript
+import { generateFromDDL } from './src/node.js';
+const sql = await generateFromDDL({
+  schemaFile: './schema.sql',
+  rows: 20,
+  outputMode: 'ddl+insert',
+  dialect: 'postgres'
+});
+```
 
 ---
 
@@ -161,7 +188,7 @@ See [AI_WORKFLOWS.md](AI_WORKFLOWS.md) for detailed step-by-step guides.
 
 ### Test Philosophy
 
-- **100% coverage required** - All code paths must be tested
+- **100% coverage required** — All new code paths must be tested
 - **Test behavior, not implementation** - Tests should survive refactoring
 - **Fast tests** - Keep tests quick for rapid iteration
 
@@ -173,6 +200,11 @@ npm test
 
 # Specific file
 npm test -- core.test.js
+
+# DDL/SQL tests
+npm test -- ddl-parser.test.js
+npm test -- schema-generator.test.js
+npm test -- sql-schema.test.js
 
 # Watch mode
 npm test -- --watch

@@ -1,0 +1,10 @@
+INSERT INTO users (id, username, email, active, createdAt) VALUES (1, 'decriminalize', 'poor', FALSE, '2026-02-22T12:08:58.114Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (2, 'mindless', 'yuck', TRUE, '2026-02-22T12:10:28.447Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (3, 'enfold', 'interior', TRUE, '2026-02-22T00:42:39.645Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (4, 'instantly', 'underneath', FALSE, '2026-02-22T02:24:56.333Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (5, 'hence', 'towards', TRUE, '2026-02-22T18:26:27.777Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (6, 'indeed', 'yowza', FALSE, '2026-02-21T21:54:55.427Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (7, 'stiffen', 'a', TRUE, '2026-02-22T09:58:10.970Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (8, 'lively', 'provided', FALSE, '2026-02-22T12:36:47.929Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (9, 'in', 'solemnly', TRUE, '2026-02-22T06:45:46.541Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (10, 'physically', 'cautiously', TRUE, '2026-02-22T10:00:01.215Z');
