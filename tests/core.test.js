@@ -5,7 +5,9 @@ import {
   parseColumns,
   generateRow,
   generateData,
-  setFaker
+  setFaker,
+  listTypes,
+  listTemplates
 } from '../src/core.js';
 import { toCSV as toCSVString } from '../src/formatters.js';
 import { faker } from '@faker-js/faker';
@@ -562,6 +564,100 @@ describe('Core Module', () => {
       // We can also verify setFaker works as the alternative
       setFaker(faker);
       expect(() => generateData({ columns: 'id', rows: 1 })).not.toThrow();
+    });
+  });
+
+  describe('listTypes and listTemplates', () => {
+    test('listTypes should return all available types', () => {
+      const types = listTypes();
+      
+      expect(Array.isArray(types)).toBe(true);
+      expect(types.length).toBeGreaterThan(0);
+      expect(types).toContain('firstName');
+      expect(types).toContain('email');
+      expect(types).toContain('uuid');
+      expect(types).toContain('autoIncrement');
+    });
+
+    test('listTemplates should return all available templates', () => {
+      const templateNames = listTemplates();
+      
+      expect(Array.isArray(templateNames)).toBe(true);
+      expect(templateNames).toContain('users');
+      expect(templateNames).toContain('products');
+      expect(templateNames).toContain('transactions');
+      expect(templateNames).toContain('addresses');
+      expect(templateNames).toContain('contacts');
+    });
+  });
+
+  describe('generateData with template option', () => {
+    test('should use template via options.template', () => {
+      const result = generateData({
+        template: 'users',
+        rows: 10
+      });
+      
+      expect(result.records).toHaveLength(10);
+      expect(result.records[0]).toHaveProperty('email');
+      expect(result.records[0]).toHaveProperty('firstName');
+      expect(result.records[0]).toHaveProperty('lastName');
+    });
+
+    test('should override template columns when columns is provided', () => {
+      const result = generateData({
+        template: 'users',
+        columns: 'id:autoIncrement,custom:word',
+        rows: 5
+      });
+      
+      expect(result.records).toHaveLength(5);
+      expect(result.records[0]).toHaveProperty('id');
+      expect(result.records[0]).toHaveProperty('custom');
+      expect(result.records[0]).not.toHaveProperty('email');
+    });
+
+    test('should use template rows when rows not specified', () => {
+      const result = generateData({
+        template: 'products'
+      });
+      
+      // products template has 100 rows
+      expect(result.records).toHaveLength(100);
+      expect(result.records[0]).toHaveProperty('sku');
+      expect(result.records[0]).toHaveProperty('price');
+    });
+
+    test('should override template rows when rows is provided', () => {
+      const result = generateData({
+        template: 'contacts',
+        rows: 25
+      });
+      
+      expect(result.records).toHaveLength(25);
+      expect(result.records[0]).toHaveProperty('fullName');
+    });
+
+    test('should throw error for unknown template', () => {
+      expect(() => {
+        generateData({
+          template: 'nonexistent',
+          rows: 10
+        });
+      }).toThrow('Unknown template: nonexistent');
+    });
+
+    test('should include available templates in error message', () => {
+      try {
+        generateData({
+          template: 'invalid'
+        });
+        fail('Should have thrown error');
+      } catch (error) {
+        expect(error.message).toContain('Available templates:');
+        expect(error.message).toContain('users');
+        expect(error.message).toContain('products');
+      }
     });
   });
 
