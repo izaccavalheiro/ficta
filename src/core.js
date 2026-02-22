@@ -232,3 +232,19 @@ export function generateData(options) {
     columnCount: columns.length
   };
 }
+
+/**
+ * List available data types
+ * @returns {Array} Array of available type names
+ */
+export function listTypes() {
+  return Object.keys(fakerTypes);
+}
+
+/**
+ * List available templates
+ * @returns {Array} Array of template names
+ */
+export function listTemplates() {
+  return Object.keys(templates);
+}
