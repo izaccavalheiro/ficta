@@ -1,12 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { generateData, downloadFile, listTemplates } from 'ficta/browser';
+import { generateData, formatData, downloadFile, listTemplates, setFaker } from 'ficta/browser';
 import { faker } from '@faker-js/faker';
 import './App.css';
 
 // Initialize Faker
-if (typeof window !== 'undefined') {
-  window.faker = faker;
-}
+setFaker(faker);
 
 function App() {
   const [columns, setColumns] = useState('id:autoIncrement,firstName,lastName,email,phone');
@@ -26,8 +24,7 @@ function App() {
     setLoading(true);
     try {
       const options = {
-        rows: parseInt(rows),
-        format
+        rows: parseInt(rows)
       };
 
       if (template) {
@@ -36,8 +33,12 @@ function App() {
         options.columns = columns;
       }
 
-      const data = await generateData(options);
-      setGeneratedData(data);
+      // Generate raw data
+      const result = await generateData(options);
+      
+      // Format the data according to selected format
+      const formattedData = formatData(result.records, result.columns, format);
+      setGeneratedData(formattedData);
     } catch (error) {
       console.error('Error generating data:', error);
       alert('Error: ' + error.message);

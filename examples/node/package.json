@@ -17,6 +17,6 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "ficta": "^1.0.0"
+    "ficta": "^1.0.2"
   }
 }
