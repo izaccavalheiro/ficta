@@ -4,7 +4,8 @@ import {
   writeFile,
   listTypes,
   listTemplates,
-  generateFromDDL
+  generateFromDDL,
+  seedFaker
 } from '../src/node.js';
 import fs from 'fs';
 import { promisify } from 'util';
@@ -288,6 +289,44 @@ describe('Node.js Module', () => {
       } finally {
         consoleSpy.mockRestore();
       }
+    });
+  });
+
+  describe('seed support', () => {
+    const seedFile1 = 'test-seed-1.json';
+    const seedFile2 = 'test-seed-2.json';
+
+    afterEach(async () => {
+      for (const f of [seedFile1, seedFile2]) {
+        if (fs.existsSync(f)) await unlink(f);
+      }
+    });
+
+    test('two generateAndSave calls with the same seed produce identical data', async () => {
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      try {
+        const r1 = await generateAndSave({
+          columns: 'name:fullName,email,score:range:1-100',
+          rows: 5,
+          format: 'json',
+          output: seedFile1,
+          seed: 99,
+        });
+        const r2 = await generateAndSave({
+          columns: 'name:fullName,email,score:range:1-100',
+          rows: 5,
+          format: 'json',
+          output: seedFile2,
+          seed: 99,
+        });
+        expect(r1.records).toEqual(r2.records);
+      } finally {
+        consoleSpy.mockRestore();
+      }
+    });
+
+    test('seedFaker is re-exported from node.js', () => {
+      expect(typeof seedFaker).toBe('function');
     });
   });
 });

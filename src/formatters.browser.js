@@ -201,7 +201,42 @@ function toSQLLegacy(records, columns, tableName) {
 }
 
 /**
- * Convert array of objects to YAML string (browser-compatible)
+ * Serialize a scalar value to a YAML-safe string.
+ * Strings that contain YAML-special characters are emitted as double-quoted
+ * scalars with backslash and double-quote escaping.
+ * Numbers, booleans, and null are emitted bare (unquoted).
+ * @param {*} value - Value to serialize
+ * @returns {string} YAML scalar representation
+ */
+function serializeYAMLScalar(value) {
+  if (value === null || value === undefined) {
+    return 'null';
+  }
+  if (typeof value === 'boolean') {
+    return value ? 'true' : 'false';
+  }
+  if (typeof value === 'number') {
+    return String(value);
+  }
+  const str = String(value);
+  // Quote if the string contains any YAML-special characters or leading/trailing whitespace
+  const needsQuoting =
+    /[:#\n[\]{},|>!"']/.test(str) ||
+    str !== str.trim() ||
+    str === '' ||
+    str === 'true' || str === 'false' || str === 'null';
+  if (needsQuoting) {
+    // Double-quoted scalar: escape backslashes, double-quotes, and newlines
+    return '"' + str.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n') + '"';
+  }
+  return str;
+}
+
+/**
+ * Convert array of objects to YAML string (browser-compatible).
+ * Produces a YAML block sequence of mappings. Each record is a list item
+ * (starting with `- `). Subsequent keys in the same record are indented
+ * by two spaces. All scalar values are properly quoted when necessary.
  * @param {Array} records - Array of row objects
  * @returns {string} YAML string
  */
@@ -209,24 +244,25 @@ export function toYAML(records) {
   if (records.length === 0) {
     return '[]\n';
   }
-  
-  const yamlLines = [];
-  records.forEach((record, index) => {
-    yamlLines.push(`- ${Object.keys(record).map(key => {
-      const value = record[key];
-      const yamlValue = typeof value === 'string' 
-        ? (value.includes(':') || value.includes('#') || value.includes('\n') 
-          ? JSON.stringify(value) 
-          : value)
-        : JSON.stringify(value);
-      return `${key}: ${yamlValue}`;
-    }).join('\n  ')}`);
-    if (index < records.length - 1) {
-      yamlLines.push('');
+
+  const lines = [];
+  for (let i = 0; i < records.length; i++) {
+    const record = records[i];
+    const keys = Object.keys(record);
+    keys.forEach((key, ki) => {
+      const value = serializeYAMLScalar(record[key]);
+      if (ki === 0) {
+        lines.push(`- ${key}: ${value}`);
+      } else {
+        lines.push(`  ${key}: ${value}`);
+      }
+    });
+    if (i < records.length - 1) {
+      lines.push('');
     }
-  });
-  
-  return yamlLines.join('\n');
+  }
+
+  return lines.join('\n') + '\n';
 }
 
 /**

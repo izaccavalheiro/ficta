@@ -86,6 +86,61 @@ function setupCLI() {
       type: 'boolean',
       default: false
     })
+    .option('seed', {
+      describe: 'Seed for reproducible output (integer)',
+      type: 'number'
+    })
+    .command(
+      'schema <file>',
+      'Generate test data from a SQL DDL schema file',
+      (yargs) => {
+        return yargs
+          .positional('file', {
+            describe: 'Path to the .sql DDL schema file',
+            type: 'string'
+          })
+          .option('rows', {
+            alias: 'r',
+            describe: 'Number of rows to generate per table',
+            type: 'number',
+            default: 10
+          })
+          .option('dialect', {
+            describe: 'SQL dialect',
+            type: 'string',
+            choices: ['postgres', 'mysql', 'sqlite', 'generic'],
+            default: 'generic'
+          })
+          .option('mode', {
+            describe: 'SQL output mode',
+            type: 'string',
+            choices: ['insert', 'upsert', 'truncate+insert', 'ddl+insert'],
+            default: 'insert'
+          })
+          .option('output', {
+            alias: 'o',
+            describe: 'Output file path (optional)',
+            type: 'string'
+          });
+      },
+      async (argv) => {
+        try {
+          const sql = await generateFromDDL({
+            schemaFile: argv.file,
+            rows: argv.rows,
+            dialect: argv.dialect,
+            outputMode: argv.mode,
+            output: argv.output,
+          });
+          if (!argv.output) {
+            process.stdout.write(sql);
+          }
+        } catch (err) {
+          console.error('Error:', err.message);
+          process.exit(1);
+        }
+      }
+    )
     .check((argv) => {
       if (argv.listTypes || argv.listTemplates) {
         return true;
@@ -106,11 +161,6 @@ function setupCLI() {
 
 // Main execution function
 async function main(argv) {
-  // 'schema' subcommand is handled by its own yargs command handler — skip
-  if (argv._ && argv._[0] === 'schema') {
-    return;
-  }
-
   if (argv.listTypes) {
     listTypes();
     return;
@@ -149,6 +199,9 @@ async function main(argv) {
   if (argv.sqlBatch) {
     options.formatOptions.batch = argv.sqlBatch;
   }
+  if (argv.seed !== undefined) {
+    options.seed = argv.seed;
+  }
 
   // Use template if specified
   if (argv.template) {
@@ -164,7 +217,16 @@ async function main(argv) {
 
 // CLI runner function
 async function runCLI() {
+  // Check for schema subcommand before yargs processes args (yargs v18 returns
+  // undefined for argv._ after command dispatch, so we check raw process.argv)
+  const isSchemaCommand = process.argv[2] === 'schema';
+
   const argv = setupCLI();
+
+  // 'schema' subcommand is fully handled by its own yargs command handler
+  if (isSchemaCommand) {
+    return;
+  }
   
   try {
     await main(argv);

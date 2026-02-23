@@ -23,6 +23,17 @@ export function setFaker(faker) {
   fakerInstance = faker;
 }
 
+/**
+ * Seed the Faker instance for reproducible output.
+ * @param {number} seed - Integer seed value
+ */
+export function seedFaker(seed) {
+  if (!fakerInstance) {
+    throw new Error('Faker.js not initialized. Call setFaker() before seedFaker()');
+  }
+  fakerInstance.seed(seed);
+}
+
 // Available Faker data types mapped to their generators
 export const fakerTypes = {
   // Person

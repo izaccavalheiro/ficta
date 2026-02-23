@@ -615,6 +615,51 @@ describe('Formatters Browser Module', () => {
       expect(yaml).toBeDefined();
       expect(typeof yaml).toBe('string');
     });
+
+    test('(a) quotes strings containing colons', () => {
+      const records = [{ key: 'host: localhost' }];
+      const yaml = formatters.toYAML(records);
+      expect(yaml).toContain('"host: localhost"');
+    });
+
+    test('(b) quotes strings containing hash characters', () => {
+      const records = [{ note: 'color #ff0000' }];
+      const yaml = formatters.toYAML(records);
+      expect(yaml).toContain('"color #ff0000"');
+    });
+
+    test('(c) multi-key records use block mapping indentation', () => {
+      const records = [{ id: 1, name: 'Alice', active: true }];
+      const yaml = formatters.toYAML(records);
+      expect(yaml).toMatch(/^- id: 1/m);
+      expect(yaml).toMatch(/^  name: Alice/m);
+      expect(yaml).toMatch(/^  active: true/m);
+    });
+
+    test('(d) booleans and numbers are emitted unquoted', () => {
+      const records = [{ flag: true, count: 42, score: 3.14, disabled: false }];
+      const yaml = formatters.toYAML(records);
+      expect(yaml).toContain('flag: true');
+      expect(yaml).toContain('count: 42');
+      expect(yaml).toContain('score: 3.14');
+      expect(yaml).toContain('disabled: false');
+      // None of these should be quoted
+      expect(yaml).not.toContain('"true"');
+      expect(yaml).not.toContain('"42"');
+    });
+
+    test('(e) quotes strings containing embedded double quotes', () => {
+      const records = [{ msg: 'say "hello"' }];
+      const yaml = formatters.toYAML(records);
+      expect(yaml).toContain('\\"hello\\"');
+    });
+
+    test('null and undefined values are emitted as bare null (covers serializeYAMLScalar null branch)', () => {
+      const records = [{ id: 1, missing: null, absent: undefined }];
+      const yaml = formatters.toYAML(records);
+      expect(yaml).toContain('missing: null');
+      expect(yaml).toContain('absent: null');
+    });
   });
 
   describe('toTOML', () => {

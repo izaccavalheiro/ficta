@@ -7,7 +7,7 @@ import { generateFromSchema } from './schema-generator.js';
 // Initialize faker for the core module
 core.setFaker(faker);
 
-// Re-export core functionality
+// Re-export core functionality (including seedFaker)
 export * from './core.js';
 
 // Re-export formatters
@@ -51,6 +51,11 @@ export async function generateAndSave(options) {
     output = `test-data.${ext}`;
   }
   
+  // Seed faker for reproducible output if requested
+  if (options.seed !== undefined && options.seed !== null && Number.isFinite(options.seed)) {
+    core.seedFaker(options.seed);
+  }
+
   // Generate data
   const result = core.generateData(options);
   

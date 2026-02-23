@@ -352,6 +352,19 @@ describe('CLI Module', () => {
         await unlink(sqlFile);
       }
     });
+
+    test('should pass seed option to generateAndSave (covers options.seed = argv.seed branch)', async () => {
+      const outFile = 'test-seed-cli-main.json';
+      await main({
+        output: outFile,
+        columns: 'name:fullName,score:range:1-100',
+        rows: 3,
+        format: 'json',
+        seed: 7
+      });
+      expect(fs.existsSync(outFile)).toBe(true);
+      if (fs.existsSync(outFile)) await unlink(outFile);
+    });
   });
 
   describe('runCLI', () => {
@@ -456,16 +469,63 @@ describe('CLI Module', () => {
       process.argv = originalArgv;
     });
 
-    test('setupCLI should accept schema positional arg without columns/template', () => {
-      // Covers cli.js line 95: the `if (argv._[0] === 'schema') return true` branch in .check()
-      process.argv = ['node', 'cli.js', 'schema'];
-      // Should NOT throw even though no --columns or --template is given
+    test('setupCLI should accept schema positional arg without columns/template', async () => {
+      // Covers the `if (argv._[0] === 'schema') return true` branch in .check()
+      // Mock process.exit and stdout.write so the async schema handler doesn't cause failures
+      const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => {});
+      const stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      process.argv = ['node', 'cli.js', 'schema', 'test-schema.sql'];
+      // Should NOT throw due to missing --columns/--template — the schema guard in check() handles it
       expect(() => setupCLI()).not.toThrow();
+      // Allow async handler to settle
+      await new Promise(resolve => setTimeout(resolve, 200));
+      exitSpy.mockRestore();
+      stdoutSpy.mockRestore();
+      consoleSpy.mockRestore();
     });
 
-    test('main should return immediately when schema subcommand is used', async () => {
-      // Covers cli.js line 111: the `if (argv._ && argv._[0] === 'schema') return` branch in main()
-      await expect(main({ _: ['schema'] })).resolves.toBeUndefined();
+    test('schema handler catch block: exits with 1 when generateFromDDL throws (covers lines 139-140)', async () => {
+      const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => {});
+      const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      process.argv = ['node', 'cli.js', 'schema', '__does_not_exist__.sql'];
+      expect(() => setupCLI()).not.toThrow();
+      // Allow async handler to settle — generateFromDDL throws ENOENT, catch runs
+      await new Promise(resolve => setTimeout(resolve, 500));
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      exitSpy.mockRestore();
+      errorSpy.mockRestore();
+    });
+
+    test('schema handler skips stdout.write when --output is provided (covers if-false branch at line 135)', async () => {
+      const outFile = 'test-schema-unit-out.sql';
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      const stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+      process.argv = ['node', 'cli.js', 'schema', 'test-schema.sql', '-o', outFile];
+      expect(() => setupCLI()).not.toThrow();
+      // Allow async handler to settle — output file path is set so stdout.write is NOT called
+      await new Promise(resolve => setTimeout(resolve, 500));
+      expect(stdoutSpy).not.toHaveBeenCalled();
+      consoleSpy.mockRestore();
+      stdoutSpy.mockRestore();
+      if (fs.existsSync(outFile)) await unlink(outFile);
+    });
+
+    test('runCLI should return early (skip main) for schema subcommand', async () => {
+      // The schema guard now lives in runCLI(), not main()
+      process.argv = ['node', 'cli.js', 'schema', 'test-schema.sql'];
+      const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => {});
+      const stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+
+      // runCLI should return without calling main() (no "Either columns or template" error)
+      await expect(runCLI()).resolves.toBeUndefined();
+      // Allow async handler to settle
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      exitSpy.mockRestore();
+      stdoutSpy.mockRestore();
+      consoleSpy.mockRestore();
     });
   });
 
@@ -587,6 +647,45 @@ describe('CLI Module', () => {
       expect(insertCount).toBeLessThan(10); // With batch, should be 1 statement for 10 rows
       
       await unlink(sqlFile);
+    }, 10000);
+
+    test('(a) schema command generates INSERT SQL from DDL fixture file', async () => {
+      const { stdout } = await execPromise('node cli.js schema test-schema.sql --rows 3');
+      expect(stdout).toContain('INSERT INTO');
+    }, 10000);
+
+    test('(a) schema command writes output file when --output provided', async () => {
+      const sqlFile = 'test-schema-out.sql';
+      try {
+        await execPromise(`node cli.js schema test-schema.sql --rows 2 -o ${sqlFile}`);
+        expect(fs.existsSync(sqlFile)).toBe(true);
+        const content = await readFile(sqlFile, 'utf-8');
+        expect(content).toContain('INSERT INTO');
+      } finally {
+        if (fs.existsSync(sqlFile)) await unlink(sqlFile);
+      }
+    }, 10000);
+
+    test('(b) schema command exits with error when file argument is missing', async () => {
+      try {
+        await execPromise('node cli.js schema');
+        fail('Should have exited with an error');
+      } catch (error) {
+        expect(error).toBeDefined();
+        const output = (error.stderr || error.stdout || '').toString();
+        expect(output.length).toBeGreaterThan(0);
+      }
+    }, 10000);
+
+    test('(c) schema command respects --dialect postgres flag', async () => {
+      const { stdout } = await execPromise('node cli.js schema test-schema.sql --rows 2 --dialect postgres');
+      expect(stdout).toContain('INSERT INTO');
+    }, 10000);
+
+    test('(c) schema command respects --mode ddl+insert flag', async () => {
+      const { stdout } = await execPromise('node cli.js schema test-schema.sql --rows 2 --mode ddl+insert --dialect postgres');
+      expect(stdout).toContain('CREATE TABLE');
+      expect(stdout).toContain('INSERT INTO');
     }, 10000);
   });
 });

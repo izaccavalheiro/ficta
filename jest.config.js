@@ -17,5 +17,5 @@ export default {
     }
   },
   testMatch: ['**/tests/**/*.test.js'],
-  testPathIgnorePatterns: ['/node_modules/', '/dist/', 'generate-csv.test.js']
+  testPathIgnorePatterns: ['/node_modules/', '/dist/']
 };

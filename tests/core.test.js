@@ -6,6 +6,7 @@ import {
   generateRow,
   generateData,
   setFaker,
+  seedFaker,
   listTypes,
   listTemplates
 } from '../src/core.js';
@@ -819,6 +820,44 @@ describe('Core Module', () => {
       expect(typeof result.records[0].j).toBe('string');
       // Should be parseable JSON
       expect(() => JSON.parse(result.records[0].j)).not.toThrow();
+    });
+  });
+
+  describe('seedFaker', () => {
+    test('throws if faker not initialized', () => {
+      // Temporarily clear the faker instance to trigger the guard
+      setFaker(null);
+      expect(() => seedFaker(42)).toThrow('Faker.js not initialized. Call setFaker() before seedFaker()');
+      // Restore for subsequent tests
+      setFaker(faker);
+    });
+
+    test('two runs with the same seed produce identical rows', () => {
+      const columns = parseColumns('name:fullName,email,score:range:1-100');
+
+      seedFaker(42);
+      const rows1 = [];
+      for (let i = 0; i < 5; i++) rows1.push(generateRow(columns, i));
+
+      seedFaker(42);
+      const rows2 = [];
+      for (let i = 0; i < 5; i++) rows2.push(generateRow(columns, i));
+
+      expect(rows1).toEqual(rows2);
+    });
+
+    test('different seeds produce different rows', () => {
+      const columns = parseColumns('name:fullName,email');
+
+      seedFaker(1);
+      const rows1 = [];
+      for (let i = 0; i < 5; i++) rows1.push(generateRow(columns, i));
+
+      seedFaker(2);
+      const rows2 = [];
+      for (let i = 0; i < 5; i++) rows2.push(generateRow(columns, i));
+
+      expect(rows1).not.toEqual(rows2);
     });
   });
 });
