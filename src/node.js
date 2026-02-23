@@ -56,6 +56,11 @@ export async function generateAndSave(options) {
     core.seedFaker(options.seed);
   }
 
+  // Set locale if requested
+  if (options.locale) {
+    core.setLocale(options.locale);
+  }
+
   // Generate data
   const result = core.generateData(options);
   
@@ -104,7 +109,8 @@ export function listTypes() {
     'Numbers': ['number', 'float'],
     'Text': ['word', 'words', 'sentence', 'paragraph'],
     'IDs': ['uuid', 'nanoid', 'autoIncrement'],
-    'Other': ['boolean', 'color', 'emoji']
+    'Other': ['boolean', 'color', 'emoji'],
+    'Aliases': ['string', 'text', 'integer', 'int', 'date']
   };
 
   for (const [category, types] of Object.entries(categories)) {

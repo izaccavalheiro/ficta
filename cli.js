@@ -90,6 +90,10 @@ function setupCLI() {
       describe: 'Seed for reproducible output (integer)',
       type: 'number'
     })
+    .option('locale', {
+      describe: 'Faker.js locale for localized data (e.g. fr, de, ja, pt_BR)',
+      type: 'string'
+    })
     .command(
       'schema <file>',
       'Generate test data from a SQL DDL schema file',
@@ -120,6 +124,10 @@ function setupCLI() {
           .option('output', {
             alias: 'o',
             describe: 'Output file path (optional)',
+            type: 'string'
+          })
+          .option('locale', {
+            describe: 'Faker.js locale for localized data (e.g. fr, de, ja, pt_BR)',
             type: 'string'
           });
       },
@@ -201,6 +209,9 @@ async function main(argv) {
   }
   if (argv.seed !== undefined) {
     options.seed = argv.seed;
+  }
+  if (argv.locale) {
+    options.locale = argv.locale;
   }
 
   // Use template if specified

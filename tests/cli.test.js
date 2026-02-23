@@ -688,4 +688,32 @@ describe('CLI Module', () => {
       expect(stdout).toContain('INSERT INTO');
     }, 10000);
   });
+
+  describe('--locale option', () => {
+    test('setupCLI recognizes --locale as a valid option', () => {
+      const originalArgv = process.argv;
+      process.argv = ['node', 'cli.js', '--locale', 'fr', '-c', 'name:fullName'];
+      try {
+        const args = setupCLI();
+        expect(args.locale).toBe('fr');
+      } finally {
+        process.argv = originalArgv;
+      }
+    });
+
+    test('main() passes locale to generateAndSave when --locale is provided', async () => {
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      try {
+        await main({
+          output: testFile,
+          columns: 'name:fullName',
+          rows: 2,
+          locale: 'en'
+        });
+        expect(fs.existsSync(testFile)).toBe(true);
+      } finally {
+        consoleSpy.mockRestore();
+      }
+    });
+  });
 });

@@ -726,4 +726,23 @@ describe('Formatters Browser Module', () => {
       expect(formatters.detectFormat('settings.toml')).toBe('toml');
     });
   });
+
+  describe('formatters.shared.js direct exports', () => {
+    test('formatColumnName, toCSV, and detectFormat are exported directly from formatters.shared.js', async () => {
+      const shared = await import('../src/formatters.shared.js');
+      expect(typeof shared.formatColumnName).toBe('function');
+      expect(shared.formatColumnName('lastName')).toBe('Last Name');
+
+      expect(typeof shared.toCSV).toBe('function');
+      const csv = shared.toCSV(
+        [{ id: 1, name: 'Bob' }],
+        [{ name: 'id' }, { name: 'name' }]
+      );
+      expect(csv).toContain('Id');
+      expect(csv).toContain('1');
+
+      expect(typeof shared.detectFormat).toBe('function');
+      expect(shared.detectFormat('output.csv')).toBe('csv');
+    });
+  });
 });

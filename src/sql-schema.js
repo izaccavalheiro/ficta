@@ -73,6 +73,7 @@ export const sqlTypeMap = {
   string: { postgres: 'VARCHAR(255)', mysql: 'VARCHAR(255)', sqlite: 'TEXT', generic: 'VARCHAR(255)' },
   text: { postgres: 'TEXT', mysql: 'TEXT', sqlite: 'TEXT', generic: 'TEXT' },
   integer: { postgres: 'INTEGER', mysql: 'INT', sqlite: 'INTEGER', generic: 'INTEGER' },
+  int: { postgres: 'INTEGER', mysql: 'INT', sqlite: 'INTEGER', generic: 'INTEGER' },
   json: { postgres: 'JSONB', mysql: 'JSON', sqlite: 'TEXT', generic: 'TEXT' }
 };
 
@@ -130,6 +131,23 @@ export function getSQLType(column, dialect = 'generic') {
 }
 
 /**
+ * Get an additional CHECK constraint fragment for the column, if applicable.
+ * Currently emits a CHECK constraint for PostgreSQL ENUM columns (since PostgreSQL
+ * has no inline ENUM column syntax).
+ * @param {Object} column - Column definition with at least { name, type }
+ * @param {string} dialect - SQL dialect (postgres, mysql, sqlite, generic)
+ * @returns {string|null} Constraint fragment (e.g. "CHECK (col IN ('a', 'b'))") or null
+ */
+export function getColumnConstraint(column, dialect = 'generic') {
+  if (dialect === 'postgres' && column.type && column.type.startsWith('enum:')) {
+    const values = column.type.replace('enum:', '').split('|');
+    const list = values.map(v => `'${v}'`).join(', ');
+    return `CHECK (${column.name} IN (${list}))`;
+  }
+  return null;
+}
+
+/**
  * Generate CREATE TABLE DDL statement
  * @param {string} tableName - Table name
  * @param {Array} columns - Column definitions
@@ -145,6 +163,12 @@ export function generateDDL(tableName, columns, options = {}) {
   columns.forEach(col => {
     let def = `  ${col.name} ${getSQLType(col, dialect)}`;
     
+    // Add inline CHECK constraint if applicable (e.g. PostgreSQL enum columns)
+    const checkConstraint = getColumnConstraint(col, dialect);
+    if (checkConstraint) {
+      def += ` ${checkConstraint}`;
+    }
+
     // Add constraints to column definition
     if (col.primaryKey) {
       if (col.type === 'autoIncrement') {
@@ -438,9 +462,9 @@ export function generateSchema(schema) {
     output.push('');
   }
   
-  // Resolve dependencies if auto order is enabled
+  // Resolve dependencies unless manual order is explicitly requested
   let orderedTables = schema.tables;
-  if (schema.insertOrder === 'auto') {
+  if (schema.insertOrder !== 'manual') {
     try {
       const tableOrder = resolveTableDependencies(schema.tables);
       orderedTables = tableOrder.map(name => 

@@ -24,6 +24,30 @@ export function setFaker(faker) {
 }
 
 /**
+ * Set the locale on the current Faker instance.
+ *
+ * Locale resets are not guaranteed to persist across major Faker version
+ * upgrades (e.g. v8 → v9 changed the locale API). The caller is responsible
+ * for reverting the locale if needed after generation.
+ *
+ * Faker v9+: calls `fakerInstance.setLocale(locale)` when that method exists.
+ * Faker v8 and below: sets `fakerInstance.locale = locale` directly.
+ *
+ * @param {string} locale - A Faker.js locale string (e.g. 'fr', 'de', 'pt_BR')
+ * @throws {Error} If Faker has not been initialised via setFaker()
+ */
+export function setLocale(locale) {
+  if (!fakerInstance) {
+    throw new Error('Faker.js not initialized. Call setFaker() before setLocale()');
+  }
+  if (typeof fakerInstance.setLocale === 'function') {
+    fakerInstance.setLocale(locale);
+  } else {
+    fakerInstance.locale = locale;
+  }
+}
+
+/**
  * Seed the Faker instance for reproducible output.
  * @param {number} seed - Integer seed value
  */
@@ -112,7 +136,14 @@ export const fakerTypes = {
   // Special
   color: () => getFaker().color.human(),
   emoji: () => getFaker().internet.emoji(),
-  
+
+  // Aliases — map intuitive names to appropriate Faker outputs
+  string:  () => getFaker().word.sample(),
+  text:    () => getFaker().lorem.sentence(),
+  integer: () => getFaker().number.int({ min: 1, max: 10000 }),
+  int:     () => getFaker().number.int({ min: 1, max: 10000 }),
+  date:    () => getFaker().date.recent().toISOString().split('T')[0],
+
   // Auto increment
   autoIncrement: null // Handled specially
 };

@@ -329,4 +329,25 @@ describe('Node.js Module', () => {
       expect(typeof seedFaker).toBe('function');
     });
   });
+
+  describe('locale support', () => {
+    test('generateAndSave with locale: en completes without error and produces expected row count', async () => {
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      const outFile = 'test-locale-output.csv';
+      try {
+        const result = await generateAndSave({
+          columns: 'name:fullName,email',
+          rows: 5,
+          format: 'csv',
+          output: outFile,
+          locale: 'en',
+        });
+        expect(result.rowCount).toBe(5);
+        expect(fs.existsSync(outFile)).toBe(true);
+      } finally {
+        consoleSpy.mockRestore();
+        if (fs.existsSync(outFile)) fs.unlinkSync(outFile);
+      }
+    });
+  });
 });

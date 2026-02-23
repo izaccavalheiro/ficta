@@ -1502,4 +1502,152 @@ describe('SQL Schema Generator', () => {
       expect(sql).toContain('INTEGER'); // generic dialect
     });
   });
+
+  describe('getColumnConstraint', () => {
+    test('(a) PostgreSQL enum column DDL includes CHECK constraint', () => {
+      const columns = [
+        { name: 'id', type: 'autoIncrement', primaryKey: true },
+        { name: 'status', type: 'enum:active|inactive|pending' }
+      ];
+      const ddl = sqlSchema.generateDDL('items', columns, { dialect: 'postgres' });
+      expect(ddl).toContain("CHECK (status IN ('active', 'inactive', 'pending'))");
+    });
+
+    test('(b) MySQL enum column still uses ENUM(...) syntax — no regression', () => {
+      const columns = [
+        { name: 'id', type: 'autoIncrement', primaryKey: true },
+        { name: 'status', type: 'enum:active|inactive|pending' }
+      ];
+      const ddl = sqlSchema.generateDDL('items', columns, { dialect: 'mysql' });
+      expect(ddl).toContain("ENUM('active', 'inactive', 'pending')");
+      expect(ddl).not.toContain('CHECK');
+    });
+
+    test('(c) Generic/SQLite enum column uses VARCHAR(50) with no CHECK constraint', () => {
+      const colGeneric = { name: 'status', type: 'enum:a|b' };
+      const colSqlite  = { name: 'status', type: 'enum:a|b' };
+
+      expect(sqlSchema.getColumnConstraint(colGeneric, 'generic')).toBeNull();
+      expect(sqlSchema.getColumnConstraint(colSqlite,  'sqlite')).toBeNull();
+
+      const ddlGeneric = sqlSchema.generateDDL('t', [colGeneric], { dialect: 'generic' });
+      expect(ddlGeneric).toContain('VARCHAR(50)');
+      expect(ddlGeneric).not.toContain('CHECK');
+
+      const ddlSqlite = sqlSchema.generateDDL('t', [colSqlite], { dialect: 'sqlite' });
+      expect(ddlSqlite).toContain('VARCHAR(50)');
+      expect(ddlSqlite).not.toContain('CHECK');
+    });
+
+    test('returns null for non-enum columns in any dialect', () => {
+      const col = { name: 'name', type: 'fullName' };
+      expect(sqlSchema.getColumnConstraint(col, 'postgres')).toBeNull();
+      expect(sqlSchema.getColumnConstraint(col, 'mysql')).toBeNull();
+    });
+
+    test('returns null when column.type is missing (falsy type branch)', () => {
+      // Covers the `column.type &&` short-circuit branch when type is absent
+      expect(sqlSchema.getColumnConstraint({ name: 'status' }, 'postgres')).toBeNull();
+      expect(sqlSchema.getColumnConstraint({ name: 'status', type: undefined }, 'postgres')).toBeNull();
+    });
+
+    test('uses generic default dialect when no dialect argument is supplied', () => {
+      // Covers the default parameter `dialect = "generic"` branch
+      const col = { name: 'status', type: 'enum:active|inactive' };
+      expect(sqlSchema.getColumnConstraint(col)).toBeNull();
+    });
+  });
+
+  describe('FK ordering default in generateSchema', () => {
+    test('(a) child table appears after parent by default — no insertOrder needed', () => {
+      const schema = {
+        dialect: 'generic',
+        mode: 'ddl',
+        // No insertOrder specified — FK ordering should apply by default
+        tables: [
+          {
+            table: 'orders',
+            columns: [
+              { name: 'id', type: 'autoIncrement', primaryKey: true },
+              { name: 'user_id', type: 'number', references: { table: 'users' } }
+            ]
+          },
+          {
+            table: 'users',
+            columns: [{ name: 'id', type: 'autoIncrement', primaryKey: true }]
+          }
+        ]
+      };
+
+      const sql = sqlSchema.generateSchema(schema);
+      const usersIndex = sql.indexOf('CREATE TABLE users');
+      const ordersIndex = sql.indexOf('CREATE TABLE orders');
+      expect(usersIndex).toBeLessThan(ordersIndex);
+    });
+
+    test('(b) insertOrder: manual bypasses sorting and preserves declaration order', () => {
+      const schema = {
+        dialect: 'generic',
+        mode: 'ddl',
+        insertOrder: 'manual',
+        tables: [
+          {
+            table: 'orders',
+            columns: [
+              { name: 'id', type: 'autoIncrement', primaryKey: true },
+              { name: 'user_id', type: 'number', references: { table: 'users' } }
+            ]
+          },
+          {
+            table: 'users',
+            columns: [{ name: 'id', type: 'autoIncrement', primaryKey: true }]
+          }
+        ]
+      };
+
+      const sql = sqlSchema.generateSchema(schema);
+      const ordersIndex = sql.indexOf('CREATE TABLE orders');
+      const usersIndex = sql.indexOf('CREATE TABLE users');
+      // Declaration order preserved: orders first, then users
+      expect(ordersIndex).toBeLessThan(usersIndex);
+    });
+
+    test('(c) circular FK dependency falls back to original order without throwing', () => {
+      const originalWarn = console.warn;
+      const warnMock = jest.fn();
+      console.warn = warnMock;
+
+      try {
+        const schema = {
+          dialect: 'generic',
+          mode: 'ddl',
+          // No insertOrder — default topological sort runs and should catch circular deps
+          tables: [
+            {
+              table: 'alpha',
+              columns: [
+                { name: 'id', type: 'autoIncrement', primaryKey: true },
+                { name: 'beta_id', type: 'number', references: { table: 'beta' } }
+              ]
+            },
+            {
+              table: 'beta',
+              columns: [
+                { name: 'id', type: 'autoIncrement', primaryKey: true },
+                { name: 'alpha_id', type: 'number', references: { table: 'alpha' } }
+              ]
+            }
+          ]
+        };
+
+        // Must not throw
+        const sql = sqlSchema.generateSchema(schema);
+        expect(sql).toContain('CREATE TABLE alpha');
+        expect(sql).toContain('CREATE TABLE beta');
+        expect(warnMock).toHaveBeenCalled();
+      } finally {
+        console.warn = originalWarn;
+      }
+    });
+  });
 });

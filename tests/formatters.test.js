@@ -649,4 +649,23 @@ describe('Formatters Module', () => {
       expect(typeof result).toBe('string');
     });
   });
+
+  describe('formatters.shared.js direct exports', () => {
+    test('formatColumnName, toCSV, and detectFormat are exported directly from formatters.shared.js', async () => {
+      const shared = await import('../src/formatters.shared.js');
+      expect(typeof shared.formatColumnName).toBe('function');
+      expect(shared.formatColumnName('firstName')).toBe('First Name');
+
+      expect(typeof shared.toCSV).toBe('function');
+      const csv = shared.toCSV(
+        [{ id: 1, name: 'Alice' }],
+        [{ name: 'id' }, { name: 'name' }]
+      );
+      expect(csv).toContain('Id');
+      expect(csv).toContain('1');
+
+      expect(typeof shared.detectFormat).toBe('function');
+      expect(shared.detectFormat('output.json')).toBe('json');
+    });
+  });
 });

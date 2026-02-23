@@ -7,6 +7,7 @@ import {
   generateData,
   setFaker,
   seedFaker,
+  setLocale,
   listTypes,
   listTemplates
 } from '../src/core.js';
@@ -858,6 +859,79 @@ describe('Core Module', () => {
       for (let i = 0; i < 5; i++) rows2.push(generateRow(columns, i));
 
       expect(rows1).not.toEqual(rows2);
+    });
+  });
+
+  describe('setLocale', () => {
+    test('throws when Faker is not initialized', () => {
+      setFaker(null);
+      expect(() => setLocale('en')).toThrow('Faker.js not initialized. Call setFaker() before setLocale()');
+      setFaker(faker);
+    });
+
+    test('calling setLocale with a valid locale does not throw', () => {
+      expect(() => setLocale('en')).not.toThrow();
+    });
+
+    test('uses fakerInstance.setLocale() when the method exists (Faker v9+ path)', () => {
+      const setLocaleMock = jest.fn();
+      const mockFaker = { ...faker, setLocale: setLocaleMock };
+      setFaker(mockFaker);
+      setLocale('fr');
+      expect(setLocaleMock).toHaveBeenCalledWith('fr');
+      // Restore real faker
+      setFaker(faker);
+    });
+  });
+
+  describe('Type aliases', () => {
+    test('string alias generates a single word (no spaces)', () => {
+      const val = fakerTypes.string();
+      expect(val).toBeDefined();
+      expect(typeof val).toBe('string');
+      expect(val).toMatch(/^\S+$/);
+    });
+
+    test('text alias generates a sentence', () => {
+      const val = fakerTypes.text();
+      expect(val).toBeDefined();
+      expect(typeof val).toBe('string');
+      expect(val.length).toBeGreaterThan(0);
+    });
+
+    test('integer alias generates a whole number', () => {
+      const val = fakerTypes.integer();
+      expect(val).toBeDefined();
+      expect(Number.isInteger(val)).toBe(true);
+    });
+
+    test('int alias generates a whole number', () => {
+      const val = fakerTypes.int();
+      expect(val).toBeDefined();
+      expect(Number.isInteger(val)).toBe(true);
+    });
+
+    test('date alias generates a date string in YYYY-MM-DD format', () => {
+      const val = fakerTypes.date();
+      expect(val).toBeDefined();
+      expect(typeof val).toBe('string');
+      expect(val).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    });
+
+    test('string alias does not produce a multi-word phrase', () => {
+      // Run multiple times to be confident
+      for (let i = 0; i < 10; i++) {
+        const val = fakerTypes.string();
+        expect(val).toMatch(/^\S+$/);
+      }
+    });
+
+    test('all aliases generate defined non-null values', () => {
+      for (const alias of ['string', 'text', 'integer', 'int', 'date']) {
+        const val = fakerTypes[alias]();
+        expect(val).toBeDefined();
+        expect(val).not.toBeNull();
+      }
     });
   });
 });
