@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
-import { generateAndSave, generateFromDDL, listTypes, listTemplates, templates } from './src/node.js';
+import { generateAndSave, generateFromDDL, generateFromSchemaFile, listTypes, listTemplates, templates } from './src/node.js';
 
 // CLI setup
 function setupCLI() {
@@ -105,6 +105,11 @@ function setupCLI() {
       choices: ['title', 'raw'],
       default: 'title'
     })
+    .option('schema-file', {
+      alias: 's',
+      describe: 'Path to a ficta.schema.json file for structured multi-table generation',
+      type: 'string'
+    })
     .command(
       'schema <file>',
       'Generate test data from a SQL DDL schema file',
@@ -168,8 +173,11 @@ function setupCLI() {
       if (argv._[0] === 'schema') {
         return true;
       }
+      if (argv.schemaFile) {
+        return true;
+      }
       if (!argv.columns && !argv.template) {
-        throw new Error('Either --columns or --template must be specified');
+        throw new Error('Either --columns, --template, or --schema-file must be specified');
       }
       return true;
     })
@@ -187,6 +195,20 @@ async function main(argv) {
 
   if (argv.listTemplates) {
     listTemplates();
+    return;
+  }
+
+  // Handle --schema-file option
+  if (argv.schemaFile) {
+    const sql = await generateFromSchemaFile({
+      schemaFile: argv.schemaFile,
+      rows: argv.rows !== 100 ? argv.rows : undefined,
+      outputMode: argv.sqlMode || 'ddl+insert',
+      output: argv.output,
+    });
+    if (!argv.output) {
+      process.stdout.write(sql);
+    }
     return;
   }
 

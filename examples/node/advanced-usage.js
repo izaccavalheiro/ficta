@@ -13,6 +13,13 @@
  *   - generateFromSchema — inline DDL, multi-table with FK integrity
  *   - parseDDL + orderByDependencies — inspect parsed table metadata
  *   - buildInsertStatements — low-level pure SQL builder
+ *   - Schema Builder (fluent table()/schema() API)
+ *
+ * For additional feature showcase see:
+ *   stream-usage.js        — generateStream (CSV + NDJSON)
+ *   plugin-api.js          — registerType / registerTemplate
+ *   schema-builder-usage.js — fluent builder deep-dive
+ *   schema-file-usage.js   — generateFromSchemaFile (ficta.schema.json)
  */
 
 import { faker } from '@faker-js/faker';
@@ -20,6 +27,7 @@ import { setFaker } from '../../src/core.js';
 import { generateData, generateAndSave, generateFromDDL } from '../../src/node.js';
 import { parseDDL, orderByDependencies } from '../../src/ddl-parser.js';
 import { generateFromSchema, buildInsertStatements } from '../../src/schema-generator.js';
+import { table, schema } from '../../src/schema-builder.js';
 import { mkdirSync, writeFileSync } from 'fs';
 
 // Faker must be set before any generation (already done in node.js, but explicit
@@ -256,6 +264,59 @@ async function pureInsertHelper() {
 }
 
 // ============================================================================
+// Section 8 — Schema Builder (fluent API)
+// ============================================================================
+async function schemaBuilderDemo() {
+  console.log('=== 8. Schema Builder — fluent table()/schema() API ===\n');
+
+  // Single-table builder
+  const singleSQL = table('products')
+    .dialect('postgres')
+    .rows(5)
+    .column('id', 'autoIncrement', { primaryKey: true })
+    .column('sku', 'pattern:PRD-######', { unique: true })
+    .column('name', 'product')
+    .column('category', 'department')
+    .column('price', 'price')
+    .column('in_stock', 'boolean')
+    .toSQL('ddl+insert');
+
+  writeFileSync('output/products-builder.sql', singleSQL);
+  console.log('Single-table builder written to output/products-builder.sql\n');
+
+  // Multi-table builder with FK
+  const multiSQL = schema('blog')
+    .dialect('postgres')
+    .rows(5)
+    .table('authors', t => t
+      .column('id', 'autoIncrement', { primaryKey: true })
+      .column('name', 'fullName')
+      .column('email', 'email', { unique: true, nullable: false })
+    )
+    .table('articles', t => t
+      .column('id', 'autoIncrement', { primaryKey: true })
+      .column('author_id', 'number', { references: { table: 'authors', column: 'id' } })
+      .column('title', 'sentence')
+      .column('published_at', 'timestamp')
+    )
+    .toSQL('ddl+insert');
+
+  writeFileSync('output/blog-builder.sql', multiSQL);
+  console.log('Multi-table builder written to output/blog-builder.sql');
+
+  // toGenerateOptions() — get plain options for generateAndSave
+  const opts = table('contacts')
+    .rows(10)
+    .column('id', 'autoIncrement')
+    .column('name', 'fullName')
+    .column('email', 'email')
+    .toGenerateOptions();
+
+  await generateAndSave({ ...opts, output: 'output/contacts-builder.csv' });
+  console.log('toGenerateOptions() → output/contacts-builder.csv\n');
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 async function main() {
@@ -267,6 +328,7 @@ async function main() {
     await inlineDDL();
     await inspectParsed();
     await pureInsertHelper();
+    await schemaBuilderDemo();
     console.log('=== All advanced examples completed ===');
   } catch (err) {
     console.error('Error:', err.message);

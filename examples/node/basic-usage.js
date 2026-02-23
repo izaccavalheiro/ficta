@@ -10,10 +10,13 @@
  *   - All five predefined templates
  *   - All output formats (CSV, JSON, XML, XLSX, TSV, SQL, YAML, TOML)
  *   - The `preview` option
+ *   - Reproducible output with seedFaker()
+ *   - Localised data with setLocale()
  *   - generateFromDDL — generate seed data from an existing .sql schema file
+ *   - listTypes() / listTemplates()
  */
 
-import { generateData, generateAndSave, generateFromDDL, listTypes, listTemplates } from '../../src/node.js';
+import { generateData, generateAndSave, generateFromDDL, seedFaker, setLocale, listTypes, listTemplates } from '../../src/node.js';
 import { writeFileSync, mkdirSync } from 'fs';
 
 mkdirSync('output', { recursive: true });
@@ -157,9 +160,44 @@ async function main() {
   console.log();
 
   // -------------------------------------------------------------------------
-  // 7. List available types and templates
+  // 7. Reproducible output with seedFaker()
   // -------------------------------------------------------------------------
-  console.log('7. Available types and templates\n');
+  console.log('7. Reproducible output with seedFaker()\n');
+
+  seedFaker(42);
+  const seeded1 = generateData({ columns: 'id:autoIncrement,name:fullName,email', rows: 3 });
+
+  seedFaker(42);
+  const seeded2 = generateData({ columns: 'id:autoIncrement,name:fullName,email', rows: 3 });
+
+  const identical = JSON.stringify(seeded1.records) === JSON.stringify(seeded2.records);
+  console.log(`Both runs with seed 42 produced identical data: ${identical}`);
+  console.log(seeded1.records);
+  console.log();
+
+  // -------------------------------------------------------------------------
+  // 8. Localised data with setLocale()
+  // -------------------------------------------------------------------------
+  console.log('8. Localised data with setLocale()\n');
+
+  setLocale('fr'); // French locale
+  const frenchData = generateData({ columns: 'id:autoIncrement,firstName,lastName,city,phone', rows: 3 });
+  console.log('French data:');
+  console.log(frenchData.records);
+  console.log();
+
+  setLocale('de'); // German locale
+  const germanData = generateData({ columns: 'id:autoIncrement,firstName,lastName,city,phone', rows: 3 });
+  console.log('German data:');
+  console.log(germanData.records);
+  console.log();
+
+  setLocale('en'); // Reset to English
+
+  // -------------------------------------------------------------------------
+  // 9. List available types and templates
+  // -------------------------------------------------------------------------
+  console.log('9. Available types and templates\n');
   listTypes();
   console.log();
   listTemplates();

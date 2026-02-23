@@ -14,8 +14,14 @@ A universal test data generator that works in **Node.js**, **browsers**, and as 
 - ✅ **Advanced SQL Modes**: INSERT, UPSERT, DDL+INSERT, batch inserts, TRUNCATE+INSERT
 - ✅ **Zero Config Browser**: Just include a script tag
 - ✅ **TypeScript Ready**: Full type definitions included
-- ✅ **High Test Coverage**: 100% coverage with 596 tests across all modules
+- ✅ **High Test Coverage**: 100% coverage with 737 tests across all modules
 - ✅ **Preview Mode**: See data before saving
+- ✅ **Plugin API**: Register custom types and templates at runtime
+- ✅ **Reproducible Output**: Seed Faker for deterministic data generation
+- ✅ **Locale Support**: Generate localized data in 60+ languages
+- ✅ **Streaming API**: Memory-efficient streaming for large datasets (CSV/NDJSON)
+- ✅ **Fluent Schema Builder**: Code-first table and schema construction API
+- ✅ **JSON Schema Input**: Drive multi-table generation from a `ficta.schema.json` file
 
 ## Table of Contents
 
@@ -59,6 +65,55 @@ Or download the browser bundle and include it locally.
 
 ---
 
+## Browser / CDN
+
+Use Ficta directly in any browser without a build step via jsDelivr or unpkg.
+
+### jsDelivr
+
+```html
+<!-- IIFE (global window.Ficta) -->
+<script src="https://cdn.jsdelivr.net/npm/ficta/dist/ficta.browser.min.js"></script>
+
+<!-- ES Module -->
+<script type="module">
+  import { generateData, toCSV } from 'https://cdn.jsdelivr.net/npm/ficta/dist/ficta.esm.js';
+</script>
+```
+
+### unpkg (fallback)
+
+```html
+<script src="https://unpkg.com/ficta/dist/ficta.browser.min.js"></script>
+```
+
+### Minimal browser example
+
+```html
+<!DOCTYPE html>
+<html>
+<head><title>Ficta Demo</title></head>
+<body>
+  <pre id="output"></pre>
+  <!-- Load the IIFE bundle (exposes window.Ficta) -->
+  <script src="https://cdn.jsdelivr.net/npm/ficta/dist/ficta.browser.min.js"></script>
+  <script>
+    // Generate 10 records with the 'users' template
+    const result = Ficta.generateData({ template: 'users', rows: 10 });
+
+    // Format as CSV and display it
+    const csv = Ficta.toCSV(result.records, result.columns);
+    document.getElementById('output').textContent = csv;
+  </script>
+</body>
+</html>
+```
+
+> An interactive playground is available at [`examples/playground.html`](examples/playground.html) —
+> open it directly in any browser, no build step required.
+
+---
+
 ## Quick Start
 
 ### CLI
@@ -78,6 +133,15 @@ ficta -t users -r 100 -o schema.sql --sql-mode ddl+insert --sql-dialect postgres
 
 # SQL with custom table name (legacy INSERT mode)
 ficta -c "id,name,email" -r 100 -o users.sql --table-name my_users
+
+# Reproducible output (same data every time)
+ficta -t users -r 100 -o users.csv --seed 42
+
+# Localized data (French)
+ficta -t contacts -r 50 -o contacts-fr.csv --locale fr
+
+# Generate from existing SQL schema
+ficta schema ./schema.sql --rows 20 --dialect postgres --mode ddl+insert -o seed.sql
 ```
 
 Format is **automatically detected** from the file extension!
@@ -107,13 +171,14 @@ await generateAndSave({
         Ficta.createUI('#app');
         
         // Or generate programmatically
-        const result = Ficta.generateCSV({
+        const result = Ficta.generateData({
             columns: 'id:autoIncrement,name:fullName,email',
             rows: 50
         });
         
-        // Download the file
-        Ficta.downloadCSV(result.csv, 'data.csv');
+        // Convert to CSV and download the file
+        const csv = Ficta.toCSV(result.records, result.columns);
+        Ficta.downloadCSV(csv, 'data.csv');
     </script>
 </body>
 </html>
@@ -165,6 +230,11 @@ ficta --list-templates
 | `--sql-batch` | - | Use batch INSERT statements | `false` |
 | `--sheet-name` | - | Excel worksheet name (for XLSX format) | `Sheet1` |
 | `--pretty` | - | Pretty-print JSON (for JSON format) | `true` |
+| `--seed` | - | Integer seed for reproducible output | - |
+| `--locale` | - | Faker.js locale for localized data (e.g. `fr`, `de`, `ja`, `pt_BR`) | - |
+| `--header` | - | Include header row in CSV/TSV (`--no-header` to omit) | `true` |
+| `--header-format` | - | Header casing: `title` (default) or `raw` (exact key names) | `title` |
+| `--schema-file` | `-s` | Path to a `ficta.schema.json` file for structured multi-table generation | - |
 | `--help` | `-h` | Show help | - |
 
 ### Node.js (Programmatic)
@@ -172,7 +242,7 @@ ficta --list-templates
 Use as a library in your Node.js application.
 
 ```javascript
-import { generateAndSave, generateCSV, templates } from 'ficta';
+import { generateAndSave, generateData, toCSV, templates } from 'ficta';
 
 // Generate and save to file
 await generateAndSave({
@@ -201,14 +271,14 @@ await generateAndSave({
     }
 });
 
-// Just generate data (no file)
-const result = generateCSV({
+// Generate data in memory (no file)
+const result = generateData({
     columns: templates.users.columns,
     rows: 100
 });
-
-console.log(result.csv);      // CSV string
-console.log(result.records);  // Array of objects
+const csv = toCSV(result.records, result.columns);
+console.log(csv);            // CSV string
+console.log(result.records); // Array of objects
 ```
 
 **Import from submodules**:
@@ -240,17 +310,17 @@ Perfect for quick prototyping or standalone HTML files.
         Ficta.createUI('#csv-ui');
         
         // Option 2: Generate programmatically
-        const result = Ficta.generateCSV({
+        const result = Ficta.generateData({
             columns: 'id:autoIncrement,email:pattern:user+{COUNTER}@test.com,name:fullName',
             rows: 50
         });
         
-        // Download the file
-        Ficta.downloadCSV(result.csv, 'data.csv');
+        // Convert to CSV and download
+        const csv = Ficta.toCSV(result.records, result.columns);
+        Ficta.downloadCSV(csv, 'data.csv');
         
-        // Or use the data
+        // Or use the records directly
         console.log(result.records); // Array of objects
-        console.log(result.csv);     // CSV string
     </script>
 </body>
 </html>
@@ -366,7 +436,11 @@ If no type is specified, defaults to `word`:
 `uuid`, `nanoid`, `autoIncrement`
 
 #### Other
-`boolean`, `color`, `emoji`
+`boolean`, `color`, `emoji`, `json`
+
+#### Aliases
+Convenient shorthand names for common types:
+`string` (= `word`), `text` (= `sentence`), `int` / `integer` (= `number`), `date` (= `recentDate`)
 
 **List all types:**
 ```bash
@@ -443,11 +517,11 @@ Predefined column sets for common data structures.
 
 | Template | Description | Columns |
 |----------|-------------|---------|
-| **users** | User account data | id, firstName, lastName, email, phone, company, jobTitle, registeredDate |
-| **products** | Product catalog | sku, name, category, price, stock, description |
-| **transactions** | Financial transactions | id, date, customerId, amount, currency, status, paymentMethod |
-| **addresses** | Address data with coordinates | id, street, city, state, zipCode, country, lat, lng |
-| **contacts** | Contact information | id, fullName, email, phone, company, jobTitle, website |
+| **users** | User account data | id, firstName, lastName, email, phone, company, jobTitle, registeredDate (pastDate) |
+| **products** | Product catalog | sku (autoIncrement), name (product), category (department), price, stock (number), description (productDescription) |
+| **transactions** | Financial transactions | id (uuid), date (timestamp), customerId (number), amount, currency, status (word), paymentMethod (word) |
+| **addresses** | Address data with coordinates | id, street, city, state, zipCode, country, lat (latitude), lng (longitude) |
+| **contacts** | Contact information | id, fullName, email, phone, company, jobTitle, website (url) |
 
 ### Usage
 
@@ -459,18 +533,42 @@ ficta -t products -r 1000 -o products.json
 
 **Node.js:**
 ```javascript
-import { templates, generateCSV } from 'ficta';
+import { templates, generateData, toCSV } from 'ficta';
 
-const result = generateCSV({
+const result = generateData({
     columns: templates.users.columns,
     rows: 100
 });
+const csv = toCSV(result.records, result.columns);
+console.log(csv);
 ```
 
 **List all templates:**
 ```bash
 ficta --list-templates
 ```
+
+### CLI Subcommands
+
+#### `ficta schema <file>`
+
+Generate test data directly from a SQL DDL schema file.
+
+```bash
+# Generate 20 rows per table from a .sql schema, output to stdout
+ficta schema ./schema.sql --rows 20 --dialect postgres --mode ddl+insert
+
+# Write output to a file
+ficta schema ./schema.sql --rows 10 --output ./seed.sql
+```
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--rows` / `-r` | Rows per table | `10` |
+| `--dialect` | SQL dialect | `generic` |
+| `--mode` | SQL output mode | `insert` |
+| `--output` / `-o` | Output file (optional) | stdout |
+| `--locale` | Faker.js locale | - |
 
 ---
 
@@ -786,104 +884,32 @@ ficta -c "id,name,email" -r 100 -o data.toml
 
 ### Core Functions
 
-#### `generateCSV(options)`
-
-Generate CSV data.
-
-```javascript
-import { generateCSV } from 'ficta';
-
-const result = generateCSV({
-    columns: 'id:autoIncrement,name:fullName,email',
-    rows: 100
-});
-
-// Returns:
-// {
-//   csv: string,           // CSV string
-//   records: Array,        // Array of objects
-//   columns: Array,        // Parsed column definitions
-//   rowCount: number,      // Number of rows
-//   columnCount: number    // Number of columns
-// }
-```
-
 #### `generateData(options)`
 
-Generate data as array of objects (no CSV conversion).
+The universal entry point: generate records in memory without writing to disk.
 
 ```javascript
-import { generateData } from 'ficta/core';
+import { generateData } from 'ficta';
 
-const records = generateData({
+const result = generateData({
     columns: 'id:autoIncrement,name:fullName,email',
     rows: 100
 });
-// Returns: Array of objects
-```
-
-#### `generateFromDDL(options)` *(Node.js only)*
-
-Read a `.sql` DDL file and generate test data for all tables, respecting column types and foreign key relationships.
-
-```javascript
-import { generateFromDDL } from 'ficta';
-
-const sql = await generateFromDDL({
-  schemaFile: './schema.sql',  // Required: path to DDL file
-  rows: 10,                    // Rows per table (default: 10)
-  outputMode: 'insert',        // 'insert' | 'upsert' | 'truncate+insert' | 'ddl+insert'
-  dialect: 'generic',          // 'postgres' | 'mysql' | 'sqlite' | 'generic'
-  output: './seed.sql'         // Optional: write to this file
-});
-```
-
-#### `generateFromSchema(options)` *(universal)*
-
-Generate test data from a DDL string or pre-parsed table definitions. Works in both Node.js and browsers.
-
-```javascript
-import { generateFromSchema } from 'ficta/src/schema-generator.js';
-
-const sql = generateFromSchema({
-  ddl: '...',          // Raw DDL string (or provide tables:)
-  tables: [...],       // Pre-parsed TableDef array (from parseDDL)
-  rows: 10,            // Rows per table
-  outputMode: 'insert',
-  dialect: 'postgres'
-});
-```
-
-#### `parseDDL(ddlString)` *(universal)*
-
-Parse SQL CREATE TABLE statements into structured table definitions.
-
-```javascript
-import { parseDDL } from 'ficta/src/ddl-parser.js';
-
-const tables = parseDDL(`
-  CREATE TABLE users (id SERIAL PRIMARY KEY, email VARCHAR(255) NOT NULL);
-`);
-// Returns: [{ tableName: 'users', columns: [...], primaryKey: ['id'], foreignKeys: [] }]
-```
-
-#### `orderByDependencies(tables)` *(universal)*
-
-Sort parsed table definitions in foreign key dependency order (topological sort). Throws on circular dependencies.
-
-```javascript
-import { orderByDependencies } from 'ficta/src/ddl-parser.js';
-
-const ordered = orderByDependencies(parseDDL(ddlString));
-// Parent tables always appear before child tables
+// Returns:
+// {
+//   records: Array<Object>,  // Array of row objects
+//   columns: Array,          // Parsed column definitions
+//   rowCount: number,        // Number of rows generated
+//   columnCount: number      // Number of columns
+// }
 ```
 
 #### `parseColumns(columnString)`
 
-Parse column definitions.
+Parse a column definition string into structured column objects.
 
 ```javascript
-import { parseColumns } from 'ficta/core';
+import { parseColumns } from 'ficta';
 
 const columns = parseColumns('id:autoIncrement,name:fullName,email');
 // Returns: [
@@ -893,11 +919,81 @@ const columns = parseColumns('id:autoIncrement,name:fullName,email');
 // ]
 ```
 
+#### `setFaker(faker)`
+
+Set the Faker.js instance (required in browser when not using the self-contained bundle).
+
+```javascript
+import { setFaker } from 'ficta';
+import { faker } from '@faker-js/faker';
+setFaker(faker);
+```
+
+#### `seedFaker(seed)`
+
+Seed the Faker RNG for reproducible, deterministic output.
+
+```javascript
+import { seedFaker } from 'ficta';
+seedFaker(42);
+```
+
+#### `setLocale(locale)`
+
+Set the Faker locale for localized data generation.
+
+```javascript
+import { setLocale } from 'ficta';
+setLocale('fr'); // French locale
+setLocale('pt_BR'); // Brazilian Portuguese
+```
+
+#### `registerType(name, generatorFn, options?)`
+
+Register a custom data type at runtime.
+
+```javascript
+import { registerType, generateData } from 'ficta';
+
+registerType('hashtag', () => '#' + Math.random().toString(36).slice(2, 8));
+
+const result = generateData({ columns: 'tag:hashtag', rows: 5 });
+```
+
+#### `unregisterType(name)`
+
+Remove a previously registered custom type. Built-in types cannot be removed.
+
+#### `registerTemplate(name, config, options?)`
+
+Register a custom column template.
+
+```javascript
+import { registerTemplate, generateData } from 'ficta';
+
+registerTemplate('employees', {
+  columns: 'id:autoIncrement,firstName,lastName,email,jobTitle,department',
+  rows: 50
+});
+
+const result = generateData({ template: 'employees', rows: 20 });
+```
+
+#### `unregisterTemplate(name)`
+
+Remove a previously registered custom template. Built-in templates cannot be removed.
+
+#### `listTypes()` / `listTemplates()`
+
+Return an array of all registered type or template names.
+
+---
+
 ### Node.js Functions
 
 #### `generateAndSave(options)`
 
-Generate and save file.
+Generate data and save to file. Format is auto-detected from the file extension if not specified.
 
 ```javascript
 import { generateAndSave } from 'ficta';
@@ -906,12 +1002,16 @@ await generateAndSave({
     columns: 'id:autoIncrement,name:fullName,email',
     rows: 100,
     output: 'users.csv',
-    format: 'csv',      // Optional: auto-detected from filename
-    preview: true,      // Optional: show preview
-    formatOptions: {    // Optional: format-specific options
+    format: 'csv',       // Optional: auto-detected from filename
+    preview: true,       // Optional: show preview in console
+    seed: 42,            // Optional: reproducible output
+    locale: 'de',        // Optional: German locale
+    formatOptions: {     // Optional: format-specific options
         tableName: 'users',  // SQL
         sheetName: 'Data',   // XLSX
-        pretty: true         // JSON
+        pretty: true,        // JSON
+        header: true,        // CSV/TSV header row
+        headerFormat: 'title' // 'title' | 'raw'
     }
 });
 ```
@@ -996,17 +1096,19 @@ ficta -t addresses -r 300 -o addresses.csv -p
 
 ```javascript
 // Generate sequential email addresses
-const result = generateCSV({
+const result = generateData({
     columns: 'email:pattern:testuser+{COUNTER}@example.com',
     rows: 1000
 });
-// Result: testuser+1@example.com, testuser+2@example.com, ...
+// result.records[0].email === 'testuser+1@example.com'
 ```
 
 ### Mixed Column Types
 
 ```javascript
-generateCSV({
+import { generateData } from 'ficta';
+
+const result = generateData({
     columns: 'id:autoIncrement,name:fullName,status:enum:active|inactive,score:range:0-100,code:pattern:XYZ-####',
     rows: 50
 });
@@ -1075,7 +1177,9 @@ ficta/
 │   ├── browser.js           # Browser-specific exports
 │   ├── sql-schema.js        # SQL DDL/DML generator (universal)
 │   ├── ddl-parser.js        # SQL DDL → TableDef parser (universal)
-│   └── schema-generator.js  # Multi-table data generation orchestrator (universal)
+│   ├── schema-generator.js  # Multi-table FK-aware orchestrator (universal)
+│   ├── schema-builder.js    # Fluent table/schema builder API (universal)
+│   └── formatters.shared.js # Shared pure format utilities (CSV/TSV/JSON)
 ├── tests/
 │   ├── core.test.js         # Core generation tests
 │   ├── formatters.test.js   # Node.js formatter tests
@@ -1085,6 +1189,7 @@ ficta/
 │   ├── cli.test.js          # CLI interface tests
 │   ├── sql-schema.test.js   # SQL schema generator tests
 │   ├── ddl-parser.test.js   # DDL parser tests
+│   ├── schema-builder.test.js  # Fluent builder tests
 │   └── schema-generator.test.js # Schema orchestrator tests
 ├── examples/
 │   ├── simple.html          # Simple browser example
@@ -1126,8 +1231,8 @@ npm run test:coverage
 
 ### Test Statistics
 
-- **Total Tests**: 596
-- **Test Suites**: 9
+- **Total Tests**: 737
+- **Test Suites**: 10
 
 ### Test Categories
 
@@ -1135,7 +1240,7 @@ npm run test:coverage
 2. **templates Tests** - Predefined template validation
 3. **parseColumns Tests** - Column parsing with complex definitions
 4. **generateRow Tests** - Row generation with all special types
-5. **generateCSV Tests** - CSV generation and formatting
+5. **Data Generation Tests** - Row generation with all special types
 6. **CLI Tests** - Command-line interface and options
 7. **Integration Tests** - End-to-end workflows
 8. **Format Tests** - All output format converters
@@ -1161,14 +1266,20 @@ open coverage/lcov-report/index.html
 ✅ All predefined templates  
 ✅ Column parsing with complex type definitions  
 ✅ All file format generation (CSV, JSON, XML, XLSX, TSV, SQL, YAML, TOML)  
-✅ CLI argument parsing and error handling  
+✅ CLI argument parsing and error handling (incl. --seed, --locale, --header, schema subcommand)  
 ✅ Preview mode and format auto-detection  
 ✅ Browser and Node.js environments  
 ✅ SQL DDL generation (CREATE TABLE, PK, FK, constraints, 4 dialects)  
 ✅ SQL DML generation (INSERT, batch INSERT, UPSERT, TRUNCATE+INSERT)  
 ✅ DDL parsing from raw SQL (parseDDL, orderByDependencies)  
 ✅ Multi-table FK-aware data generation (schema-generator)  
-✅ Topological sort and circular dependency detection
+✅ Topological sort and circular dependency detection  
+✅ Plugin API: registerType, unregisterType, registerTemplate, unregisterTemplate  
+✅ Reproducible output via Faker seed  
+✅ Locale-aware data generation  
+✅ Streaming API (CSV/NDJSON)  
+✅ Fluent Schema Builder (table() / schema())  
+✅ JSON schema file input (generateFromSchemaFile)
 
 ---
 
@@ -1179,7 +1290,7 @@ open coverage/lcov-report/index.html
 
 ## Node.js Compatibility
 
-- **Node.js**: 16+ (ES Modules required)
+- **Node.js**: 18+ (ES Modules required)
 
 ---
 
@@ -1188,9 +1299,10 @@ open coverage/lcov-report/index.html
 ### Production
 
 - [@faker-js/faker](https://fakerjs.dev/) - Generate realistic fake data
-- [csv-writer](https://www.npmjs.com/package/csv-writer) - Write CSV files (Node.js)
 - [exceljs](https://www.npmjs.com/package/exceljs) - Excel file generation (Node.js)
 - [xml2js](https://www.npmjs.com/package/xml2js) - XML building (Node.js)
+- [js-yaml](https://www.npmjs.com/package/js-yaml) - YAML serialization
+- [@iarna/toml](https://www.npmjs.com/package/@iarna/toml) - TOML serialization
 - [yargs](https://yargs.js.org/) - CLI argument parsing
 
 ### Development
@@ -1198,6 +1310,7 @@ open coverage/lcov-report/index.html
 - [jest](https://jestjs.io/) - Testing framework
 - [esbuild](https://esbuild.github.io/) - Browser bundle builder
 - [csv-parse](https://csv.js.org/) - CSV parsing for tests
+- [c8](https://www.npmjs.com/package/c8) - Code coverage
 
 ---
 

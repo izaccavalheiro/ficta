@@ -767,4 +767,98 @@ describe('CLI Module', () => {
       expect(lines[0]).toBe('firstName,emailAddress');
     });
   });
+
+  describe('--schema-file option', () => {
+    const schemaFile = 'test-cli-ficta-schema.json';
+
+    afterEach(() => {
+      if (fs.existsSync(schemaFile)) fs.unlinkSync(schemaFile);
+    });
+
+    test('setupCLI recognizes --schema-file as a valid option', () => {
+      process.argv = ['node', 'cli.js', '--schema-file', 'some.json'];
+      const args = setupCLI();
+      expect(args.schemaFile).toBe('some.json');
+    });
+
+    test('main() with schemaFile pointing at a valid fixture produces SQL output without error', async () => {
+      const schema = {
+        dialect: 'generic',
+        tables: [
+          {
+            name: 'cli_test_users',
+            rows: 2,
+            columns: [
+              { name: 'id', type: 'autoIncrement', primaryKey: true },
+              { name: 'email', type: 'email' }
+            ]
+          }
+        ]
+      };
+      fs.writeFileSync(schemaFile, JSON.stringify(schema));
+
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => {});
+      try {
+        await main({ schemaFile, sqlMode: 'ddl+insert', rows: 100 });
+        // Verify stdout.write was called with SQL containing the table name
+        const calls = writeSpy.mock.calls.map(c => c[0]).join('');
+        expect(calls).toContain('cli_test_users');
+      } finally {
+        consoleSpy.mockRestore();
+        writeSpy.mockRestore();
+      }
+    });
+
+    test('main() with schemaFile uses ddl+insert as default outputMode when sqlMode is not provided', async () => {
+      const schema = {
+        tables: [
+          {
+            name: 'cli_default_mode',
+            rows: 1,
+            columns: [{ name: 'id', type: 'autoIncrement', primaryKey: true }]
+          }
+        ]
+      };
+      fs.writeFileSync(schemaFile, JSON.stringify(schema));
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => {});
+      try {
+        // No sqlMode provided → argv.sqlMode = undefined → falls back to 'ddl+insert'
+        await main({ schemaFile });
+        const output = writeSpy.mock.calls.map(c => c[0]).join('');
+        expect(output).toContain('cli_default_mode');
+      } finally {
+        consoleSpy.mockRestore();
+        writeSpy.mockRestore();
+      }
+    });
+
+    test('main() with schemaFile + output writes to file and does NOT write to stdout', async () => {
+      const outputFile = 'test-cli-schema-with-output.sql';
+      const schema = {
+        tables: [
+          {
+            name: 'cli_out_table',
+            rows: 2,
+            columns: [{ name: 'id', type: 'autoIncrement', primaryKey: true }]
+          }
+        ]
+      };
+      fs.writeFileSync(schemaFile, JSON.stringify(schema));
+
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => {});
+      try {
+        await main({ schemaFile, output: outputFile, sqlMode: 'ddl+insert', rows: 100 });
+        // stdout.write must NOT have been called because output is a file
+        expect(writeSpy).not.toHaveBeenCalled();
+        expect(fs.existsSync(outputFile)).toBe(true);
+      } finally {
+        consoleSpy.mockRestore();
+        writeSpy.mockRestore();
+        if (fs.existsSync(outputFile)) fs.unlinkSync(outputFile);
+      }
+    });
+  });
 });

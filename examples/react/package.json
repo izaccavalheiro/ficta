@@ -11,7 +11,7 @@
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "ficta": "^1.1.6",
+    "ficta": "^1.1.7",
     "@faker-js/faker": "^8.0.0"
   },
   "devDependencies": {

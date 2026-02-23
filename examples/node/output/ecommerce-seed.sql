@@ -46,36 +46,36 @@ CREATE TABLE order_items (
 );
 
 -- Table: categories
-INSERT INTO categories (id, name, description) VALUES (1, 'Nathen Bechtelar Jr.', 'Repellat ab aduro victoria solium bellum.');
-INSERT INTO categories (id, name, description) VALUES (2, 'Carolyn Orn', 'Ustulo apud acceptus amicitia arcus vapulus vespillo conatus volubilis audacia.');
-INSERT INTO categories (id, name, description) VALUES (3, 'Lemuel Hermann', 'Cotidie conicio volutabrum placeat utor defero umerus vigilo adnuo.');
-INSERT INTO categories (id, name, description) VALUES (4, 'Ruben King', 'Thorax casso impedit bibo tamquam nulla comes confero eaque.');
-INSERT INTO categories (id, name, description) VALUES (5, 'Nina Labadie', 'Strues talio utpote.');
+INSERT INTO categories (id, name, description) VALUES (1, 'Emory Reilly', 'Uterque patior tendo aufero dolorum vorax spiritus causa cunabula.');
+INSERT INTO categories (id, name, description) VALUES (2, 'Michelle Beahan Jr.', 'Umquam vesper dedecor vero sum conspergo cunabula pauci cohors conduco.');
+INSERT INTO categories (id, name, description) VALUES (3, 'Bennie Fadel', 'Theca tibi comedo volubilis beatus antiquus tardus abutor.');
+INSERT INTO categories (id, name, description) VALUES (4, 'Alicia Mayer', 'Accusantium suppono uredo tabesco cunae cohibeo vulticulus thymbra.');
+INSERT INTO categories (id, name, description) VALUES (5, 'Miss Pam Christiansen', 'Succedo civitas accusantium cognatus repudiandae minima crapula.');
 
 -- Table: customers
-INSERT INTO customers (id, email, first_name, last_name, phone, created_at) VALUES (1, 'Devin_Lang@hotmail.com', 'Santiago', 'Franey', '297-263-7064 x9463', '2026-02-22T19:44:56.595Z');
-INSERT INTO customers (id, email, first_name, last_name, phone, created_at) VALUES (2, 'Harriet29@gmail.com', 'Andy', 'Konopelski', '1-874-344-7107 x17948', '2026-02-21T22:09:18.780Z');
-INSERT INTO customers (id, email, first_name, last_name, phone, created_at) VALUES (3, 'Carlton.Parker@yahoo.com', 'Buddy', 'Schmidt', '342.997.7753 x3827', '2026-02-22T05:56:15.385Z');
-INSERT INTO customers (id, email, first_name, last_name, phone, created_at) VALUES (4, 'Al_Kautzer@hotmail.com', 'Kristin', 'Cummerata', '1-263-762-6809 x22473', '2026-02-22T12:17:08.817Z');
-INSERT INTO customers (id, email, first_name, last_name, phone, created_at) VALUES (5, 'Bobbie.Mayert@gmail.com', 'Andre', 'Trantow', '887.628.6658 x09389', '2026-02-22T12:16:02.494Z');
+INSERT INTO customers (id, email, first_name, last_name, phone, created_at) VALUES (1, 'Danny58@yahoo.com', 'Mayra', 'Bode', '532.284.8072 x915', '2026-02-23T03:25:24.590Z');
+INSERT INTO customers (id, email, first_name, last_name, phone, created_at) VALUES (2, 'Edwina_Terry@yahoo.com', 'Lenna', 'Casper', '258-648-9922 x82799', '2026-02-22T06:05:49.363Z');
+INSERT INTO customers (id, email, first_name, last_name, phone, created_at) VALUES (3, 'Nakia.Von@yahoo.com', 'Nellie', 'O''Keefe', '635.852.2406 x729', '2026-02-22T14:18:15.420Z');
+INSERT INTO customers (id, email, first_name, last_name, phone, created_at) VALUES (4, 'Lucas.Prosacco@yahoo.com', 'Carol', 'Balistreri', '479-848-4969 x043', '2026-02-22T07:51:06.948Z');
+INSERT INTO customers (id, email, first_name, last_name, phone, created_at) VALUES (5, 'Lenny_Bode89@hotmail.com', 'Fay', 'Dickens', '370.341.5377 x76627', '2026-02-22T13:20:54.325Z');
 
 -- Table: products
-INSERT INTO products (id, category_id, sku, name, price, stock) VALUES (1, 3, 'ha', 'Rebecca Hermann', '300.59', 9474);
-INSERT INTO products (id, category_id, sku, name, price, stock) VALUES (2, 3, 'through', 'Amelia O''Connell', '321.69', 1567);
-INSERT INTO products (id, category_id, sku, name, price, stock) VALUES (3, 4, 'avaricious', 'Ken Marvin', '254.19', 1125);
-INSERT INTO products (id, category_id, sku, name, price, stock) VALUES (4, 5, 'yum', 'Mrs. Kristen Cremin-Ankunding DVM', '224.49', 8673);
-INSERT INTO products (id, category_id, sku, name, price, stock) VALUES (5, 3, 'rag', 'Michel Ritchie', '558.60', 2654);
+INSERT INTO products (id, category_id, sku, name, price, stock) VALUES (1, 4, 'duh', 'Cindy Durgan', '831.89', 5554);
+INSERT INTO products (id, category_id, sku, name, price, stock) VALUES (2, 4, 'bug', 'Jordan Fadel', '892.75', 4253);
+INSERT INTO products (id, category_id, sku, name, price, stock) VALUES (3, 4, 'lox', 'Devon Emmerich', '73.19', 3158);
+INSERT INTO products (id, category_id, sku, name, price, stock) VALUES (4, 4, 'vaguely', 'Gwen McLaughlin', '788.99', 9993);
+INSERT INTO products (id, category_id, sku, name, price, stock) VALUES (5, 4, 'ack', 'Nova Smith', '494.95', 8746);
 
 -- Table: orders
-INSERT INTO orders (id, customer_id, total, status, placed_at) VALUES (1, 1, '1920.70', 'yowza', '2026-02-21T23:39:18.358Z');
-INSERT INTO orders (id, customer_id, total, status, placed_at) VALUES (2, 4, '4394.19', 'since', '2026-02-22T03:20:40.690Z');
-INSERT INTO orders (id, customer_id, total, status, placed_at) VALUES (3, 3, '4496.25', 'fabricate', '2026-02-21T21:51:06.229Z');
-INSERT INTO orders (id, customer_id, total, status, placed_at) VALUES (4, 2, '4153.48', 'spirit', '2026-02-22T08:18:33.172Z');
-INSERT INTO orders (id, customer_id, total, status, placed_at) VALUES (5, 5, '413.80', 'limp', '2026-02-22T07:39:00.753Z');
+INSERT INTO orders (id, customer_id, total, status, placed_at) VALUES (1, 3, '56.79', 'below', '2026-02-22T10:59:22.721Z');
+INSERT INTO orders (id, customer_id, total, status, placed_at) VALUES (2, 2, '4915.95', 'justly', '2026-02-22T06:48:36.568Z');
+INSERT INTO orders (id, customer_id, total, status, placed_at) VALUES (3, 5, '2897.39', 'than', '2026-02-22T11:00:41.670Z');
+INSERT INTO orders (id, customer_id, total, status, placed_at) VALUES (4, 5, '2350.36', 'obedient', '2026-02-22T18:04:35.358Z');
+INSERT INTO orders (id, customer_id, total, status, placed_at) VALUES (5, 1, '1184.58', 'stable', '2026-02-22T23:17:40.776Z');
 
 -- Table: order_items
-INSERT INTO order_items (id, order_id, product_id, quantity, unit_price) VALUES (1, 5, 2, 4887, 78.6);
-INSERT INTO order_items (id, order_id, product_id, quantity, unit_price) VALUES (2, 4, 5, 6981, 78.24);
-INSERT INTO order_items (id, order_id, product_id, quantity, unit_price) VALUES (3, 5, 3, 8887, 94.15);
-INSERT INTO order_items (id, order_id, product_id, quantity, unit_price) VALUES (4, 3, 5, 4157, 59.85);
-INSERT INTO order_items (id, order_id, product_id, quantity, unit_price) VALUES (5, 2, 1, 9094, 54.45);
+INSERT INTO order_items (id, order_id, product_id, quantity, unit_price) VALUES (1, 3, 2, 9105, 15.82);
+INSERT INTO order_items (id, order_id, product_id, quantity, unit_price) VALUES (2, 4, 5, 2492, 59.29);
+INSERT INTO order_items (id, order_id, product_id, quantity, unit_price) VALUES (3, 2, 2, 9766, 77.48);
+INSERT INTO order_items (id, order_id, product_id, quantity, unit_price) VALUES (4, 1, 1, 3461, 42.42);
+INSERT INTO order_items (id, order_id, product_id, quantity, unit_price) VALUES (5, 1, 4, 7687, 79.16);

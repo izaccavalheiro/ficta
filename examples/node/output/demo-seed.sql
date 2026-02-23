@@ -14,13 +14,13 @@ CREATE TABLE books (
 );
 
 -- Table: authors
-INSERT INTO authors (id, name, email) VALUES (1, 'Mr. Mario Balistreri', 'Hallie_Ebert15@gmail.com');
-INSERT INTO authors (id, name, email) VALUES (2, 'Lynne Leannon', 'Wendy87@gmail.com');
-INSERT INTO authors (id, name, email) VALUES (3, 'Maggie Block', 'Bethany_Rempel@hotmail.com');
-INSERT INTO authors (id, name, email) VALUES (4, 'Sarah Lubowitz', 'Kolby.Ryan@gmail.com');
+INSERT INTO authors (id, name, email) VALUES (1, 'Roosevelt Kunze', 'Carole0@hotmail.com');
+INSERT INTO authors (id, name, email) VALUES (2, 'Tracey Emmerich', 'Dianne_Bayer@hotmail.com');
+INSERT INTO authors (id, name, email) VALUES (3, 'Melissa Krajcik', 'Coralie_Daugherty9@yahoo.com');
+INSERT INTO authors (id, name, email) VALUES (4, 'Dr. Lily Metz', 'Franklin71@yahoo.com');
 
 -- Table: books
-INSERT INTO books (id, author_id, title, published) VALUES (1, 3, 'Investor Quality Consultant', '2026-02-13');
-INSERT INTO books (id, author_id, title, published) VALUES (2, 4, 'Human Markets Developer', '2024-04-04');
-INSERT INTO books (id, author_id, title, published) VALUES (3, 3, 'Dynamic Assurance Associate', '2024-08-14');
-INSERT INTO books (id, author_id, title, published) VALUES (4, 1, 'Lead Communications Designer', '2025-12-05');
+INSERT INTO books (id, author_id, title, published) VALUES (1, 2, 'Senior Optimization Manager', '2024-10-05');
+INSERT INTO books (id, author_id, title, published) VALUES (2, 2, 'National Usability Director', '2024-08-22');
+INSERT INTO books (id, author_id, title, published) VALUES (3, 3, 'Chief Configuration Consultant', '2024-11-17');
+INSERT INTO books (id, author_id, title, published) VALUES (4, 1, 'Product Directives Administrator', '2025-10-12');

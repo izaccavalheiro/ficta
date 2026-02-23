@@ -6,13 +6,13 @@ CREATE TABLE users (
   createdAt DATETIME
 );
 
-INSERT INTO users (id, username, email, active, createdAt) VALUES (1, 'or', 'onset', 1, '2026-02-22T19:26:34.780Z');
-INSERT INTO users (id, username, email, active, createdAt) VALUES (2, 'meanwhile', 'after', 1, '2026-02-22T12:57:08.336Z');
-INSERT INTO users (id, username, email, active, createdAt) VALUES (3, 'refer', 'ugly', 1, '2026-02-22T15:45:48.764Z');
-INSERT INTO users (id, username, email, active, createdAt) VALUES (4, 'deny', 'qua', 1, '2026-02-21T21:17:10.062Z');
-INSERT INTO users (id, username, email, active, createdAt) VALUES (5, 'whose', 'gah', 1, '2026-02-22T01:15:27.718Z');
-INSERT INTO users (id, username, email, active, createdAt) VALUES (6, 'versus', 'poorly', 1, '2026-02-22T02:57:26.992Z');
-INSERT INTO users (id, username, email, active, createdAt) VALUES (7, 'minister', 'scuffle', 0, '2026-02-22T02:04:10.058Z');
-INSERT INTO users (id, username, email, active, createdAt) VALUES (8, 'pro', 'unto', 0, '2026-02-22T06:27:58.681Z');
-INSERT INTO users (id, username, email, active, createdAt) VALUES (9, 'markup', 'lobster', 0, '2026-02-22T17:29:43.001Z');
-INSERT INTO users (id, username, email, active, createdAt) VALUES (10, 'armchair', 'if', 0, '2026-02-22T06:59:28.585Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (1, 'farmer', 'march', 0, '2026-02-22T23:16:56.512Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (2, 'twin', 'bungalow', 0, '2026-02-23T00:18:54.637Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (3, 'helpfully', 'metallic', 1, '2026-02-23T03:20:01.342Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (4, 'geez', 'merry', 1, '2026-02-22T23:35:22.216Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (5, 'unrealistic', 'geez', 0, '2026-02-22T06:03:10.150Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (6, 'highly', 'unlawful', 1, '2026-02-22T07:21:26.512Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (7, 'around', 'all', 0, '2026-02-22T05:31:17.289Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (8, 'bandwidth', 'since', 0, '2026-02-22T06:47:18.223Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (9, 'fond', 'knuckle', 1, '2026-02-22T17:29:58.665Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (10, 'er', 'internalise', 1, '2026-02-22T13:24:56.806Z');

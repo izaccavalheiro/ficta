@@ -1,22 +1,31 @@
 /**
  * SQL Schema Generation Examples
- * 
- * This example demonstrates the enhanced SQL schema generation features:
- * - DDL generation with column types and constraints
- * - Multi-table schemas with foreign keys
- * - Different SQL dialects (PostgreSQL, MySQL, SQLite)
- * - Various output modes (insert, ddl, ddl+insert, upsert, truncate+insert)
- * - Batch inserts
+ *
+ * This example demonstrates the enhanced SQL schema generation features
+ * using the low-level generateSchema() API from src/sql-schema.js.
+ *
+ * Run from this directory:
+ *   node sql-schema-examples.js
+ *
+ * Covers:
+ *   - DDL generation with column types and constraints (all 4 dialects)
+ *   - Multi-table schemas with foreign keys
+ *   - Various output modes (insert, ddl, ddl+insert, upsert, truncate+insert)
+ *   - Batch inserts
+ *   - Complete e-commerce schema (4 tables, FK relationships)
  */
 
-import { generateData } from 'ficta';
-import { generateSchema } from 'ficta/src/sql-schema.js';
-import * as core from 'ficta/src/core.js';
+import { generateData } from '../../src/node.js';
+import { generateSchema } from '../../src/sql-schema.js';
+import * as core from '../../src/core.js';
 import { faker } from '@faker-js/faker';
 import fs from 'fs';
+import { mkdirSync } from 'fs';
 
 // Initialize Faker
 core.setFaker(faker);
+
+mkdirSync('output', { recursive: true });
 
 console.log('=== SQL Schema Generation Examples ===\n');
 
@@ -358,8 +367,8 @@ const fullEcommerceSchema = {
 const fullSchema = generateSchema(fullEcommerceSchema);
 
 // Save to file
-fs.writeFileSync('ecommerce-schema.sql', fullSchema);
-console.log('✓ Complete schema saved to ecommerce-schema.sql');
+fs.writeFileSync('output/ecommerce-schema.sql', fullSchema);
+console.log('✓ Complete schema saved to output/ecommerce-schema.sql');
 console.log(`  - ${customersDataFull.records.length} customers`);
 console.log(`  - ${productsData.records.length} products`);
 console.log(`  - ${ordersDataFull.records.length} orders`);

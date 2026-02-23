@@ -296,3 +296,83 @@ export function listTypes() {
 export function listTemplates() {
   return Object.keys(templates);
 }
+
+// ---------------------------------------------------------------------------
+// Plugin API — built-in name snapshots (captured once at module load)
+// ---------------------------------------------------------------------------
+const BUILT_IN_TYPES = new Set(Object.keys(fakerTypes));
+const BUILT_IN_TEMPLATES = new Set(Object.keys(templates));
+
+/**
+ * Register a custom data type generator.
+ * @param {string} name - Type name (used in column definitions as name:type)
+ * @param {Function} generatorFn - Zero-argument function returning a value
+ * @param {Object} [options]
+ * @param {boolean} [options.override=false] - Allow overwriting an existing type
+ */
+export function registerType(name, generatorFn, { override = false } = {}) {
+  if (typeof name !== 'string' || !name.trim()) {
+    throw new Error('registerType: name must be a non-empty string');
+  }
+  if (typeof generatorFn !== 'function') {
+    throw new Error(`registerType: generatorFn must be a function, got ${typeof generatorFn}`);
+  }
+  if (fakerTypes[name] !== undefined && !override) {
+    throw new Error(
+      `registerType: type "${name}" is already registered. Pass { override: true } to replace it.`
+    );
+  }
+  fakerTypes[name] = generatorFn;
+}
+
+/**
+ * Unregister a previously registered custom type.
+ * Built-in types cannot be removed.
+ * @param {string} name - Type name to remove
+ */
+export function unregisterType(name) {
+  if (BUILT_IN_TYPES.has(name)) {
+    throw new Error(`unregisterType: "${name}" is a built-in type and cannot be removed`);
+  }
+  if (!(name in fakerTypes)) {
+    throw new Error(`unregisterType: type "${name}" is not registered`);
+  }
+  delete fakerTypes[name];
+}
+
+/**
+ * Register a custom column template.
+ * @param {string} name - Template name
+ * @param {{ columns: string, rows: number }} config - Template configuration
+ * @param {Object} [options]
+ * @param {boolean} [options.override=false] - Allow overwriting an existing template
+ */
+export function registerTemplate(name, config, { override = false } = {}) {
+  if (typeof name !== 'string' || !name.trim()) {
+    throw new Error('registerTemplate: name must be a non-empty string');
+  }
+  if (!config || typeof config.columns !== 'string') {
+    throw new Error('registerTemplate: config.columns must be a string');
+  }
+  if (templates[name] !== undefined && !override) {
+    throw new Error(
+      `registerTemplate: template "${name}" is already registered. Pass { override: true } to replace it.`
+    );
+  }
+  templates[name] = { columns: config.columns, rows: config.rows || 100 };
+}
+
+/**
+ * Unregister a previously registered custom template.
+ * Built-in templates cannot be removed.
+ * @param {string} name - Template name to remove
+ */
+export function unregisterTemplate(name) {
+  if (BUILT_IN_TEMPLATES.has(name)) {
+    throw new Error(`unregisterTemplate: "${name}" is a built-in template and cannot be removed`);
+  }
+  if (!(name in templates)) {
+    throw new Error(`unregisterTemplate: template "${name}" is not registered`);
+  }
+  delete templates[name];
+}

@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ficta — Interactive Playground</title>
+  <!-- Load Ficta IIFE bundle from jsDelivr CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/ficta/dist/ficta.browser.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f0f4f8;
+      color: #1a202c;
+      min-height: 100vh;
+    }
+    header {
+      background: #2d3748;
+      color: #fff;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    header h1 { font-size: 1.4rem; font-weight: 700; }
+    header span { font-size: 0.9rem; color: #a0aec0; }
+    .container {
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      gap: 16px;
+      padding: 16px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    .panel {
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.12);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .panel h2 { font-size: 1rem; font-weight: 600; color: #4a5568; }
+    label { font-size: 0.85rem; font-weight: 500; color: #4a5568; display: block; margin-bottom: 4px; }
+    input[type="text"], input[type="number"], select, textarea {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #cbd5e0;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      font-family: inherit;
+      background: #fafafa;
+      color: #1a202c;
+    }
+    input[type="text"]:focus, input[type="number"]:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: #667eea;
+      background: #fff;
+      box-shadow: 0 0 0 3px rgba(102,126,234,.15);
+    }
+    textarea { resize: vertical; min-height: 80px; font-family: 'Courier New', monospace; font-size: 0.82rem; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .btn {
+      padding: 9px 18px;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .btn-primary { background: #667eea; color: #fff; }
+    .btn-primary:hover { background: #5a67d8; }
+    .btn-secondary { background: #48bb78; color: #fff; }
+    .btn-secondary:hover { background: #38a169; }
+    .btn-secondary:disabled { background: #a0aec0; cursor: not-allowed; }
+    .btn-row { display: flex; gap: 8px; }
+    .output-panel { display: flex; flex-direction: column; gap: 8px; }
+    .output-panel h2 { font-size: 1rem; font-weight: 600; color: #4a5568; }
+    .stats { font-size: 0.8rem; color: #718096; }
+    #output {
+      flex: 1;
+      background: #1a202c;
+      color: #e2e8f0;
+      border-radius: 8px;
+      padding: 14px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.8rem;
+      line-height: 1.5;
+      overflow: auto;
+      white-space: pre;
+      min-height: 400px;
+      max-height: calc(100vh - 180px);
+    }
+    .error { color: #fc8181; font-weight: 600; }
+    @media (max-width: 768px) {
+      .container { grid-template-columns: 1fr; }
+      #output { min-height: 300px; max-height: 50vh; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Ficta Playground</h1>
+    <span>Interactive test data generator &mdash; no build step required</span>
+  </header>
+
+  <div class="container">
+    <!-- Left: controls -->
+    <div class="panel">
+      <h2>⚙️ Configuration</h2>
+
+      <div>
+        <label for="templateSelect">Template (optional)</label>
+        <select id="templateSelect">
+          <option value="">— none (use column definitions below) —</option>
+        </select>
+      </div>
+
+      <div>
+        <label for="columnsInput">Column Definitions</label>
+        <textarea id="columnsInput" rows="4"
+          placeholder="id:autoIncrement,name:fullName,email,status:enum:active|inactive">id:autoIncrement,name:fullName,email,status:enum:active|inactive,score:range:1-100</textarea>
+      </div>
+
+      <div class="row">
+        <div>
+          <label for="rowsInput">Rows</label>
+          <input type="number" id="rowsInput" value="20" min="1" max="10000" />
+        </div>
+        <div>
+          <label for="formatSelect">Format</label>
+          <select id="formatSelect">
+            <option value="csv">CSV</option>
+            <option value="json">JSON</option>
+            <option value="tsv">TSV</option>
+            <option value="xml">XML</option>
+            <option value="sql">SQL</option>
+            <option value="yaml">YAML</option>
+            <option value="toml">TOML</option>
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label for="outputFilename">Download filename</label>
+        <input type="text" id="outputFilename" value="ficta-data.csv" placeholder="ficta-data.csv" />
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" id="generateBtn">▶ Generate</button>
+        <button class="btn btn-secondary" id="downloadBtn" disabled>⬇ Download</button>
+      </div>
+
+      <div style="font-size:0.78rem; color:#718096; border-top:1px solid #e2e8f0; padding-top:10px;">
+        <strong>Tip:</strong> Column format: <code>name:type</code> or <code>name:enum:a|b|c</code><br/>
+        Types: fullName, email, number, price, uuid, pastDate, boolean, sentence&hellip;
+      </div>
+    </div>
+
+    <!-- Right: output -->
+    <div class="panel output-panel">
+      <h2>📄 Output</h2>
+      <div class="stats" id="statsBar">Click "Generate" to create data.</div>
+      <pre id="output">// Output will appear here…</pre>
+    </div>
+  </div>
+
+  <script>
+    // Wait for Ficta to be available
+    window.addEventListener('load', () => {
+      if (!window.Ficta) {
+        document.getElementById('output').textContent =
+          'ERROR: Ficta CDN bundle failed to load. Check your internet connection.';
+        return;
+      }
+
+      const { generateData, toCSV, toJSON, toTSV, toXML, toSQL, toYAML, toTOML,
+              formatData, templates, downloadFile } = Ficta;
+
+      // Populate template selector
+      const templateSelect = document.getElementById('templateSelect');
+      Object.keys(templates).forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name.charAt(0).toUpperCase() + name.slice(1);
+        templateSelect.appendChild(opt);
+      });
+
+      // Auto-fill columns when template is chosen
+      templateSelect.addEventListener('change', () => {
+        const name = templateSelect.value;
+        if (name && templates[name]) {
+          document.getElementById('columnsInput').value = templates[name].columns;
+          document.getElementById('rowsInput').value = templates[name].rows;
+        }
+      });
+
+      // Auto-update filename extension when format changes
+      const formatSelect = document.getElementById('formatSelect');
+      const filenameInput = document.getElementById('outputFilename');
+      formatSelect.addEventListener('change', () => {
+        const ext = formatSelect.value === 'yml' ? 'yaml' : formatSelect.value;
+        const current = filenameInput.value;
+        filenameInput.value = current.replace(/\.[^.]+$/, '') + '.' + ext;
+      });
+
+      let lastResult = null;
+      let lastFormat = 'csv';
+      let lastFormatted = null;
+
+      async function doGenerate() {
+        const outputEl = document.getElementById('output');
+        const statsEl = document.getElementById('statsBar');
+        const downloadBtn = document.getElementById('downloadBtn');
+
+        const columnsInput = document.getElementById('columnsInput').value.trim();
+        const rows = parseInt(document.getElementById('rowsInput').value, 10) || 20;
+        const format = formatSelect.value;
+        const template = templateSelect.value || undefined;
+
+        if (!columnsInput && !template) {
+          outputEl.innerHTML = '<span class="error">Please enter column definitions or choose a template.</span>';
+          return;
+        }
+
+        try {
+          const genOptions = template
+            ? { template, rows }
+            : { columns: columnsInput, rows };
+
+          const result = generateData(genOptions);
+          lastResult = result;
+          lastFormat = format;
+
+          // Format data
+          let formatted;
+          try {
+            formatted = await formatData(result.records, result.columns, format, { pretty: true });
+          } catch (fmtErr) {
+            throw new Error('Formatting error: ' + fmtErr.message);
+          }
+
+          lastFormatted = formatted;
+
+          const preview = typeof formatted === 'string'
+            ? (formatted.length > 20000 ? formatted.slice(0, 20000) + '\n… (truncated for display)' : formatted)
+            : '[Binary data — use Download]';
+
+          outputEl.textContent = preview;
+          statsEl.textContent =
+            `✓ ${result.rowCount} rows × ${result.columnCount} columns — ${format.toUpperCase()} — ` +
+            `${(typeof formatted === 'string' ? formatted.length : 0).toLocaleString()} characters`;
+
+          downloadBtn.disabled = false;
+        } catch (err) {
+          outputEl.innerHTML = `<span class="error">Error: ${err.message}</span>`;
+          statsEl.textContent = '';
+          downloadBtn.disabled = true;
+        }
+      }
+
+      document.getElementById('generateBtn').addEventListener('click', doGenerate);
+
+      document.getElementById('downloadBtn').addEventListener('click', () => {
+        if (!lastFormatted) return;
+        const filename = filenameInput.value || `ficta-data.${lastFormat}`;
+        downloadFile(lastFormatted, filename, lastFormat);
+      });
+
+      // Generate on load with defaults
+      doGenerate();
+    });
+  </script>
+</body>
+</html>

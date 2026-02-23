@@ -34,16 +34,18 @@ ficta -t users -r 1000 -o users.xlsx
 
 ```
 src/
-  core.js              ← 🎯 Core logic: parseColumns, generateRows
-  formatters.js        ← Format converters (CSV, JSON, XML, Excel, etc.)
+  core.js              ← 🎯 Core logic: parseColumns, generateData, Plugin API
+  formatters.js        ← Format converters (CSV, JSON, XML, Excel, YAML, TOML, SQL)
+  formatters.shared.js ← Shared pure utilities (CSV, TSV, JSON, detectFormat)
   formatters.browser.js ← Browser-safe format converters
-  node.js              ← Node.js API wrapper + generateFromDDL()
-  browser.js           ← Browser API wrapper
+  node.js              ← Node.js API: generateAndSave, generateFromDDL, generateStream
+  browser.js           ← Browser API: generateAndDownload, createUI
   sql-schema.js        ← SQL DDL/DML generator (universal)
   ddl-parser.js        ← SQL DDL → TableDef parser (universal, pure)
   schema-generator.js  ← Multi-table FK-aware orchestrator (universal)
+  schema-builder.js    ← Fluent table/schema builder API (universal)
 cli.js                 ← CLI interface with yargs
-tests/*.test.js        ← 596 tests, 100% overall coverage
+tests/*.test.js        ← 737 tests, 100% overall coverage
 ```
 
 ## 🔑 Core Concepts
@@ -61,9 +63,9 @@ Example: "id:autoIncrement,name:fullName,email,age:range:18-65"
 
 ### 3. Templates
 ```javascript
-users: "id:autoIncrement,firstName,lastName,email,phone,street,city,state,zipCode"
-products: "id:autoIncrement,product,price,department,productDescription"
-transactions: "id:autoIncrement,accountNumber,amount,timestamp,currency"
+users: "id:autoIncrement,firstName,lastName,email,phone,company,jobTitle,registeredDate:pastDate"
+products: "sku:autoIncrement,name:product,category:department,price,stock:number,description:productDescription"
+transactions: "id:uuid,date:timestamp,customerId:number,amount,currency,status:word,paymentMethod:word"
 ```
 
 ### 4. Formats
@@ -131,6 +133,39 @@ const ordered = orderByDependencies(tables);
 2. `src/node.js` → Add case to switch statement
 3. `cli.js` → Add to format choices
 
+### Task: Use Fluent Schema Builder
+```javascript
+import { table, schema } from 'ficta/schema-builder';
+
+// Single table
+const sql = table('users').dialect('postgres').rows(20)
+  .column('id', 'autoIncrement', { primaryKey: true })
+  .column('email', 'email')
+  .toSQL('ddl+insert');
+
+// Multi-table (FK-aware)
+const sql2 = schema('blog').dialect('mysql').rows(10)
+  .table('authors', t => t.column('id', 'autoIncrement', { primaryKey: true }).column('name', 'fullName'))
+  .table('posts', t => t
+    .column('id', 'autoIncrement', { primaryKey: true })
+    .column('author_id', 'number', { references: { table: 'authors', column: 'id' } }))
+  .toSQL('ddl+insert');
+```
+
+### Task: Register a Custom Type or Template (Plugin API)
+```javascript
+import { registerType, registerTemplate } from 'ficta';
+registerType('hashtag', () => '#' + Math.random().toString(36).slice(2, 8));
+registerTemplate('employees', { columns: 'id:autoIncrement,firstName,lastName,email', rows: 50 });
+```
+
+### Task: Stream Large Datasets
+```javascript
+import { generateStream } from 'ficta';
+const stream = generateStream({ columns: 'id,name,email', rows: 100000, format: 'ndjson', batchSize: 1000 });
+stream.pipe(fs.createWriteStream('large.ndjson'));
+```
+
 ### Task: Fix Formatter
 **Location:** `src/formatters.js` → Specific `toXXX()` function
 
@@ -148,31 +183,35 @@ npm run test:coverage       # With coverage report
 
 ```javascript
 @faker-js/faker    // Data generation (core dependency)
-csv-writer         // CSV files (Node.js)
 exceljs           // Excel files (Node.js)
 xml2js            // XML parsing/building
 js-yaml           // YAML formatting
 @iarna/toml       // TOML formatting
 yargs             // CLI arguments
-esbuild           // Browser bundles
-jest              // Testing
+esbuild           // Browser bundles (dev)
+jest              // Testing (dev)
+csv-parse         // CSV parsing in tests (dev)
+c8                // Coverage collection (dev)
 ```
 
 ## 🔍 Finding Code
 
 | What | Where |
 |------|-------|
-| Data generation logic | `src/core.js` → `generateRows()` |
+| Data generation logic | `src/core.js` → `generateData()` |
 | Column parsing | `src/core.js` → `parseColumns()` |
-| CSV formatting | `src/formatters.js` → `toCSV()` |
-| JSON formatting | `src/formatters.js` → `toJSON()` |
+| Plugin API (types/templates) | `src/core.js` → `registerType()`, `registerTemplate()` |
+| CSV / TSV formatting (shared) | `src/formatters.shared.js` → `toCSV()`, `toTSV()` |
 | Excel formatting | `src/formatters.js` → `toExcel()` |
 | Special types (enum, range) | `src/core.js` → `generateRow()` |
 | Templates | `src/core.js` → `templates` object |
 | CLI logic | `cli.js` → `setupCLI()` |
 | Node.js API | `src/node.js` → `generateAndSave()` |
 | DDL file import | `src/node.js` → `generateFromDDL()` |
-| Browser API | `src/browser.js` → `generateData()`, `downloadFile()` |
+| JSON schema file import | `src/node.js` → `generateFromSchemaFile()` |
+| Streaming API | `src/node.js` → `generateStream()` |
+| Fluent builder | `src/schema-builder.js` → `table()`, `schema()` |
+| Browser API | `src/browser.js` → `generateAndDownload()`, `createUI()` |
 | SQL DDL/DML generation | `src/sql-schema.js` → `generateDDL()`, `generateInserts()` |
 | Parse SQL schema | `src/ddl-parser.js` → `parseDDL()` |
 | Multi-table FK generation | `src/schema-generator.js` → `generateFromSchema()` |
@@ -267,13 +306,13 @@ if (typeof window !== 'undefined') {
 
 - **Lines of Code**: ~4,500+
 - **Test Coverage**: 100% (statements, branches, functions, lines)
-- **Number of Tests**: 596
+- **Number of Tests**: 737
 - **Supported Formats**: 9
 - **Data Types**: 40+
 - **Templates**: 5
 - **SQL Dialects**: 4 (PostgreSQL, MySQL, SQLite, Generic)
 - **SQL Output Modes**: 5 (insert, upsert, ddl, ddl+insert, truncate+insert)
-- **Dependencies**: 12
+- **Production Dependencies**: 6
 - **Complexity**: Low-Medium
 
 ## 🔥 Hot Spots (Change Frequently)
@@ -286,7 +325,7 @@ if (typeof window !== 'undefined') {
 ## ❄️ Cold Spots (Rarely Change)
 
 - `src/core.js` → `parseColumns()` (stable)
-- `src/core.js` → `generateRows()` (stable)
+- `src/core.js` → `generateRow()` / `generateData()` (stable)
 - Build configuration
 - Test setup
 

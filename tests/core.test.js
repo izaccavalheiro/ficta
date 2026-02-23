@@ -9,7 +9,11 @@ import {
   seedFaker,
   setLocale,
   listTypes,
-  listTemplates
+  listTemplates,
+  registerType,
+  unregisterType,
+  registerTemplate,
+  unregisterTemplate
 } from '../src/core.js';
 import { toCSV as toCSVString } from '../src/formatters.js';
 import { faker } from '@faker-js/faker';
@@ -932,6 +936,152 @@ describe('Core Module', () => {
         expect(val).toBeDefined();
         expect(val).not.toBeNull();
       }
+    });
+  });
+});
+
+describe('Plugin API', () => {
+  // Clean up any custom types/templates registered during tests
+  afterEach(() => {
+    // Remove custom types if they were registered
+    ['customTestType', 'anotherCustomType', 'overriddenType'].forEach(name => {
+      if (name in fakerTypes && !['autoIncrement'].includes(name)) {
+        try { unregisterType(name); } catch (_) {}
+      }
+    });
+    ['myCustomTemplate', 'overriddenTemplate', 'anotherCustomTemplate'].forEach(name => {
+      if (name in templates) {
+        try { unregisterTemplate(name); } catch (_) {}
+      }
+    });
+  });
+
+  describe('registerType', () => {
+    test('registers a custom type and generates values with it', () => {
+      registerType('customTestType', () => 'custom-value');
+      const columns = parseColumns('field:customTestType');
+      const rows = generateData({ columns: 'field:customTestType', rows: 3 });
+      expect(rows.records[0].field).toBe('custom-value');
+      expect(rows.records[1].field).toBe('custom-value');
+      expect(rows.records[2].field).toBe('custom-value');
+    });
+
+    test('throws when registering an existing type without override', () => {
+      expect(() => registerType('email', () => 'x')).toThrow(
+        'registerType: type "email" is already registered. Pass { override: true } to replace it.'
+      );
+    });
+
+    test('replaces an existing type with override: true', () => {
+      registerType('overriddenType', () => 'first');
+      expect(fakerTypes['overriddenType']()).toBe('first');
+      registerType('overriddenType', () => 'replaced', { override: true });
+      expect(fakerTypes['overriddenType']()).toBe('replaced');
+    });
+
+    test('throws when name is empty', () => {
+      expect(() => registerType('', () => 'x')).toThrow('registerType: name must be a non-empty string');
+    });
+
+    test('throws when generatorFn is not a function', () => {
+      expect(() => registerType('testType', 'not-a-function')).toThrow(
+        'registerType: generatorFn must be a function, got string'
+      );
+    });
+  });
+
+  describe('unregisterType', () => {
+    test('removes a custom type so generation falls back to default', () => {
+      registerType('anotherCustomType', () => 'temp');
+      unregisterType('anotherCustomType');
+      expect('anotherCustomType' in fakerTypes).toBe(false);
+      // Falls back to generating 2 random words
+      const result = generateData({ columns: 'field:anotherCustomType', rows: 1 });
+      expect(result.records[0].field).toBeDefined();
+    });
+
+    test('throws when unregistering a built-in type', () => {
+      expect(() => unregisterType('email')).toThrow(
+        'unregisterType: "email" is a built-in type and cannot be removed'
+      );
+    });
+
+    test('throws when unregistering a type that does not exist', () => {
+      expect(() => unregisterType('nonExistentType')).toThrow(
+        'unregisterType: type "nonExistentType" is not registered'
+      );
+    });
+  });
+
+  describe('registerTemplate', () => {
+    test('registers a custom template and generateData uses it', () => {
+      registerTemplate('myCustomTemplate', { columns: 'id:autoIncrement,label:word', rows: 7 });
+      const result = generateData({ template: 'myCustomTemplate' });
+      expect(result.records).toHaveLength(7);
+      expect(result.records[0]).toHaveProperty('id');
+      expect(result.records[0]).toHaveProperty('label');
+    });
+
+    test('throws when registering an existing template without override', () => {
+      expect(() => registerTemplate('users', { columns: 'id', rows: 1 })).toThrow(
+        'registerTemplate: template "users" is already registered. Pass { override: true } to replace it.'
+      );
+    });
+
+    test('replaces an existing template with override: true', () => {
+      registerTemplate('overriddenTemplate', { columns: 'x:word', rows: 5 });
+      registerTemplate('overriddenTemplate', { columns: 'y:word', rows: 3 }, { override: true });
+      const result = generateData({ template: 'overriddenTemplate' });
+      expect(result.records).toHaveLength(3);
+      expect(result.records[0]).toHaveProperty('y');
+    });
+
+    test('throws when config.columns is not a string', () => {
+      expect(() => registerTemplate('bad', { columns: 123 })).toThrow(
+        'registerTemplate: config.columns must be a string'
+      );
+    });
+
+    test('throws when name is empty string', () => {
+      expect(() => registerTemplate('', { columns: 'id' })).toThrow(
+        'registerTemplate: name must be a non-empty string'
+      );
+    });
+
+    test('throws when name is whitespace-only', () => {
+      expect(() => registerTemplate('   ', { columns: 'id' })).toThrow(
+        'registerTemplate: name must be a non-empty string'
+      );
+    });
+
+    test('uses default rows of 100 when config.rows is not provided', () => {
+      const name = '__testDefaultRows__';
+      try {
+        registerTemplate(name, { columns: 'id:autoIncrement' });  // no rows
+        expect(templates[name].rows).toBe(100);
+      } finally {
+        delete templates[name];
+      }
+    });
+  });
+
+  describe('unregisterTemplate', () => {
+    test('throws when unregistering a built-in template', () => {
+      expect(() => unregisterTemplate('users')).toThrow(
+        'unregisterTemplate: "users" is a built-in template and cannot be removed'
+      );
+    });
+
+    test('throws when unregistering a template that does not exist', () => {
+      expect(() => unregisterTemplate('nonExistentTemplate')).toThrow(
+        'unregisterTemplate: template "nonExistentTemplate" is not registered'
+      );
+    });
+
+    test('removes a custom template successfully', () => {
+      registerTemplate('anotherCustomTemplate', { columns: 'id:autoIncrement', rows: 2 });
+      unregisterTemplate('anotherCustomTemplate');
+      expect('anotherCustomTemplate' in templates).toBe(false);
     });
   });
 });

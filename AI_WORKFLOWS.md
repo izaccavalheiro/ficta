@@ -18,6 +18,10 @@ This guide provides detailed workflows for AI assistants to handle typical devel
 - [Workflow 8: Add Validation](#workflow-8-add-validation)
 - [Workflow 9: Update Documentation](#workflow-9-update-documentation)
 - [Workflow 10: Refactor Code](#workflow-10-refactor-code)
+- [Workflow 11: Generate Data from SQL DDL Schema](#workflow-11-generate-data-from-sql-ddl-schema)
+- [Workflow 12: Use the Schema Builder API](#workflow-12-use-the-schema-builder-api)
+- [Workflow 13: Use the Plugin API](#workflow-13-use-the-plugin-api)
+- [Workflow 14: Stream Large Datasets](#workflow-14-stream-large-datasets)
 
 ---
 
@@ -56,20 +60,18 @@ export const fakerTypes = {
 
 ```javascript
 test('generates ipv6 addresses', () => {
-  const columns = parseColumns('ip:ipv6');
-  const rows = generateRows(columns, 5);
+  const result = generateData({ columns: 'ip:ipv6', rows: 5 });
   
-  rows.forEach(row => {
+  result.records.forEach(row => {
     expect(row.ip).toBeDefined();
     expect(row.ip).toMatch(/^[0-9a-f:]+$/i); // Basic IPv6 pattern
   });
 });
 
 test('generates MAC addresses', () => {
-  const columns = parseColumns('mac:macAddress');
-  const rows = generateRows(columns, 5);
+  const result = generateData({ columns: 'mac:macAddress', rows: 5 });
   
-  rows.forEach(row => {
+  result.records.forEach(row => {
     expect(row.mac).toBeDefined();
     expect(row.mac).toMatch(/^[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}$/i);
   });
@@ -131,23 +133,21 @@ export const templates = {
 
 ```javascript
 test('employees template generates correct columns', () => {
-  const columns = parseColumns(templates.employees);
-  const rows = generateRows(columns, 10);
+  const result = generateData({ template: 'employees', rows: 10 });
   
-  expect(rows).toHaveLength(10);
-  expect(rows[0]).toHaveProperty('id');
-  expect(rows[0]).toHaveProperty('firstName');
-  expect(rows[0]).toHaveProperty('email');
-  expect(rows[0]).toHaveProperty('jobTitle');
-  expect(rows[0].id).toBe(1);
-  expect(rows[1].id).toBe(2);
+  expect(result.records).toHaveLength(10);
+  expect(result.records[0]).toHaveProperty('id');
+  expect(result.records[0]).toHaveProperty('firstName');
+  expect(result.records[0]).toHaveProperty('email');
+  expect(result.records[0]).toHaveProperty('jobTitle');
+  expect(result.records[0].id).toBe(1);
+  expect(result.records[1].id).toBe(2);
 });
 
 test('orders template generates valid data', () => {
-  const columns = parseColumns(templates.orders);
-  const rows = generateRows(columns, 10);
+  const result = generateData({ template: 'orders', rows: 10 });
   
-  rows.forEach(row => {
+  result.records.forEach(row => {
     expect(row.orderId).toBeGreaterThan(0);
     expect(row.customerId).toBeGreaterThanOrEqual(1);
     expect(row.customerId).toBeLessThanOrEqual(1000);
@@ -472,17 +472,14 @@ function generateValue(column, counter) {
 ```javascript
 describe('weighted special type', () => {
   test('generates weighted values', () => {
-    const columns = parseColumns('priority:weighted:10:high|5:medium|1:low');
-    const rows = generateRows(columns, 1000);
+    const result = generateData({ columns: 'priority:weighted:10:high|5:medium|1:low', rows: 1000 });
     
     const counts = { high: 0, medium: 0, low: 0 };
-    rows.forEach(row => {
+    result.records.forEach(row => {
       counts[row.priority]++;
     });
     
     // High should appear ~625 times (10/16 * 1000)
-    // Medium should appear ~312 times (5/16 * 1000)
-    // Low should appear ~62 times (1/16 * 1000)
     expect(counts.high).toBeGreaterThan(500);
     expect(counts.medium).toBeGreaterThan(200);
     expect(counts.low).toBeGreaterThan(20);
@@ -491,10 +488,8 @@ describe('weighted special type', () => {
   });
   
   test('handles single weighted value', () => {
-    const columns = parseColumns('single:weighted:1:only');
-    const rows = generateRows(columns, 5);
-    
-    rows.forEach(row => {
+    const result = generateData({ columns: 'single:weighted:1:only', rows: 5 });
+    result.records.forEach(row => {
       expect(row.single).toBe('only');
     });
   });
@@ -778,14 +773,12 @@ Optimize performance for large dataset generation
 ```javascript
 // tests/performance.test.js
 test('benchmark: generate 100k rows', () => {
-  const columns = parseColumns('id:autoIncrement,name:fullName,email,phone');
-  
   const start = Date.now();
-  const rows = generateRows(columns, 100000);
+  const result = generateData({ columns: 'id:autoIncrement,name:fullName,email,phone', rows: 100000 });
   const duration = Date.now() - start;
   
   console.log(`Generated 100k rows in ${duration}ms`);
-  expect(rows).toHaveLength(100000);
+  expect(result.records).toHaveLength(100000);
 });
 ```
 
@@ -797,46 +790,33 @@ Identify bottlenecks:
 
 #### Step 3: Apply Optimizations
 
-**Example: Optimize parseColumns caching**
+**Example: Optimize internal record generation caching**
 ```javascript
-// Before: Parse columns every time
-function generateRows(columns, count) {
-  const rows = [];
-  for (let i = 0; i < count; i++) {
-    const row = {};
-    for (const column of columns) {
-      row[column.name] = generateValue(column, i + 1);
-    }
-    rows.push(row);
+// Before: No pre-computation
+function generateRow(columns, counter) {
+  const row = {};
+  for (const column of columns) {
+    row[column.name] = generateValue(column, counter);
   }
-  return rows;
+  return row;
 }
 
 // After: Pre-compute what we can
-function generateRows(columns, count) {
-  const rows = new Array(count);  // Pre-allocate array
-  const columnNames = columns.map(c => c.name);  // Cache names
-  
-  for (let i = 0; i < count; i++) {
-    const row = {};
-    const counter = i + 1;
-    
-    for (let j = 0; j < columns.length; j++) {
-      row[columnNames[j]] = generateValue(columns[j], counter);
-    }
-    rows[i] = row;
+function generateRow(columns, counter) {
+  const row = {};
+  const len = columns.length;
+  for (let j = 0; j < len; j++) {
+    row[columns[j].name] = generateValue(columns[j], counter);
   }
-  return rows;
+  return row;
 }
 ```
 
 #### Step 4: Benchmark After Optimization
 ```javascript
 test('benchmark: optimized 100k rows', () => {
-  const columns = parseColumns('id:autoIncrement,name:fullName,email,phone');
-  
   const start = Date.now();
-  const rows = generateRows(columns, 100000);
+  const result = generateData({ columns: 'id:autoIncrement,name:fullName,email,phone', rows: 100000 });
   const duration = Date.now() - start;
   
   console.log(`Optimized: Generated 100k rows in ${duration}ms`);
@@ -1013,17 +993,16 @@ Ensure JSDoc is up to date:
 
 ```javascript
 /**
- * Generate test data rows
- * @param {Array<Object>} columns - Column definitions
- * @param {number} count - Number of rows to generate
- * @param {Object} [options] - Additional options
- * @param {number} [options.seed] - Random seed for reproducibility
- * @returns {Array<Object>} Generated data rows
+ * Generate data rows
+ * @param {Object} options - Generation options
+ * @param {string|Array} options.columns - Column definitions
+ * @param {number} [options.rows=100] - Number of rows
+ * @param {string} [options.template] - Template name
+ * @returns {{ records: Array<Object>, columns: Array, rowCount: number }}
  * @example
- * const columns = parseColumns('id,name');
- * const rows = generateRows(columns, 100);
+ * const result = generateData({ columns: 'id:autoIncrement,name', rows: 100 });
  */
-export function generateRows(columns, count, options = {}) {
+export function generateData(options) {
   // Implementation
 }
 ```
@@ -1132,7 +1111,7 @@ npm run test:coverage
 #### Step 7: Check for Performance Impact
 ```bash
 # If refactoring core logic, benchmark before/after
-node -e "const { generateRows, parseColumns } = require('./src/core.js'); console.time('gen'); generateRows(parseColumns('id,name,email'), 100000); console.timeEnd('gen');"
+node -e "import('./src/core.js').then(({ generateData }) => { console.time('gen'); const r = generateData({ columns: 'id:autoIncrement,name:fullName,email', rows: 100000 }); console.timeEnd('gen'); });"
 ```
 
 ### Success Criteria
@@ -1316,6 +1295,193 @@ test('generates FK-consistent data', () => {
 - [ ] Chosen `dialect` and `outputMode` are reflected in the output
 - [ ] All DDL-related tests pass (`npm test -- ddl-parser schema-generator sql-schema`)
 - [ ] Overall coverage stays at 100%
+
+---
+
+## Workflow 12: Use the Schema Builder API
+
+### Objective
+Build table schemas and generate test data using the fluent `table()` / `schema()` API — a code-first alternative to raw DDL strings.
+
+### Steps
+
+#### Step 1: Import
+```javascript
+import { table, schema } from 'ficta/schema-builder';
+// or for development:
+import { table, schema } from './src/schema-builder.js';
+```
+
+#### Step 2a: Single Table
+```javascript
+const sql = table('users')
+  .dialect('postgres')
+  .rows(30)
+  .column('id', 'autoIncrement', { primaryKey: true })
+  .column('email', 'email', { unique: true })
+  .column('name', 'fullName')
+  .column('status', 'enum:active|inactive')
+  .toSQL('ddl+insert'); // 'insert' | 'upsert' | 'truncate+insert' | 'ddl+insert'
+
+console.log(sql);
+```
+
+#### Step 2b: Multi-Table with FK Relationships
+```javascript
+const sql = schema('blog')
+  .dialect('mysql')
+  .rows(20)
+  .table('authors', t => t
+    .column('id', 'autoIncrement', { primaryKey: true })
+    .column('name', 'fullName')
+    .column('email', 'email'))
+  .table('posts', t => t
+    .column('id', 'autoIncrement', { primaryKey: true })
+    .column('author_id', 'number', { references: { table: 'authors', column: 'id' } })
+    .column('title', 'sentence')
+    .column('created_at', 'pastDate'))
+  .toSQL('ddl+insert');
+```
+
+#### Step 3: Access Generated Structure
+```javascript
+const result = table('items')
+  .column('id', 'autoIncrement', { primaryKey: true })
+  .column('name', 'product')
+  .build();  // Returns { tables: TableDef[], rows: number, dialect: string }
+```
+
+#### Step 4: Save to File (Node.js)
+```javascript
+import { writeFile } from 'fs/promises';
+const sql = table('products').rows(50).column('id', 'autoIncrement', { primaryKey: true }).column('name', 'product').toSQL('ddl+insert');
+await writeFile('seed.sql', sql);
+```
+
+### Success Criteria
+- [ ] Correct SQL output for selected dialect
+- [ ] FK columns reference valid parent PKs
+- [ ] Tests pass (`npm test -- schema-builder.test.js`)
+
+---
+
+## Workflow 13: Use the Plugin API
+
+### Objective
+Register custom data types or templates at runtime without modifying `src/core.js`.
+
+### Steps
+
+#### Step 1: Register a Custom Type
+```javascript
+import { registerType, generateData } from 'ficta';
+
+// Custom type: hashtag
+registerType('hashtag', () => '#' + Math.random().toString(36).slice(2, 8));
+
+// Custom type with Faker
+registerType('ipv6', () => faker.internet.ipv6());
+
+// Verify
+const result = generateData({ columns: 'tag:hashtag,ip:ipv6', rows: 5 });
+console.log(result.records);
+```
+
+#### Step 2: Override a Built-In Type (use sparingly)
+```javascript
+registerType('email', () => `custom-${Math.random().toString(36).slice(2)}@myco.com`, { override: true });
+```
+
+#### Step 3: Register a Custom Template
+```javascript
+import { registerTemplate } from 'ficta';
+
+registerTemplate('employees', {
+  columns: 'id:autoIncrement,firstName,lastName,email,jobTitle,department,hireDate:pastDate',
+  rows: 50
+});
+
+// Use the template
+const result = generateData({ template: 'employees', rows: 20 });
+```
+
+#### Step 4: Unregister (cleanup in tests)
+```javascript
+import { unregisterType, unregisterTemplate } from 'ficta';
+
+beforeEach(() => { registerType('myType', fn); });
+afterEach(() => { unregisterType('myType'); });
+```
+
+### Success Criteria
+- [ ] Custom type/template appears in `listTypes()` / `listTemplates()`
+- [ ] `generateData()` uses the registered type
+- [ ] `unregisterType()` / `unregisterTemplate()` restores prior state
+
+---
+
+## Workflow 14: Stream Large Datasets
+
+### Objective
+Generate millions of rows without loading all data into memory using `generateStream()`.
+
+### Steps
+
+#### Step 1: Choose Format
+```javascript
+// Supported formats: 'csv' (default), 'ndjson'
+const stream = generateStream({ columns: 'id:autoIncrement,name,email', rows: 1000000, format: 'ndjson' });
+```
+
+#### Step 2: Pipe to File
+```javascript
+import { generateStream } from 'ficta';
+import { createWriteStream } from 'fs';
+
+const stream = generateStream({
+  columns: 'id:autoIncrement,name:fullName,email',
+  rows: 500000,
+  format: 'csv',
+  batchSize: 1000  // Rows emitted per chunk (default: 500)
+});
+
+stream.pipe(createWriteStream('large-dataset.csv'));
+stream.on('end', () => console.log('Done!'));
+```
+
+#### Step 3: Reproducible Stream
+```javascript
+const stream = generateStream({
+  template: 'users',
+  rows: 10000,
+  seed: 42,
+  locale: 'fr'
+});
+```
+
+#### Step 4: Collect Stream Output (for testing)
+```javascript
+async function streamToString(stream) {
+  const chunks = [];
+  for await (const chunk of stream) {
+    chunks.push(chunk);
+  }
+  return chunks.join('');
+}
+
+test('stream produces CSV with header', async () => {
+  const stream = generateStream({ columns: 'id:autoIncrement,name', rows: 5 });
+  const output = await streamToString(stream);
+  expect(output).toContain('Id,Name');
+  expect(output.trim().split('\n').length).toBe(6); // header + 5 rows
+});
+```
+
+### Success Criteria
+- [ ] Stream emits data in chunks without buffering all rows
+- [ ] Output is valid CSV / NDJSON
+- [ ] Same `seed` produces same output
+- [ ] Tests pass (`npm test -- node.test.js`)
 
 ---
 

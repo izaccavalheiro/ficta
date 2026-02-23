@@ -1,0 +1,146 @@
+{
+  "dialect": "postgres",
+  "defaultRows": 8,
+  "tables": [
+    {
+      "name": "categories",
+      "rows": 4,
+      "columns": [
+        {
+          "name": "id",
+          "type": "autoIncrement",
+          "primaryKey": true
+        },
+        {
+          "name": "name",
+          "type": "department",
+          "nullable": false
+        },
+        {
+          "name": "slug",
+          "type": "word",
+          "nullable": false
+        },
+        {
+          "name": "description",
+          "type": "sentence"
+        }
+      ]
+    },
+    {
+      "name": "products",
+      "rows": 15,
+      "columns": [
+        {
+          "name": "id",
+          "type": "autoIncrement",
+          "primaryKey": true
+        },
+        {
+          "name": "category_id",
+          "type": "number",
+          "references": {
+            "table": "categories",
+            "column": "id"
+          },
+          "notNull": true
+        },
+        {
+          "name": "sku",
+          "type": "nanoid",
+          "nullable": false
+        },
+        {
+          "name": "name",
+          "type": "product",
+          "nullable": false
+        },
+        {
+          "name": "price",
+          "type": "price",
+          "nullable": false
+        },
+        {
+          "name": "stock",
+          "type": "number",
+          "default": 0
+        },
+        {
+          "name": "active",
+          "type": "boolean",
+          "default": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp"
+        }
+      ]
+    },
+    {
+      "name": "customers",
+      "rows": 10,
+      "columns": [
+        {
+          "name": "id",
+          "type": "autoIncrement",
+          "primaryKey": true
+        },
+        {
+          "name": "email",
+          "type": "email",
+          "nullable": false
+        },
+        {
+          "name": "first_name",
+          "type": "firstName"
+        },
+        {
+          "name": "last_name",
+          "type": "lastName"
+        },
+        {
+          "name": "phone",
+          "type": "phone"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp"
+        }
+      ]
+    },
+    {
+      "name": "orders",
+      "rows": 20,
+      "columns": [
+        {
+          "name": "id",
+          "type": "autoIncrement",
+          "primaryKey": true
+        },
+        {
+          "name": "customer_id",
+          "type": "number",
+          "references": {
+            "table": "customers",
+            "column": "id"
+          },
+          "notNull": true
+        },
+        {
+          "name": "total",
+          "type": "price",
+          "nullable": false
+        },
+        {
+          "name": "status",
+          "type": "word",
+          "default": "pending"
+        },
+        {
+          "name": "placed_at",
+          "type": "timestamp"
+        }
+      ]
+    }
+  ]
+}

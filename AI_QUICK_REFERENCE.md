@@ -11,16 +11,18 @@ Universal test data generator: Node.js + Browser + CLI → CSV/JSON/XML/Excel/TS
 
 | File | Purpose |
 |------|---------|
-| `src/core.js` | Data generation (universal - NO Node/browser deps) |
+| `src/core.js` | Data generation + Plugin API (universal) |
 | `src/formatters.js` | Format converters (Node.js) |
+| `src/formatters.shared.js` | Shared pure utilities (CSV, TSV, JSON) |
 | `src/formatters.browser.js` | Format converters (browser) |
-| `src/node.js` | Node.js API + `generateFromDDL()` |
-| `src/browser.js` | Browser API |
+| `src/node.js` | Node.js API: `generateAndSave`, `generateFromDDL`, `generateStream` |
+| `src/browser.js` | Browser API: `generateAndDownload`, `createUI` |
 | `src/sql-schema.js` | SQL DDL/DML generator (universal) |
 | `src/ddl-parser.js` | SQL schema → TableDef parser (universal, pure) |
 | `src/schema-generator.js` | Multi-table FK-aware orchestrator (universal) |
+| `src/schema-builder.js` | Fluent table/schema builder API (universal) |
 | `cli.js` | CLI interface |
-| `tests/*.test.js` | 596 tests, 100% coverage |
+| `tests/*.test.js` | 737 tests, 100% coverage |
 
 ---
 
@@ -156,11 +158,13 @@ if (value.includes(',') || value.includes('"') || value.includes('\n')) {
 ## 📦 Dependencies
 
 - `@faker-js/faker` - Data generation
-- `csv-writer`, `exceljs`, `xml2js` - Formatters (Node.js)
+- `exceljs`, `xml2js` - Formatters (Node.js)
 - `js-yaml`, `@iarna/toml` - YAML/TOML formatters
 - `yargs` - CLI
-- `jest` - Testing
+- `jest`, `c8` - Testing & coverage
 - `esbuild` - Browser bundles
+
+> `csv-writer` is **not** a dependency — CSV output uses the built-in `toCSV()` in `src/formatters.shared.js`.
 
 ---
 
@@ -168,16 +172,19 @@ if (value.includes(',') || value.includes('"') || value.includes('\n')) {
 
 | What | Where |
 |------|-------|
-| Generate data | `src/core.js` → `generateRows()` |
+| Generate data | `src/core.js` → `generateData()` |
 | Parse columns | `src/core.js` → `parseColumns()` |
 | Data types | `src/core.js` → `fakerTypes` |
 | Templates | `src/core.js` → `templates` |
-| CSV format | `src/formatters.js` → `toCSV()` |
-| JSON format | `src/formatters.js` → `toJSON()` |
+| Plugin API | `src/core.js` → `registerType()`, `registerTemplate()` |
+| CSV / TSV format | `src/formatters.shared.js` → `toCSV()`, `toTSV()` |
+| Excel format | `src/formatters.js` → `toExcel()` |
 | SQL DDL/DML | `src/sql-schema.js` → `generateDDL()`, `generateInserts()` |
 | Parse SQL schema | `src/ddl-parser.js` → `parseDDL()`, `orderByDependencies()` |
 | FK-aware generation | `src/schema-generator.js` → `generateFromSchema()` |
+| Fluent builder | `src/schema-builder.js` → `table()`, `schema()` |
 | DDL file import | `src/node.js` → `generateFromDDL()` |
+| Streaming API | `src/node.js` → `generateStream()` |
 
 ---
 
@@ -242,4 +249,4 @@ node cli.js --list-types   # Show types
 
 ---
 
-**Version**: 1.1.0 | **Updated**: 2026-02-22 | **Status**: ✅ Ready
+**Version**: 1.1.7 | **Updated**: 2026-02-23 | **Status**: ✅ Ready

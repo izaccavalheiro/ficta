@@ -195,12 +195,12 @@ ARCHITECTURE.md (deep understanding)
 
 | Looking For | Location |
 |-------------|----------|
-| Core generation logic | `src/core.js` → `generateRows()` |
+| Core generation logic | `src/core.js` → `generateData()` |
 | Column parsing | `src/core.js` → `parseColumns()` |
 | Data types | `src/core.js` → `fakerTypes` |
 | Templates | `src/core.js` → `templates` |
-| CSV formatter | `src/formatters.js` → `toCSV()` |
-| JSON formatter | `src/formatters.js` → `toJSON()` |
+| CSV formatter | `src/formatters.shared.js` → `toCSV()` |
+| JSON formatter | `src/formatters.shared.js` → `toJSON()` |
 | Excel formatter | `src/formatters.js` → `toExcel()` |
 | CLI logic | `cli.js` |
 | Tests | `tests/*.test.js` |

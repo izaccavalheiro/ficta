@@ -25,7 +25,7 @@ This is **Ficta** - a universal test data generator that works in Node.js, brows
   ```
 
 ### Naming Conventions
-- Functions: `camelCase` (e.g., `generateRows`, `parseColumns`)
+- Functions: `camelCase` (e.g., `generateData`, `parseColumns`)
 - Constants: `UPPER_SNAKE_CASE` for true constants
 - Files: `kebab-case.js` for filenames
 - Column names: `camelCase` internally, convert to Title Case for output
@@ -51,8 +51,10 @@ This is **Ficta** - a universal test data generator that works in Node.js, brows
 - Example:
   ```javascript
   // ✅ Pure (in core.js)
-  export function generateRows(columns, count) {
-    return columns.map(/* ... */);
+  export function generateData({ columns, rows = 100 }) {
+    const parsed = parseColumns(columns);
+    const records = Array.from({ length: rows }, (_, i) => generateRow(parsed, i + 1));
+    return { records, columns: parsed, rowCount: records.length };
   }
   
   // ✅ Side effect (in node.js)
@@ -145,10 +147,13 @@ npm test
 |------|-------|
 | New Faker type | `src/core.js` → `fakerTypes` object |
 | New template | `src/core.js` → `templates` object |
-| New special type | `src/core.js` → Add handler + update `generateValue()` |
+| New special type | `src/core.js` → Add handler + update `generateRow()` |
 | New format (Node) | `src/formatters.js` → Add `toFormatName()` + update `node.js` |
+| Shared format util | `src/formatters.shared.js` → Pure CSV/JSON/TSV helpers |
 | New format (Browser) | `src/formatters.browser.js` → Add `toFormatName()` |
 | CLI option | `cli.js` → Update yargs config |
+| Fluent schema | `src/schema-builder.js` → `table()` / `schema()` |
+| Plugin type/template | `src/core.js` → `registerType()` / `registerTemplate()` |
 | Tests | `tests/[module].test.js` |
 
 ## Common Tasks
@@ -163,9 +168,8 @@ export const fakerTypes = {
 
 // 2. Add test in tests/core.test.js
 test('generates myNewType data', () => {
-  const columns = parseColumns('field:myNewType');
-  const rows = generateRows(columns, 1);
-  expect(rows[0].field).toBeDefined();
+  const result = generateData({ columns: 'field:myNewType', rows: 1 });
+  expect(result.records[0].field).toBeDefined();
 });
 ```
 
@@ -233,7 +237,6 @@ export function myFunction({ option }) {
 
 ### Production
 - `@faker-js/faker` - Test data generation
-- `csv-writer` - CSV file writing
 - `exceljs` - Excel file generation
 - `xml2js` - XML parsing/building
 - `js-yaml` - YAML formatting
@@ -244,6 +247,9 @@ export function myFunction({ option }) {
 - `jest` - Testing framework
 - `esbuild` - Browser bundle building
 - `csv-parse` - CSV parsing for tests
+- `c8` - Coverage collection
+
+> Note: `csv-writer` is **not** a dependency. CSV output is handled by the built-in `toCSV()` in `src/formatters.shared.js`.
 
 Always use these existing dependencies before suggesting new ones.
 

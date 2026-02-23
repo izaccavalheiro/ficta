@@ -28,22 +28,22 @@ CREATE TABLE comments (
 );
 
 -- Table: users
-INSERT INTO users (id, email, first_name, last_name, created_at) VALUES (1, 'Ellen62@hotmail.com', 'Elmer', 'Schroeder', '2026-02-22T10:13:27.615Z');
-INSERT INTO users (id, email, first_name, last_name, created_at) VALUES (2, 'Lisa95@yahoo.com', 'Ricardo', 'Buckridge', '2026-02-22T05:25:01.449Z');
-INSERT INTO users (id, email, first_name, last_name, created_at) VALUES (3, 'Mildred_Hauck88@gmail.com', 'Katelynn', 'Leuschke', '2026-02-22T05:08:11.340Z');
-INSERT INTO users (id, email, first_name, last_name, created_at) VALUES (4, 'Santos68@gmail.com', 'Harriet', 'Schmeler', '2026-02-22T13:17:58.367Z');
-INSERT INTO users (id, email, first_name, last_name, created_at) VALUES (5, 'Melanie.Watsica@yahoo.com', 'Stacey', 'Schulist', '2026-02-21T23:23:15.258Z');
+INSERT INTO users (id, email, first_name, last_name, created_at) VALUES (1, 'Allan_Metz62@yahoo.com', 'Cathy', 'Casper', '2026-02-23T01:36:50.243Z');
+INSERT INTO users (id, email, first_name, last_name, created_at) VALUES (2, 'Mercedes29@yahoo.com', 'Joana', 'Blanda', '2026-02-23T03:27:20.297Z');
+INSERT INTO users (id, email, first_name, last_name, created_at) VALUES (3, 'Margie.Kautzer@hotmail.com', 'Jonathon', 'Leffler', '2026-02-22T22:30:27.601Z');
+INSERT INTO users (id, email, first_name, last_name, created_at) VALUES (4, 'Laurine.Bayer23@yahoo.com', 'Katarina', 'Kemmer', '2026-02-22T09:59:52.646Z');
+INSERT INTO users (id, email, first_name, last_name, created_at) VALUES (5, 'Brooke85@yahoo.com', 'Maryam', 'Boehm', '2026-02-22T14:22:35.767Z');
 
 -- Table: posts
-INSERT INTO posts (id, user_id, title, body, published) VALUES (1, 1, 'Internal Interactions Coordinator', 'Consectetur tabesco casso depulso atavus vesper bene vito.', '2024-08-22');
-INSERT INTO posts (id, user_id, title, body, published) VALUES (2, 4, 'Principal Infrastructure Planner', 'Decens confero uberrime coma suppellex nobis incidunt demum ascisco sollers.', '2025-05-21');
-INSERT INTO posts (id, user_id, title, body, published) VALUES (3, 5, 'Product Communications Planner', 'Tergeo aggero depraedor conculco venio caelestis distinctio voluntarius accusantium accendo.', '2024-11-27');
-INSERT INTO posts (id, user_id, title, body, published) VALUES (4, 4, 'Global Configuration Strategist', 'Vulgaris delibero cilicium tabesco subiungo sublime cohaero condico veritas.', '2025-04-17');
-INSERT INTO posts (id, user_id, title, body, published) VALUES (5, 4, 'National Brand Director', 'Alioqui occaecati tubineus toties uredo quos.', '2024-05-26');
+INSERT INTO posts (id, user_id, title, body, published) VALUES (1, 2, 'Chief Applications Supervisor', 'Adaugeo supellex denique aestus spero temperantia utilis decor cubo.', '2025-01-04');
+INSERT INTO posts (id, user_id, title, body, published) VALUES (2, 4, 'Customer Accountability Representative', 'Tripudio adversus defessus ducimus cibus cerno doloribus vero vita.', '2024-07-16');
+INSERT INTO posts (id, user_id, title, body, published) VALUES (3, 4, 'Investor Response Specialist', 'Audeo debitis adfero charisma adhuc tantum voluptatibus.', '2025-03-28');
+INSERT INTO posts (id, user_id, title, body, published) VALUES (4, 4, 'Senior Data Strategist', 'Corrumpo supra patrocinor architecto verto theca.', '2025-09-11');
+INSERT INTO posts (id, user_id, title, body, published) VALUES (5, 4, 'Future Integration Executive', 'Utor atavus sustineo.', '2025-02-22');
 
 -- Table: comments
-INSERT INTO comments (id, post_id, author_id, content, created_at) VALUES (1, 1, 2, 'Vestrum quibusdam venustas vere tenuis dens ademptio vestigium iure.', '2026-02-21T21:53:51.693Z');
-INSERT INTO comments (id, post_id, author_id, content, created_at) VALUES (2, 4, 1, 'Aggredior cito toties.', '2026-02-22T12:36:58.746Z');
-INSERT INTO comments (id, post_id, author_id, content, created_at) VALUES (3, 2, 4, 'Cariosus demens incidunt cognatus suppellex sumptus viduo.', '2026-02-21T22:20:59.800Z');
-INSERT INTO comments (id, post_id, author_id, content, created_at) VALUES (4, 3, 2, 'Delibero arca magni cibus abeo vinco.', '2026-02-22T09:54:27.730Z');
-INSERT INTO comments (id, post_id, author_id, content, created_at) VALUES (5, 3, 2, 'Capio amicitia curtus civitas quas eum qui exercitationem.', '2026-02-22T00:44:13.557Z');
+INSERT INTO comments (id, post_id, author_id, content, created_at) VALUES (1, 1, 3, 'Demergo talus voluntarius triumphus vestrum.', '2026-02-22T09:04:24.724Z');
+INSERT INTO comments (id, post_id, author_id, content, created_at) VALUES (2, 4, 1, 'Urbanus subnecto absconditus cunae.', '2026-02-23T04:35:47.795Z');
+INSERT INTO comments (id, post_id, author_id, content, created_at) VALUES (3, 2, 1, 'Vilis adsuesco damnatio cimentarius adamo aurum clam repellat adstringo officia.', '2026-02-22T08:52:35.496Z');
+INSERT INTO comments (id, post_id, author_id, content, created_at) VALUES (4, 3, 2, 'Vilitas avaritia vaco cito depraedor adeo.', '2026-02-22T18:23:20.040Z');
+INSERT INTO comments (id, post_id, author_id, content, created_at) VALUES (5, 1, 4, 'Vestigium aureus crux ducimus vito decretum sollers patruus.', '2026-02-22T22:55:25.169Z');

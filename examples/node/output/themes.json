@@ -1,0 +1,32 @@
+[
+  {
+    "id": 1,
+    "name": "inquisitively",
+    "primaryColor": "#eea12b",
+    "secondaryColor": "#78cfbb"
+  },
+  {
+    "id": 2,
+    "name": "bah",
+    "primaryColor": "#1d6456",
+    "secondaryColor": "#cfdf45"
+  },
+  {
+    "id": 3,
+    "name": "weakly",
+    "primaryColor": "#40eed0",
+    "secondaryColor": "#12ecac"
+  },
+  {
+    "id": 4,
+    "name": "sure-footed",
+    "primaryColor": "#3cf917",
+    "secondaryColor": "#ce8997"
+  },
+  {
+    "id": 5,
+    "name": "outdo",
+    "primaryColor": "#e914ce",
+    "secondaryColor": "#b3ebc6"
+  }
+]

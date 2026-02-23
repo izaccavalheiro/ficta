@@ -1,12 +1,12 @@
 TRUNCATE TABLE users;
 
-INSERT INTO users (id, username, email, active, createdAt) VALUES (1, 'strictly', 'silently', 0, '2026-02-22T10:59:42.539Z');
-INSERT INTO users (id, username, email, active, createdAt) VALUES (2, 'ick', 'biodegrade', 1, '2026-02-22T13:43:16.973Z');
-INSERT INTO users (id, username, email, active, createdAt) VALUES (3, 'crazy', 'rebound', 0, '2026-02-22T14:47:42.046Z');
-INSERT INTO users (id, username, email, active, createdAt) VALUES (4, 'incomplete', 'ceramics', 0, '2026-02-22T03:50:16.501Z');
-INSERT INTO users (id, username, email, active, createdAt) VALUES (5, 'duh', 'importance', 1, '2026-02-22T11:09:03.848Z');
-INSERT INTO users (id, username, email, active, createdAt) VALUES (6, 'account', 'crafty', 0, '2026-02-22T19:44:34.986Z');
-INSERT INTO users (id, username, email, active, createdAt) VALUES (7, 'despite', 'sleepily', 1, '2026-02-22T09:52:25.495Z');
-INSERT INTO users (id, username, email, active, createdAt) VALUES (8, 'wilted', 'zowie', 1, '2026-02-22T16:07:09.353Z');
-INSERT INTO users (id, username, email, active, createdAt) VALUES (9, 'lounge', 'because', 1, '2026-02-22T14:42:18.615Z');
-INSERT INTO users (id, username, email, active, createdAt) VALUES (10, 'till', 'scuttle', 0, '2026-02-22T07:38:26.019Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (1, 'merit', 'with', 1, '2026-02-22T23:26:15.006Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (2, 'hm', 'blah', 0, '2026-02-22T14:39:28.983Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (3, 'where', 'pfft', 1, '2026-02-22T16:48:05.813Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (4, 'phooey', 'regularly', 0, '2026-02-22T13:50:55.071Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (5, 'knottily', 'woot', 1, '2026-02-22T08:24:10.402Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (6, 'except', 'gown', 1, '2026-02-22T17:51:33.872Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (7, 'outside', 'minority', 1, '2026-02-22T12:11:49.569Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (8, 'lace', 'extra-large', 1, '2026-02-22T15:14:42.462Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (9, 'frenetically', 'shocked', 1, '2026-02-22T15:48:53.461Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (10, 'given', 'uh-huh', 1, '2026-02-22T08:10:09.114Z');

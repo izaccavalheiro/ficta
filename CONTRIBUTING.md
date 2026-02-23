@@ -72,14 +72,16 @@ ficta/
 ├── src/                     # Source code
 │   ├── core.js              # Universal core (no Node/browser deps)
 │   ├── formatters.js        # Node.js formatters
+│   ├── formatters.shared.js # Shared pure utilities (CSV, TSV, JSON)
 │   ├── formatters.browser.js # Browser formatters
-│   ├── node.js              # Node.js adapter + generateFromDDL()
+│   ├── node.js              # Node.js adapter + generateFromDDL/Stream/SchemaFile
 │   ├── browser.js           # Browser adapter
 │   ├── sql-schema.js        # SQL DDL/DML generator (universal)
 │   ├── ddl-parser.js        # SQL DDL → TableDef parser (universal, pure)
-│   └── schema-generator.js  # Multi-table FK-aware orchestrator (universal)
+│   ├── schema-generator.js  # Multi-table FK-aware orchestrator (universal)
+│   └── schema-builder.js    # Fluent table/schema builder API (universal)
 ├── cli.js                   # CLI interface
-├── tests/                   # Test suite (596 tests, 100% coverage)
+├── tests/                   # Test suite (737 tests, 100% coverage)
 ├── examples/                # Usage examples
 └── dist/                    # Built browser bundles
 ```
@@ -263,13 +265,12 @@ Check coverage report after running `npm run test:coverage`:
  * @param {Object} options - Generation options
  * @param {Array} options.columns - Column definitions
  * @param {number} [options.rows=100] - Number of rows
- * @returns {Array} Generated rows
+ * @returns {Object} Result with records, columns, rowCount
  */
-export function generateRows({ columns, rows = 100 }) {
-  return columns.map((col, index) => ({
-    ...col,
-    value: generateValue(col, index)
-  }));
+export function generateData({ columns, rows = 100 }) {
+  const parsed = parseColumns(columns);
+  const records = Array.from({ length: rows }, (_, i) => generateRow(parsed, i + 1));
+  return { records, columns: parsed, rowCount: records.length };
 }
 ```
 
@@ -277,7 +278,7 @@ export function generateRows({ columns, rows = 100 }) {
 
 ```javascript
 // No JSDoc, positional params, not pure
-function generateRows(columns, rows) {
+function generateData(columns, rows) {
   globalState.rows = rows; // Side effect!
   return columns.map(c => c);
 }

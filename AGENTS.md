@@ -42,14 +42,13 @@ Universal test data generator that works in Node.js, browsers, and CLI. Generate
 - **Runtime**: Node.js 18+ / Modern Browsers
 - **Dependencies**:
   - `@faker-js/faker` - Test data generation
-  - `csv-writer` - CSV file writing
   - `exceljs` - Excel file generation
   - `xml2js` - XML parsing/building
   - `js-yaml` - YAML formatting
   - `@iarna/toml` - TOML formatting
   - `yargs` - CLI argument parsing
 - **Build**: esbuild (browser bundles)
-- **Testing**: Jest — 596 tests, 100% overall coverage
+- **Testing**: Jest — 737 tests, 100% overall coverage
 
 ---
 
@@ -63,16 +62,19 @@ ficta/
 │   ├── core.js              # Core generation logic (universal — no env deps)
 │   ├── formatters.js        # Format converters (Node.js)
 │   ├── formatters.browser.js # Format converters (browser)
-│   ├── node.js              # Node.js entry point + generateFromDDL()
+│   ├── formatters.shared.js  # Shared pure format utilities (CSV, TSV, JSON)
+│   ├── node.js              # Node.js entry point + generateFromDDL/Stream/SchemaFile
 │   ├── browser.js           # Browser entry point
 │   ├── sql-schema.js        # SQL DDL/DML generator with dialect support (universal)
 │   ├── ddl-parser.js        # SQL DDL → TableDef parser (universal, pure)
-│   └── schema-generator.js  # Multi-table FK-aware data orchestrator (universal)
+│   ├── schema-generator.js  # Multi-table FK-aware data orchestrator (universal)
+│   └── schema-builder.js    # Fluent table/schema builder API (universal)
 ├── cli.js                   # CLI entry point
-├── tests/                   # Test files (596 tests, 100% coverage)
-│   ├── sql-schema.test.js   # SQL schema generator tests (73+ tests)
-│   ├── ddl-parser.test.js   # DDL parser tests (762 lines)
-│   └── schema-generator.test.js # Orchestrator tests
+├── tests/                   # Test files (737 tests, 100% coverage)
+│   ├── sql-schema.test.js   # SQL schema generator tests
+│   ├── ddl-parser.test.js   # DDL parser tests
+│   ├── schema-generator.test.js # Orchestrator tests
+│   └── schema-builder.test.js   # Fluent builder tests
 ├── examples/                # Usage examples
 │   ├── sql-schema.html      # Interactive browser SQL demo
 │   └── node/
@@ -95,7 +97,7 @@ ficta/
 ```
 User Input → Parse Columns → Generate Rows → Format Data → Output
      ↓            ↓               ↓              ↓           ↓
-   CLI/API   parseColumns()  generateRows()  toCSV()   Save/Download
+   CLI/API   parseColumns()  generateData()  toCSV()   Save/Download
               Template          Faker.js      toJSON()
               Resolution        Special       toXML()
                                Types         toExcel()
@@ -127,10 +129,14 @@ Complete SQL script
 
 **Exports:**
 - `setFaker(faker)` - Set Faker instance
+- `seedFaker(seed)` - Set deterministic seed
+- `setLocale(locale)` - Set Faker locale
 - `fakerTypes` - Object mapping type names to generators
 - `templates` - Predefined column templates
 - `parseColumns(columnString)` - Parse column definitions
-- `generateRows(columns, count)` - Generate data rows
+- `generateData(options)` - Generate records ({ records, columns, rowCount })
+- `registerType(name, fn)` / `unregisterType(name)` - Plugin API
+- `registerTemplate(name, config)` / `unregisterTemplate(name)` - Plugin API
 - `listTypes()` - List all available types
 - `listTemplates()` - List all templates
 
@@ -139,8 +145,8 @@ Complete SQL script
 // Parse "id:autoIncrement,name:fullName,email" → column objects
 parseColumns(columnString) → Array<{name, type, options}>
 
-// Generate N rows of data based on columns
-generateRows(columns, count) → Array<Object>
+// Generate records
+generateData({ columns, rows, template?, seed?, locale? }) → { records, columns, rowCount }
 
 // Special type handlers
 handleAutoIncrement(counter) → number
@@ -170,6 +176,29 @@ handlePattern(options, counter) → string
 }
 ```
 
+**`generateFromSchemaFile` options (Node.js only):**
+```javascript
+{
+  schemaFile: string,   // Required: path to ficta.schema.json file
+  rows: number,         // Override row count for all tables
+  outputMode: string,   // 'insert' | 'upsert' | 'truncate+insert' | 'ddl+insert'
+  output: string        // Optional: write generated SQL to this file path
+}
+```
+
+**`generateStream` options (Node.js only):**
+```javascript
+{
+  columns: string,      // Column definitions (or use template:)
+  template: string,     // Template name (alternative to columns)
+  rows: number,         // Total rows to generate
+  format: 'csv'|'ndjson', // Output format
+  batchSize: number,    // Rows per emitted chunk (default: 500)
+  seed: number,         // Optional Faker seed
+  locale: string        // Optional Faker locale
+}
+```
+
 **`generateAndSave` options:**
 ```javascript
 {
@@ -179,10 +208,20 @@ handlePattern(options, counter) → string
   output: string,          // Output filename
   template: string,        // Template name
   preview: boolean,        // Return data without saving
-  tableName: string,       // SQL table name (default: 'data')
-  rootElement: string,     // XML root element
-  recordElement: string,   // XML record element
-  sheetName: string        // Excel sheet name
+  seed: number,            // Optional Faker seed for reproducible output
+  locale: string,          // Optional Faker locale (e.g. 'fr', 'de', 'ja')
+  formatOptions: {
+    tableName: string,       // SQL table name (default: 'data_table')
+    rootElement: string,     // XML root element
+    recordElement: string,   // XML record element
+    sheetName: string,       // Excel sheet name
+    header: boolean,         // Include CSV/TSV header row (default: true)
+    headerFormat: string,    // 'title' | 'raw' (default: 'title')
+    mode: string,            // SQL output mode
+    dialect: string,         // SQL dialect
+    batch: boolean,          // SQL batch inserts
+    pretty: boolean          // JSON pretty print
+  }
 }
 ```
 
@@ -281,11 +320,11 @@ Predefined column sets for common use cases:
 
 ```javascript
 templates = {
-  users: { columns: "id:autoIncrement,firstName,lastName,email,phone,street,city,state,zipCode", rows: 100 },
-  products: { columns: "id:autoIncrement,product,price,department,productDescription", rows: 100 },
-  transactions: { columns: "id:autoIncrement,accountNumber,amount,timestamp,currency", rows: 100 },
-  addresses: { columns: "id:autoIncrement,street,city,state,country,zipCode,latitude,longitude", rows: 100 },
-  contacts: { columns: "id:autoIncrement,fullName,email,phone,company,jobTitle", rows: 100 }
+  users: { columns: "id:autoIncrement,firstName,lastName,email,phone,company,jobTitle,registeredDate:pastDate", rows: 100 },
+  products: { columns: "sku:autoIncrement,name:product,category:department,price,stock:number,description:productDescription", rows: 100 },
+  transactions: { columns: "id:uuid,date:timestamp,customerId:number,amount,currency,status:word,paymentMethod:word", rows: 100 },
+  addresses: { columns: "id:autoIncrement,street,city,state,zipCode,country,lat:latitude,lng:longitude", rows: 100 },
+  contacts: { columns: "id:autoIncrement,fullName,email,phone,company,jobTitle,website:url", rows: 100 }
 }
 ```
 
@@ -340,9 +379,8 @@ export const fakerTypes = {
 
 // 2. Test it (tests/core.test.js)
 test('generates cryptocurrency data', () => {
-  const columns = parseColumns('wallet:cryptocurrency');
-  const rows = generateRows(columns, 5);
-  expect(rows[0].wallet).toMatch(/^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$/);
+  const result = generateData({ columns: 'wallet:cryptocurrency', rows: 5 });
+  expect(result.records[0].wallet).toMatch(/^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$/);
 });
 ```
 
@@ -562,7 +600,7 @@ npm test -- --watch
 
 **Unit Tests (Pure Functions):**
 ```javascript
-import { parseColumns, generateRows } from '../src/core.js';
+import { parseColumns, generateData } from '../src/core.js';
 
 test('parseColumns parses simple columns', () => {
   const result = parseColumns('id,name,email');
@@ -602,8 +640,8 @@ test('uses custom faker configuration', () => {
   setFaker(mockFaker);
   
   const columns = parseColumns('name:fullName');
-  const rows = generateRows(columns, 1);
-  expect(rows[0].name).toBe('Test Name');
+  const result = generateData({ columns: 'name:fullName', rows: 1 });
+  expect(result.records[0].name).toBe('Test Name');
 });
 ```
 
@@ -699,6 +737,18 @@ Consistent delimiter-based parsing:
 
 ### Core API (`src/core.js`)
 
+#### `setFaker(faker)`, `seedFaker(seed)`, `setLocale(locale)`
+
+Initialize and configure the Faker instance.
+
+```javascript
+import { setFaker, seedFaker, setLocale } from './src/core.js';
+import { faker } from '@faker-js/faker';
+setFaker(faker);
+seedFaker(42);      // reproducible output
+setLocale('fr');    // French data
+```
+
 #### `parseColumns(columnString)`
 Parses column definition string into structured array.
 
@@ -718,134 +768,87 @@ parseColumns('id:autoIncrement,name:fullName,age:range:18-65')
 ]
 ```
 
-#### `generateRows(columns, count)`
-Generates array of data rows based on column definitions.
-
-**Parameters:**
-- `columns` (Array): Column definition objects
-- `count` (number): Number of rows to generate
-
-**Returns:** `Array<Object>`
-
-**Example:**
-```javascript
-const columns = parseColumns('id:autoIncrement,name');
-const rows = generateRows(columns, 3);
-// Returns:
-[
-  { id: 1, name: 'John Doe' },
-  { id: 2, name: 'Jane Smith' },
-  { id: 3, name: 'Bob Johnson' }
-]
-```
-
-#### `setFaker(faker)`
-Sets the Faker.js instance for data generation.
-
-**Parameters:**
-- `faker` (object): Faker.js instance
-
-**Example:**
-```javascript
-import { faker } from '@faker-js/faker';
-import { setFaker } from './src/core.js';
-setFaker(faker);
-```
-
-### Node.js API (`src/node.js`)
-
-#### `generateData(options)`
-Generates formatted data string/buffer.
-
-**Parameters:**
-- `options` (object):
-  - `columns` (string|Array): Column definitions
-  - `rows` (number): Number of rows (default: 100)
-  - `format` (string): Output format (csv|json|xml|xlsx|tsv|sql)
-  - `template` (string): Template name
-  - `tableName` (string): SQL table name
-  - Format-specific options...
-
-**Returns:** `Promise<string|Buffer>`
-
-**Example:**
-```javascript
-const csv = await generateData({
-  columns: 'id,name,email',
-  rows: 50,
-  format: 'csv'
-});
-```
-
-#### `generateAndSave(options)`
-Generates data and saves to file.
-
-**Parameters:**
-- `options` (object): Same as generateData + `output` (required)
-
-**Returns:** `Promise<void>`
-
-**Example:**
-```javascript
-await generateAndSave({
-  template: 'users',
-  rows: 1000,
-  output: 'users.xlsx'
-});
-```
+#### `generateData(options)` (previously named `generateRows` internally)
+Generates records and returns a result object (no file I/O).
 
 ### Browser API (`src/browser.js`)
 
+The browser bundle is self-contained (Faker bundled in). No external Faker script needed.
+
 #### `generateData(options)`
-Generates data as string or Blob for browser.
+Generates records from column definitions. Returns `{ records, columns, rowCount, columnCount }`.
 
-**Parameters:** Same as Node.js version
-
-**Returns:** `string|Blob`
-
-**Example:**
 ```javascript
-const jsonData = Ficta.generateData({
-  columns: 'id,name',
-  rows: 10,
-  format: 'json'
-});
+const result = Ficta.generateData({ columns: 'id,name', rows: 10 });
 ```
 
 #### `downloadFile(data, filename, format)`
-Triggers browser download.
+Triggers browser file download with the correct MIME type.
 
-**Parameters:**
-- `data` (string|Blob): File content
-- `filename` (string): Download filename
-- `format` (string): File format for MIME type
-
-**Example:**
 ```javascript
-const data = Ficta.generateData({ columns: 'id,name', rows: 10 });
-Ficta.downloadFile(data, 'data.csv', 'csv');
+const csv = Ficta.toCSV(result.records, result.columns);
+Ficta.downloadFile(csv, 'data.csv', 'csv');
+```
+
+#### `generateAndDownload(options)` / `createUI(container)`
+
+Generate + download in one call, or mount a self-contained UI.
+
+```javascript
+Ficta.generateAndDownload({ columns: 'id,name', rows: 50, filename: 'data.json', format: 'json' });
+Ficta.createUI('#app');
+```
+
+---
+
+### Schema Builder API (`src/schema-builder.js`)
+
+Fluent code-first alternative to raw DDL strings.
+
+```javascript
+import { table, schema } from './src/schema-builder.js';
+
+// Single table
+const sql = table('users')
+  .dialect('postgres').rows(50)
+  .column('id', 'autoIncrement', { primaryKey: true })
+  .column('email', 'email', { unique: true })
+  .toSQL('ddl+insert');
+
+// Multi-table
+const sql2 = schema('blog')
+  .dialect('mysql').rows(20)
+  .table('authors', t => t.column('id', 'autoIncrement', { primaryKey: true }).column('name', 'fullName'))
+  .table('posts', t => t
+    .column('id', 'autoIncrement', { primaryKey: true })
+    .column('author_id', 'number', { references: { table: 'authors', column: 'id' } })
+    .column('title', 'sentence'))
+  .toSQL('ddl+insert');
 ```
 
 ---
 
 ## 🔌 Extension Points
 
-### 1. Custom Data Types
+### 1. Plugin API (Custom Types and Templates)
 
-Add custom Faker-based types to `fakerTypes` object.
+Add or replace types/templates at runtime without touching `core.js`. Preferred over direct edits for project-specific extensions.
 
-**When:** Need data types not in Faker.js standard API
-
-**How:**
 ```javascript
-export const fakerTypes = {
-  // Add custom types
-  customerId: () => `CUST-${getFaker().string.alphanumeric(8).toUpperCase()}`,
-  timezone: () => getFaker().location.timeZone(),
-};
+import { registerType, registerTemplate } from 'ficta';
+
+registerType('hashtag', () => '#' + Math.random().toString(36).slice(2, 8));
+registerTemplate('employees', {
+  columns: 'id:autoIncrement,firstName,lastName,email,jobTitle,department',
+  rows: 50
+});
 ```
 
-### 2. Format Converters
+### 2. Custom Data Types (built-in extension)
+
+Add to `fakerTypes` in `src/core.js` for permanent built-in types.
+
+### 3. Format Converters
 
 Add new output format to formatters.
 
@@ -853,11 +856,11 @@ Add new output format to formatters.
 
 **How:**
 1. Add `toFormatName()` function in formatters.js
-2. Update switch statement in `generateData()`
+2. Update switch statement in `generateAndSave()`
 3. Add format to CLI choices
 4. Add browser implementation in formatters.browser.js
 
-### 3. Special Types
+### 4. Special Types
 
 Add complex value generation beyond simple Faker calls.
 
@@ -865,7 +868,7 @@ Add complex value generation beyond simple Faker calls.
 
 **How:**
 ```javascript
-// In generateValue() function
+// In generateRow() function inside core.js
 if (type.startsWith('mySpecial:')) {
   return handleMySpecial(type.substring(10), counter);
 }
@@ -876,7 +879,7 @@ function handleMySpecial(options, counter) {
 }
 ```
 
-### 4. Templates
+### 5. Templates
 
 Add domain-specific column sets.
 
@@ -889,7 +892,7 @@ export const templates = {
 };
 ```
 
-### 5. Validators
+### 6. Validators
 
 Add data validation before output.
 
@@ -904,7 +907,7 @@ function validateRecord(record, columns) {
   }
 }
 
-// Call in generateRows()
+// Call in generateRow()
 const record = {...};
 validateRecord(record, columns);
 records.push(record);
@@ -936,14 +939,11 @@ node --experimental-vm-modules node_modules/jest/bin/jest.js
 
 ### Issue: Browser bundle not working
 
-**Cause:** Faker not loaded globally
+**Cause:** The IIFE bundle (`ficta.browser.js` / `ficta.browser.min.js`) is **self-contained** — Faker is bundled in. No separate Faker `<script>` tag is needed.
 
-**Solution:**
 ```html
-<!-- Load Faker first -->
-<script src="https://cdn.jsdelivr.net/npm/@faker-js/faker@latest/dist/faker.min.js"></script>
-<!-- Then load generator -->
-<script src="./dist/ficta.browser.js"></script>
+<!-- This is enough — no Faker script required -->
+<script src="https://cdn.jsdelivr.net/npm/ficta/dist/ficta.browser.min.js"></script>
 ```
 
 ### Issue: Large Excel files fail
@@ -1004,10 +1004,13 @@ if (value.includes(',') || value.includes('"')) {
 - Core logic: `src/core.js`
 - Node API: `src/node.js`
 - Browser API: `src/browser.js`
-- Formatters: `src/formatters.js`
+- Formatters (Node.js): `src/formatters.js`
+- Formatters (shared/pure): `src/formatters.shared.js`
+- Formatters (browser): `src/formatters.browser.js`
 - SQL DDL/DML generator: `src/sql-schema.js`
 - DDL parser: `src/ddl-parser.js`
 - Multi-table orchestrator: `src/schema-generator.js`
+- Fluent schema builder: `src/schema-builder.js`
 - CLI: `cli.js`
 - Tests: `tests/*.test.js`
 
@@ -1060,6 +1063,6 @@ node cli.js --help         # CLI help
 
 ---
 
-**Last Updated:** 2026-02-22
-**Agent Version:** 2.0.0
-**Project Version:** 1.0.0
+**Last Updated:** 2026-02-23
+**Agent Version:** 2.1.0
+**Project Version:** 1.1.7

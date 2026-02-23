@@ -14,11 +14,11 @@ CREATE TABLE books (
 );
 
 -- Table: authors
-INSERT INTO authors (id, name, email) VALUES (1, 'Ms. Mae Crona', 'Darrick60@hotmail.com');
-INSERT INTO authors (id, name, email) VALUES (2, 'Rebecca Lynch', 'Whitney.Hoppe77@gmail.com');
-INSERT INTO authors (id, name, email) VALUES (3, 'Dr. Roberto Legros', 'Earline93@gmail.com');
+INSERT INTO authors (id, name, email) VALUES (1, 'Ollie Lind', 'Antoinette62@gmail.com');
+INSERT INTO authors (id, name, email) VALUES (2, 'Jody Shanahan', 'Odell26@yahoo.com');
+INSERT INTO authors (id, name, email) VALUES (3, 'Salma Cremin', 'Cory_Heathcote@gmail.com');
 
 -- Table: books
-INSERT INTO books (id, author_id, title, published) VALUES (1, 3, 'Chief Solutions Agent', '2024-07-31');
-INSERT INTO books (id, author_id, title, published) VALUES (2, 1, 'Legacy Data Supervisor', '2025-11-11');
-INSERT INTO books (id, author_id, title, published) VALUES (3, 3, 'Chief Directives Coordinator', '2024-05-01');
+INSERT INTO books (id, author_id, title, published) VALUES (1, 3, 'Corporate Applications Executive', '2024-09-16');
+INSERT INTO books (id, author_id, title, published) VALUES (2, 3, 'Lead Tactics Supervisor', '2024-05-10');
+INSERT INTO books (id, author_id, title, published) VALUES (3, 2, 'Legacy Division Director', '2026-02-16');

@@ -1,12 +1,12 @@
 TRUNCATE TABLE users;
 
-INSERT INTO users (id, username, email, active, createdAt) VALUES (1, 'once', 'kaleidoscopic', 1, '2026-02-22T09:09:30.305Z');
-INSERT INTO users (id, username, email, active, createdAt) VALUES (2, 'anenst', 'phew', 0, '2026-02-22T01:26:57.580Z');
-INSERT INTO users (id, username, email, active, createdAt) VALUES (3, 'reassuringly', 'why', 1, '2026-02-22T10:03:20.999Z');
-INSERT INTO users (id, username, email, active, createdAt) VALUES (4, 'shy', 'whoa', 0, '2026-02-22T19:12:18.921Z');
-INSERT INTO users (id, username, email, active, createdAt) VALUES (5, 'hm', 'grandson', 0, '2026-02-21T23:28:19.087Z');
-INSERT INTO users (id, username, email, active, createdAt) VALUES (6, 'sunder', 'alongside', 1, '2026-02-21T21:10:08.596Z');
-INSERT INTO users (id, username, email, active, createdAt) VALUES (7, 'veg', 'aged', 1, '2026-02-22T07:27:03.620Z');
-INSERT INTO users (id, username, email, active, createdAt) VALUES (8, 'whoa', 'dim', 0, '2026-02-22T10:32:41.932Z');
-INSERT INTO users (id, username, email, active, createdAt) VALUES (9, 'harvest', 'unbalance', 1, '2026-02-22T13:03:29.432Z');
-INSERT INTO users (id, username, email, active, createdAt) VALUES (10, 'towards', 'quizzically', 0, '2026-02-22T04:13:54.118Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (1, 'um', 'helpless', 0, '2026-02-22T15:08:12.674Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (2, 'sore', 'orderly', 0, '2026-02-22T13:16:35.017Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (3, 'pish', 'sashay', 1, '2026-02-22T07:56:48.720Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (4, 'milky', 'excess', 1, '2026-02-22T23:36:08.391Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (5, 'muted', 'wrathful', 1, '2026-02-22T14:50:05.678Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (6, 'book', 'afore', 1, '2026-02-23T04:42:06.645Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (7, 'how', 'fess', 1, '2026-02-22T23:35:34.465Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (8, 'metal', 'behind', 1, '2026-02-23T04:39:36.174Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (9, 'down', 'hollow', 0, '2026-02-22T11:14:11.453Z');
+INSERT INTO users (id, username, email, active, createdAt) VALUES (10, 'gee', 'imaginary', 1, '2026-02-23T01:54:27.332Z');

@@ -174,14 +174,16 @@ ficta/
 │   ├── core.js              # Universal core logic
 │   ├── formatters.js        # Node.js formatters
 │   ├── formatters.browser.js # Browser formatters
-│   ├── node.js              # Node.js adapter + generateFromDDL()
+│   ├── formatters.shared.js  # Shared pure utilities (CSV, TSV, JSON)
+│   ├── node.js              # Node.js adapter + generateFromDDL/Stream/SchemaFile
 │   ├── browser.js           # Browser adapter
 │   ├── sql-schema.js        # SQL DDL/DML generator (universal)
 │   ├── ddl-parser.js        # SQL DDL → TableDef parser (universal, pure)
-│   └── schema-generator.js  # Multi-table FK-aware orchestrator (universal)
+│   ├── schema-generator.js  # Multi-table FK-aware orchestrator (universal)
+│   └── schema-builder.js    # Fluent table/schema builder API (universal)
 ├── cli.js                   # CLI interface
 ├── build.js                 # Build script for bundles
-├── tests/                   # Test suite (596 tests, 100% coverage)
+├── tests/                   # Test suite (737 tests, 100% coverage)
 │   ├── core.test.js
 │   ├── formatters.test.js
 │   ├── formatters.browser.test.js
@@ -190,10 +192,12 @@ ficta/
 │   ├── cli.test.js
 │   ├── sql-schema.test.js
 │   ├── ddl-parser.test.js
-│   └── schema-generator.test.js
+│   ├── schema-generator.test.js
+│   └── schema-builder.test.js
 └── dist/                    # Built browser bundles
-    ├── ficta.browser.js    # UMD bundle
-    └── csv-generator.esm.js        # ES Module bundle
+    ├── ficta.browser.js     # IIFE bundle (self-contained)
+    ├── ficta.browser.min.js # Minified IIFE bundle (self-contained)
+    └── ficta.esm.js         # ES Module bundle
 ```
 
 ### Module Dependency Graph
@@ -254,9 +258,13 @@ ficta/
 - Special type handlers
 
 **Exports:**
-- `setFaker(faker)`
-- `parseColumns(columnString)`
-- `generateRows(columns, count)`
+- `setFaker(faker)` - Inject Faker instance
+- `seedFaker(seed)` - Set deterministic seed
+- `setLocale(locale)` - Set Faker locale (e.g. `'fr'`, `'de'`)
+- `parseColumns(columnString)` - Parse column definitions
+- `generateData(options)` - Generate records (returns `{ records, columns, rowCount }`)
+- `registerType(name, fn)` / `unregisterType(name)` - Plugin API
+- `registerTemplate(name, config)` / `unregisterTemplate(name)` - Plugin API
 - `fakerTypes` object
 - `templates` object
 - `listTypes()`, `listTemplates()`
@@ -280,7 +288,24 @@ ficta/
 - `toTOML(records)`
 - `formatColumnName(name)`
 
-**Dependencies:** ExcelJS, xml2js, js-yaml, @iarna/toml
+**Dependencies:** ExcelJS, xml2js, js-yaml, @iarna/toml, formatters.shared.js
+
+#### `formatters.shared.js` - Shared Pure Utilities
+**Responsibilities:**
+- Pure CSV, JSON, TSV formatting (no external dependencies)
+- Format detection from file extension
+- `formatColumnName` conversion (camelCase → Title Case)
+- Shared by both `formatters.js` and `formatters.browser.js`
+
+**Exports:**
+- `toCSV(records, columns, options?)` - with `header`, `headerFormat` options
+- `toJSON(records, pretty?)`
+- `toTSV(records, columns, options?)`
+- `detectFormat(filename)`
+- `getFileExtension(filename)`
+- `formatColumnName(name)`
+
+**Dependencies:** None (pure JS, universal)
 
 #### `formatters.browser.js` - Browser Formatters
 **Responsibilities:**
@@ -298,15 +323,18 @@ ficta/
 - File system operations
 - Format detection from filename
 - Integrate core + formatters
-- DDL file reading and generation (`generateFromDDL`)
+- DDL file import (`generateFromDDL`)
+- JSON schema file import (`generateFromSchemaFile`)
+- Streaming data generation (`generateStream`)
 
 **Exports:**
-- `generateData(options)` - Returns formatted data
-- `generateAndSave(options)` - Saves to file
+- `generateAndSave(options)` - Generate + save to file (supports `seed`, `locale`, `formatOptions.header`/`headerFormat`)
 - `generateFromDDL(options)` - Reads a DDL `.sql` file and writes a seed SQL file
-- Re-exports from core (templates, listTypes, etc.)
+- `generateFromSchemaFile(options)` - Reads a `ficta.schema.json` file and generates SQL
+- `generateStream(options)` - Returns a Node.js `Readable` stream (CSV or NDJSON)
+- Re-exports from core (`templates`, `listTypes`, `listTemplates`, etc.)
 
-**Dependencies:** core.js, formatters.js, schema-generator.js, fs (Node.js built-in)
+**Dependencies:** core.js, formatters.js, schema-generator.js, ddl-parser.js, fs (Node.js built-in)
 
 #### `sql-schema.js` - SQL DDL/DML Generator
 **Responsibilities:**
@@ -351,16 +379,34 @@ ficta/
 
 **Dependencies:** core.js, ddl-parser.js, sql-schema.js
 
-#### `browser.js` - Browser Adapter
+#### `schema-builder.js` - Fluent Schema Builder
 **Responsibilities:**
-- Browser API entry point
-- File downloads via Blob API
-- Global window.Ficta exposure
-- Integrate core + browser formatters
+- Provide a fluent, code-first API for defining tables and schemas
+- Single-table (`table()`) and multi-table (`schema()`) builder patterns
+- Generate FK-aware test data via `generateFromSchema` under the hood
+- Produce the same SQL output modes as the DDL flow
 
 **Exports:**
-- `generateData(options)` - Returns formatted string/Blob
+- `table(tableName)` → `TableBuilder` (`column()`, `rows()`, `dialect()`, `toSQL()`, `build()`)
+- `schema(schemaName)` → `SchemaBuilder` (`table()`, `rows()`, `dialect()`, `toSQL()`, `build()`)
+
+**Import path:** `ficta/schema-builder`
+
+**Dependencies:** core.js, schema-generator.js
+
+#### `browser.js` - Browser Adapter
+**Responsibilities:**
+- Browser API entry point (self-contained: Faker bundled in)
+- File downloads via Blob API
+- Global `window.Ficta` exposure
+- Integrate core + browser formatters
+- Mount self-contained interactive UI via `createUI()`
+
+**Exports:**
+- `generateData(options)` - Returns formatted string
 - `downloadFile(data, filename, format)` - Trigger download
+- `generateAndDownload(options)` - Generate + download in one call
+- `createUI(containerSelector)` - Mount interactive HTML UI
 - Re-exports from core
 
 **Dependencies:** core.js, formatters.browser.js
@@ -394,7 +440,7 @@ User Input
 └─────────┬─────────┘
           ↓
 ┌───────────────────┐
-│ Generate Records  │ ← generateRows()
+│ Generate Records  │ ← generateData() (core.js)
 └─────────┬─────────┘
           ↓
 ┌───────────────────┐
@@ -435,14 +481,16 @@ Complete SQL script string
 **pkStore** is a live map `{ tableName: { colName: value[] } }` that accumulates
 primary key values as each parent table is generated, ensuring FK integrity.
 
-### Detailed Flow: generateRows()
+### Detailed Flow: generateData() / generateRow()
 
 ```javascript
-generateRows(columns, count)
+generateData({ columns, rows, ... })
     ↓
-  Loop 1 to count
+  parseColumns(columns)
     ↓
-  For each row:
+  Loop 1 to rows
+    ↓
+  For each row: generateRow(parsedColumns, counter)
     ├─ Initialize empty record {}
     ├─ Loop through columns
     │   ├─ Get column type
@@ -558,8 +606,8 @@ Templates are named column definition strings:
 
 ```javascript
 export const templates = {
-  users: "id:autoIncrement,firstName,lastName,email,phone,street,city,state,zipCode",
-  products: "id:autoIncrement,product,price,department,productDescription",
+  users: { columns: "id:autoIncrement,firstName,lastName,email,phone,company,jobTitle,registeredDate:pastDate", rows: 100 },
+  products: { columns: "sku:autoIncrement,name:product,category:department,price,stock:number,description:productDescription", rows: 100 },
   // ...
 };
 ```
@@ -633,7 +681,7 @@ Use conditional exports and environment detection:
 ```javascript
 // src/node.js
 import { faker } from '@faker-js/faker';
-import { setFaker, parseColumns, generateRows } from './core.js';
+import { setFaker, generateData } from './core.js';
 import { toCSV, toJSON, toXML, toExcel } from './formatters.js';
 import fs from 'fs';
 
@@ -650,13 +698,12 @@ export async function generateAndSave(options) {
 
 ```javascript
 // src/browser.js
-import { parseColumns, generateRows, templates } from './core.js';
+import { setFaker, generateData, templates } from './core.js';
 import { toCSV, toJSON, toXML } from './formatters.browser.js';
 
-// Expect Faker to be loaded globally
-if (typeof window !== 'undefined' && window.faker) {
-  setFaker(window.faker);
-}
+// Faker bundled in — no need to load separately
+import { faker } from '@faker-js/faker';
+setFaker(faker);
 
 export function downloadFile(data, filename, format) {
   const blob = new Blob([data], { type: getMimeType(format) });
@@ -848,15 +895,14 @@ setFaker(faker);
 ### 2. Custom Formatters
 
 ```javascript
-import { generateRows, parseColumns } from 'ficta/core';
+import { generateData } from 'ficta';
 
 function toYAML(records) {
   // Custom YAML formatting logic
   return yamlString;
 }
 
-const columns = parseColumns('id,name,email');
-const records = generateRows(columns, 100);
+const { records } = generateData({ columns: 'id,name,email', rows: 100 });
 const yaml = toYAML(records);
 ```
 
@@ -891,17 +937,19 @@ await generateAndSave({
 - Stream Excel generation using ExcelJS streaming API
 - Consider pagination for browser generation
 
-**Example:**
+**Example (streaming is preferred for very large files):**
 ```javascript
-async function generateLargeFile(options) {
-  const chunkSize = 10000;
-  const totalRows = options.rows;
-  
-  for (let i = 0; i < totalRows; i += chunkSize) {
-    const chunk = generateRows(columns, Math.min(chunkSize, totalRows - i));
-    await appendToFile(options.output, chunk);
-  }
-}
+import { generateStream } from 'ficta';
+import { createWriteStream } from 'fs';
+
+// Use the built-in streaming API for large datasets
+const stream = generateStream({
+  columns: options.columns,
+  rows: options.rows,
+  format: 'csv',
+  batchSize: 10000
+});
+stream.pipe(createWriteStream(options.output));
 ```
 
 ### 2. Faker Performance

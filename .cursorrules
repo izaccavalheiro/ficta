@@ -115,13 +115,16 @@ Uses `--experimental-vm-modules` for ES modules support
 
 ### Production
 - `@faker-js/faker` - Data generation
-- `csv-writer`, `exceljs`, `xml2js` - Formatters
+- `exceljs`, `xml2js` - Formatters
 - `yargs` - CLI parsing
+
+> Note: `csv-writer` is **not** a dependency. CSV output is handled by the built-in `toCSV()` in `src/formatters.shared.js`.
 
 ### Development  
 - `jest` - Testing
 - `esbuild` - Browser bundles
 - `csv-parse` - Test helpers
+- `c8` - Coverage
 
 Don't suggest new dependencies without checking if existing ones can be used.
 
