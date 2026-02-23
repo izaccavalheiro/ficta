@@ -735,5 +735,58 @@ describe('Browser Module', () => {
       
       jest.useRealTimers();
     });
+
+    test('should render yaml and toml format options dynamically', () => {
+      let capturedHTML = '';
+      const mockContainer = {
+        get innerHTML() { return capturedHTML; },
+        set innerHTML(html) { capturedHTML = html; },
+        querySelector: jest.fn((selector) => {
+          if (selector === '#file-format') return { value: 'csv', addEventListener: jest.fn() };
+          if (selector === '#file-template') return { value: '', addEventListener: jest.fn() };
+          if (selector === '#file-columns') return { value: '' };
+          if (selector === '#file-rows') return { value: '100' };
+          if (selector === '#file-generate') return { addEventListener: jest.fn() };
+          if (selector === '#file-filename') return { value: 'data.csv' };
+          if (selector === '#file-status') return { style: {}, textContent: '' };
+          return null;
+        })
+      };
+
+      createUI(mockContainer);
+
+      expect(capturedHTML).toContain('value="yaml"');
+      expect(capturedHTML).toContain('value="toml"');
+    });
+
+    test('template select contains exactly Object.keys(templates).length + 1 options', () => {
+      let capturedHTML = '';
+      const mockContainer = {
+        get innerHTML() { return capturedHTML; },
+        set innerHTML(html) { capturedHTML = html; },
+        querySelector: jest.fn((selector) => {
+          if (selector === '#file-format') return { value: 'csv', addEventListener: jest.fn() };
+          if (selector === '#file-template') return { value: '', addEventListener: jest.fn() };
+          if (selector === '#file-columns') return { value: '' };
+          if (selector === '#file-rows') return { value: '100' };
+          if (selector === '#file-generate') return { addEventListener: jest.fn() };
+          if (selector === '#file-filename') return { value: 'data.csv' };
+          if (selector === '#file-status') return { style: {}, textContent: '' };
+          return null;
+        })
+      };
+
+      createUI(mockContainer);
+
+      // Count <option value="..."> occurrences within the #file-template select block
+      // We check via counting template name options + the blank option
+      const expectedCount = Object.keys(templates).length + 1; // +1 for "-- Custom Columns --"
+      const templateOptionsCount = (capturedHTML.match(/value="[a-z]+"/g) || [])
+        .filter(m => Object.keys(templates).some(t => m === `value="${t}"`)).length;
+      expect(templateOptionsCount).toBe(Object.keys(templates).length);
+      // Blank option is also present
+      expect(capturedHTML).toContain('-- Custom Columns --');
+      expect(templateOptionsCount + 1).toBe(expectedCount);
+    });
   });
 });

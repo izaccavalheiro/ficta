@@ -94,6 +94,17 @@ function setupCLI() {
       describe: 'Faker.js locale for localized data (e.g. fr, de, ja, pt_BR)',
       type: 'string'
     })
+    .option('header', {
+      describe: 'Include header row in CSV/TSV output (use --no-header to omit)',
+      type: 'boolean',
+      default: true
+    })
+    .option('header-format', {
+      describe: 'Header casing: "title" (default) or "raw" (exact column key names)',
+      type: 'string',
+      choices: ['title', 'raw'],
+      default: 'title'
+    })
     .command(
       'schema <file>',
       'Generate test data from a SQL DDL schema file',
@@ -206,6 +217,12 @@ async function main(argv) {
   }
   if (argv.sqlBatch) {
     options.formatOptions.batch = argv.sqlBatch;
+  }
+  if (argv.header === false) {
+    options.formatOptions.header = false;
+  }
+  if (argv.headerFormat) {
+    options.formatOptions.headerFormat = argv.headerFormat;
   }
   if (argv.seed !== undefined) {
     options.seed = argv.seed;

@@ -208,7 +208,10 @@ export function toTOML(records) {
 export async function formatData(records, columns, format, options = {}) {
   switch (format.toLowerCase()) {
     case 'csv':
-      return toCSV(records, columns);
+      return toCSV(records, columns, {
+        header: options.header !== false,
+        headerFormat: options.headerFormat || 'title'
+      });
     
     case 'json':
       return toJSON(records, options.pretty !== false);
@@ -226,7 +229,10 @@ export async function formatData(records, columns, format, options = {}) {
       return await toExcel(records, columns, options.sheetName || 'Sheet1');
     
     case 'tsv':
-      return toTSV(records, columns);
+      return toTSV(records, columns, {
+        header: options.header !== false,
+        headerFormat: options.headerFormat || 'title'
+      });
     
     case 'sql':
       // Pass through all SQL-specific options

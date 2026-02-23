@@ -1,5 +1,8 @@
 // Build script for browser bundle
 import * as esbuild from 'esbuild';
+import { readFileSync } from 'fs';
+
+const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf-8'));
 
 async function build() {
   try {
@@ -15,7 +18,7 @@ async function build() {
       sourcemap: true,
       minify: false,
       banner: {
-        js: '// Ficta - Browser Bundle\n// https://github.com/your-repo/ficta\n'
+        js: `// Ficta v${pkg.version} - Browser Bundle\n// ${pkg.homepage}\n`
       }
     });
 
@@ -29,7 +32,10 @@ async function build() {
       platform: 'browser',
       target: ['es2020'],
       sourcemap: true,
-      minify: true
+      minify: true,
+      banner: {
+        js: `// Ficta v${pkg.version} - Browser Bundle\n// ${pkg.homepage}\n`
+      }
     });
 
     // Build ES module version for modern browsers

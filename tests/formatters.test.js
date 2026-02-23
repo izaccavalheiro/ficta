@@ -71,6 +71,25 @@ describe('Formatters Module', () => {
       expect(lines[0]).toBe('Id,Name');
       expect(lines[1]).toBe('1,John');
     });
+
+    test('omits header row when header option is false', () => {
+      const csv = formatters.toCSV(sampleRecords, sampleColumns, { header: false });
+      const lines = csv.split('\n');
+      expect(lines[0]).toBe('1,John Doe,john@example.com');
+      expect(lines.length).toBe(3); // data rows only
+    });
+
+    test('emits raw key names when headerFormat is raw', () => {
+      const csv = formatters.toCSV(sampleRecords, sampleColumns, { headerFormat: 'raw' });
+      const lines = csv.split('\n');
+      expect(lines[0]).toBe('id,name,email');
+    });
+
+    test('defaults to title case header when no options provided (backward compat)', () => {
+      const csv = formatters.toCSV(sampleRecords, sampleColumns);
+      const lines = csv.split('\n');
+      expect(lines[0]).toBe('Id,Name,Email');
+    });
   });
 
   describe('toJSON', () => {
@@ -172,6 +191,25 @@ describe('Formatters Module', () => {
     test('returns empty string for empty records', () => {
       const tsv = formatters.toTSV([], sampleColumns);
       expect(tsv).toBe('');
+    });
+
+    test('omits header row when header option is false', () => {
+      const tsv = formatters.toTSV(sampleRecords, sampleColumns, { header: false });
+      const lines = tsv.split('\n');
+      expect(lines[0]).toBe('1\tJohn Doe\tjohn@example.com');
+      expect(lines.length).toBe(3);
+    });
+
+    test('emits raw key names when headerFormat is raw', () => {
+      const tsv = formatters.toTSV(sampleRecords, sampleColumns, { headerFormat: 'raw' });
+      const lines = tsv.split('\n');
+      expect(lines[0]).toBe('id\tname\temail');
+    });
+
+    test('defaults to title case header when no options provided (backward compat)', () => {
+      const tsv = formatters.toTSV(sampleRecords, sampleColumns);
+      const lines = tsv.split('\n');
+      expect(lines[0]).toBe('Id\tName\tEmail');
     });
   });
 

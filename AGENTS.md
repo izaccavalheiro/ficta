@@ -281,11 +281,11 @@ Predefined column sets for common use cases:
 
 ```javascript
 templates = {
-  users: "id:autoIncrement,firstName,lastName,email,phone,street,city,state,zipCode",
-  products: "id:autoIncrement,product,price,department,productDescription",
-  transactions: "id:autoIncrement,accountNumber,amount,timestamp,currency",
-  addresses: "id:autoIncrement,street,city,state,country,zipCode,latitude,longitude",
-  contacts: "id:autoIncrement,fullName,email,phone,company,jobTitle"
+  users: { columns: "id:autoIncrement,firstName,lastName,email,phone,street,city,state,zipCode", rows: 100 },
+  products: { columns: "id:autoIncrement,product,price,department,productDescription", rows: 100 },
+  transactions: { columns: "id:autoIncrement,accountNumber,amount,timestamp,currency", rows: 100 },
+  addresses: { columns: "id:autoIncrement,street,city,state,country,zipCode,latitude,longitude", rows: 100 },
+  contacts: { columns: "id:autoIncrement,fullName,email,phone,company,jobTitle", rows: 100 }
 }
 ```
 
@@ -356,9 +356,15 @@ export const templates = {
   // ... existing templates
   
   // Add new template
-  employees: "id:autoIncrement,firstName,lastName,email,jobTitle,department,phone,street,city,state",
+  employees: {
+    columns: "id:autoIncrement,firstName,lastName,email,jobTitle,department,phone,street,city,state",
+    rows: 100
+  },
   
-  orders: "orderId:autoIncrement,productId:number,customerId:number,quantity:range:1-100,amount:price,timestamp,status:enum:pending|shipped|delivered",
+  orders: {
+    columns: "orderId:autoIncrement,productId:number,customerId:number,quantity:range:1-100,amount:price,timestamp,status:enum:pending|shipped|delivered",
+    rows: 50
+  },
 };
 ```
 

@@ -350,4 +350,13 @@ describe('Node.js Module', () => {
       }
     });
   });
+
+  describe('TypeScript declarations (index.d.ts)', () => {
+    test('index.d.ts contains expected public API declarations', () => {
+      const dts = fs.readFileSync('index.d.ts', 'utf-8');
+      expect(dts).toContain('export function generateAndSave');
+      expect(dts).toContain('export function generateFromDDL');
+      expect(dts).toContain('export interface GenerateAndSaveOptions');
+    });
+  });
 });

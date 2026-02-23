@@ -20,20 +20,23 @@ export function formatColumnName(name) {
  * Convert array of objects to CSV string
  * @param {Array} records - Array of row objects
  * @param {Array} columns - Column definitions
+ * @param {Object} [options={}] - Formatting options
+ * @param {boolean} [options.header=true] - Whether to include a header row
+ * @param {'title'|'raw'} [options.headerFormat='title'] - Header casing: 'title' uses formatColumnName, 'raw' uses key names as-is
  * @returns {string} CSV string
  */
-export function toCSV(records, columns) {
+export function toCSV(records, columns, options = {}) {
   if (records.length === 0) {
     return '';
   }
+
+  const includeHeader = options.header !== false;
+  const headerFormat = options.headerFormat || 'title';
 
   // Parse columns if string was passed
   const parsedColumns = typeof columns === 'string'
     ? columns.split(',').map(c => ({ name: c.trim() }))
     : columns;
-
-  const headers = parsedColumns.map(col => formatColumnName(col.name));
-  const headerRow = headers.join(',');
 
   const dataRows = records.map(record => {
     return parsedColumns.map(col => {
@@ -45,6 +48,15 @@ export function toCSV(records, columns) {
       return value;
     }).join(',');
   });
+
+  if (!includeHeader) {
+    return dataRows.join('\n');
+  }
+
+  const headers = parsedColumns.map(col =>
+    headerFormat === 'raw' ? col.name : formatColumnName(col.name)
+  );
+  const headerRow = headers.join(',');
 
   return [headerRow, ...dataRows].join('\n');
 }
@@ -63,15 +75,18 @@ export function toJSON(records, pretty = true) {
  * Convert array of objects to TSV (Tab-Separated Values) string
  * @param {Array} records - Array of row objects
  * @param {Array} columns - Column definitions
+ * @param {Object} [options={}] - Formatting options
+ * @param {boolean} [options.header=true] - Whether to include a header row
+ * @param {'title'|'raw'} [options.headerFormat='title'] - Header casing: 'title' uses formatColumnName, 'raw' uses key names as-is
  * @returns {string} TSV string
  */
-export function toTSV(records, columns) {
+export function toTSV(records, columns, options = {}) {
   if (records.length === 0) {
     return '';
   }
 
-  const headers = columns.map(col => formatColumnName(col.name));
-  const headerRow = headers.join('\t');
+  const includeHeader = options.header !== false;
+  const headerFormat = options.headerFormat || 'title';
 
   const dataRows = records.map(record => {
     return columns.map(col => {
@@ -83,6 +98,15 @@ export function toTSV(records, columns) {
       return value;
     }).join('\t');
   });
+
+  if (!includeHeader) {
+    return dataRows.join('\n');
+  }
+
+  const headers = columns.map(col =>
+    headerFormat === 'raw' ? col.name : formatColumnName(col.name)
+  );
+  const headerRow = headers.join('\t');
 
   return [headerRow, ...dataRows].join('\n');
 }

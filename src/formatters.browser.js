@@ -229,7 +229,10 @@ export function toTOML(records) {
 export function formatData(records, columns, format, options = {}) {
   switch (format.toLowerCase()) {
     case 'csv':
-      return toCSV(records, columns);
+      return toCSV(records, columns, {
+        header: options.header !== false,
+        headerFormat: options.headerFormat || 'title'
+      });
     
     case 'json':
       return toJSON(records, options.pretty !== false);
@@ -242,7 +245,10 @@ export function formatData(records, columns, format, options = {}) {
       );
     
     case 'tsv':
-      return toTSV(records, columns);
+      return toTSV(records, columns, {
+        header: options.header !== false,
+        headerFormat: options.headerFormat || 'title'
+      });
     
     case 'sql':
       // Pass through all SQL-specific options

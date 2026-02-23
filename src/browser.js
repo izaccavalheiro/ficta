@@ -90,6 +90,12 @@ export function generateAndDownload(options) {
 }
 
 /**
+ * Supported output formats in the browser bundle
+ * @type {string[]}
+ */
+const BROWSER_FORMATS = ['csv', 'json', 'xml', 'tsv', 'sql', 'yaml', 'toml'];
+
+/**
  * Create an interactive UI for file generation
  * @param {string|HTMLElement} container - Container element or selector
  * @param {Object} options - UI options
@@ -103,7 +109,20 @@ export function createUI(container, options = {}) {
   if (!element) {
     throw new Error('Container element not found');
   }
-  
+
+  // Build format options dynamically so new formats are picked up automatically
+  const formatOptions = BROWSER_FORMATS
+    .map(f => `<option value="${f}">${f.toUpperCase()}</option>`)
+    .join('\n          ');
+
+  // Build template options dynamically from core.templates
+  const templateOptions = [
+    '<option value="">-- Custom Columns --</option>',
+    ...Object.keys(core.templates).map(
+      name => `<option value="${name}">${name.charAt(0).toUpperCase() + name.slice(1)}</option>`
+    )
+  ].join('\n          ');
+
   // Create UI HTML
   element.innerHTML = `
     <div class="ficta-ui" style="font-family: system-ui, -apple-system, sans-serif; max-width: 600px; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
@@ -112,23 +131,14 @@ export function createUI(container, options = {}) {
       <div style="margin-bottom: 15px;">
         <label style="display: block; margin-bottom: 5px; font-weight: 500;">Format:</label>
         <select id="file-format" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
-          <option value="csv">CSV</option>
-          <option value="json">JSON</option>
-          <option value="xml">XML</option>
-          <option value="tsv">TSV</option>
-          <option value="sql">SQL</option>
+          ${formatOptions}
         </select>
       </div>
       
       <div style="margin-bottom: 15px;">
         <label style="display: block; margin-bottom: 5px; font-weight: 500;">Template:</label>
         <select id="file-template" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
-          <option value="">-- Custom Columns --</option>
-          <option value="users">Users</option>
-          <option value="products">Products</option>
-          <option value="transactions">Transactions</option>
-          <option value="addresses">Addresses</option>
-          <option value="contacts">Contacts</option>
+          ${templateOptions}
         </select>
       </div>
       

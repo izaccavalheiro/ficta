@@ -716,4 +716,55 @@ describe('CLI Module', () => {
       }
     });
   });
+
+  describe('--no-header and --header-format options', () => {
+    test('setupCLI recognizes --no-header as a valid option', () => {
+      const originalArgv = process.argv;
+      process.argv = ['node', 'cli.js', '--no-header', '-c', 'id:autoIncrement,name:fullName'];
+      try {
+        const args = setupCLI();
+        // Yargs negation: --no-header sets header=false (not noHeader=true)
+        expect(args.header).toBe(false);
+      } finally {
+        process.argv = originalArgv;
+      }
+    });
+
+    test('setupCLI recognizes --header-format as a valid option', () => {
+      const originalArgv = process.argv;
+      process.argv = ['node', 'cli.js', '--header-format', 'raw', '-c', 'firstName:fullName'];
+      try {
+        const args = setupCLI();
+        expect(args.headerFormat).toBe('raw');
+      } finally {
+        process.argv = originalArgv;
+      }
+    });
+
+    test('main() with noHeader=true generates CSV without a header line', async () => {
+      await main({
+        output: testFile,
+        columns: 'id:autoIncrement,firstName:fullName',
+        rows: 2,
+        header: false
+      });
+      const content = fs.readFileSync(testFile, 'utf-8');
+      const lines = content.trim().split('\n');
+      // First line should be a data value (number), not a header like 'Id,First Name'
+      expect(lines[0]).toMatch(/^\d/);
+      expect(lines.length).toBe(2);
+    });
+
+    test('main() with headerFormat=raw generates CSV with raw column names', async () => {
+      await main({
+        output: testFile,
+        columns: 'firstName:fullName,emailAddress:email',
+        rows: 1,
+        headerFormat: 'raw'
+      });
+      const content = fs.readFileSync(testFile, 'utf-8');
+      const lines = content.trim().split('\n');
+      expect(lines[0]).toBe('firstName,emailAddress');
+    });
+  });
 });
