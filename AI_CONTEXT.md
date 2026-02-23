@@ -35,17 +35,22 @@ ficta -t users -r 1000 -o users.xlsx
 ```
 src/
   core.js              ← 🎯 Core logic: parseColumns, generateData, Plugin API
-  formatters.js        ← Format converters (CSV, JSON, XML, Excel, YAML, TOML, SQL)
+  formatters.js        ← Format converters (CSV, JSON, XML, Excel, YAML, TOML, SQL, Parquet)
   formatters.shared.js ← Shared pure utilities (CSV, TSV, JSON, detectFormat)
   formatters.browser.js ← Browser-safe format converters
-  node.js              ← Node.js API: generateAndSave, generateFromDDL, generateStream
+  node.js              ← Node.js API: generateAndSave, generateFromDDL, generateStream,
+                          inferSchemaFromFile, fromOpenAPIFile, fromGraphQLFile,
+                          generateFromSchemaFile, watchAndGenerate
   browser.js           ← Browser API: generateAndDownload, createUI
   sql-schema.js        ← SQL DDL/DML generator (universal)
   ddl-parser.js        ← SQL DDL → TableDef parser (universal, pure)
   schema-generator.js  ← Multi-table FK-aware orchestrator (universal)
   schema-builder.js    ← Fluent table/schema builder API (universal)
-cli.js                 ← CLI interface with yargs
-tests/*.test.js        ← 737 tests, 100% overall coverage
+  infer.js             ← Schema inference from data samples (universal)
+  openapi-bridge.js    ← OpenAPI/JSON Schema → Ficta columns (universal)
+  graphql-bridge.js    ← GraphQL SDL → Ficta columns (universal)
+cli.js                 ← CLI interface with yargs (subcommands: schema, infer, from-openapi, from-graphql)
+tests/*.test.js        ← 921 tests across 13 suites, 100% overall coverage
 ```
 
 ## 🔑 Core Concepts
@@ -166,6 +171,40 @@ const stream = generateStream({ columns: 'id,name,email', rows: 100000, format: 
 stream.pipe(fs.createWriteStream('large.ndjson'));
 ```
 
+### Task: Infer Column Types from Existing Data
+```javascript
+import { inferSchemaFromFile } from 'ficta';
+const { columns } = await inferSchemaFromFile('./users.csv');
+// Use inferred columns for generation
+```
+**CLI:** `ficta infer ./users.csv`
+
+### Task: Convert OpenAPI Spec to ficta.schema.json
+```javascript
+import { fromOpenAPIFile } from 'ficta';
+const schema = await fromOpenAPIFile('./openapi.yaml', { rows: 50, dialect: 'postgres' });
+```
+**CLI:** `ficta from-openapi ./openapi.yaml -o ficta.schema.json`
+
+### Task: Convert GraphQL SDL to ficta.schema.json
+```javascript
+import { fromGraphQLFile } from 'ficta';
+const schema = await fromGraphQLFile('./schema.graphql', { typeName: 'User' });
+```
+**CLI:** `ficta from-graphql ./schema.graphql -o ficta.schema.json`
+
+### Task: Watch DDL and Auto-Regenerate
+```javascript
+import { watchAndGenerate } from 'ficta';
+const watcher = watchAndGenerate({
+  schemaFile: './schema.sql',
+  rows: 10, outputMode: 'ddl+insert', dialect: 'postgres', output: './seed.sql',
+  onSuccess: (path, ms) => console.log(`Regenerated in ${ms}ms`)
+});
+// watcher.stop() to cancel
+```
+**CLI:** `ficta schema ./schema.sql -o seed.sql --watch`
+
 ### Task: Fix Formatter
 **Location:** `src/formatters.js` → Specific `toXXX()` function
 
@@ -188,6 +227,8 @@ xml2js            // XML parsing/building
 js-yaml           // YAML formatting
 @iarna/toml       // TOML formatting
 yargs             // CLI arguments
+graphql           // GraphQL SDL parsing (for from-graphql)
+parquetjs-lite    // Parquet file generation (Node.js)
 esbuild           // Browser bundles (dev)
 jest              // Testing (dev)
 csv-parse         // CSV parsing in tests (dev)
@@ -210,6 +251,10 @@ c8                // Coverage collection (dev)
 | DDL file import | `src/node.js` → `generateFromDDL()` |
 | JSON schema file import | `src/node.js` → `generateFromSchemaFile()` |
 | Streaming API | `src/node.js` → `generateStream()` |
+| Schema inference | `src/infer.js` → `inferSchema()` / `src/node.js` → `inferSchemaFromFile()` |
+| OpenAPI conversion | `src/openapi-bridge.js` / `src/node.js` → `fromOpenAPIFile()` |
+| GraphQL conversion | `src/graphql-bridge.js` / `src/node.js` → `fromGraphQLFile()` |
+| Watch & regenerate | `src/node.js` → `watchAndGenerate()` |
 | Fluent builder | `src/schema-builder.js` → `table()`, `schema()` |
 | Browser API | `src/browser.js` → `generateAndDownload()`, `createUI()` |
 | SQL DDL/DML generation | `src/sql-schema.js` → `generateDDL()`, `generateInserts()` |
@@ -304,15 +349,16 @@ if (typeof window !== 'undefined') {
 
 ## 📊 Project Stats
 
-- **Lines of Code**: ~4,500+
+- **Lines of Code**: ~6,000+
 - **Test Coverage**: 100% (statements, branches, functions, lines)
-- **Number of Tests**: 737
-- **Supported Formats**: 9
+- **Number of Tests**: 921
+- **Test Suites**: 13
+- **Supported Formats**: 10 (CSV, JSON, XML, XLSX, TSV, SQL, YAML, YML, TOML, Parquet)
 - **Data Types**: 40+
 - **Templates**: 5
 - **SQL Dialects**: 4 (PostgreSQL, MySQL, SQLite, Generic)
 - **SQL Output Modes**: 5 (insert, upsert, ddl, ddl+insert, truncate+insert)
-- **Production Dependencies**: 6
+- **Production Dependencies**: 8
 - **Complexity**: Low-Medium
 
 ## 🔥 Hot Spots (Change Frequently)

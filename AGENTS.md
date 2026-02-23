@@ -48,7 +48,7 @@ Universal test data generator that works in Node.js, browsers, and CLI. Generate
   - `@iarna/toml` - TOML formatting
   - `yargs` - CLI argument parsing
 - **Build**: esbuild (browser bundles)
-- **Testing**: Jest — 737 tests, 100% overall coverage
+- **Testing**: Jest — 921 tests across 13 suites, 100% overall coverage
 
 ---
 
@@ -68,15 +68,28 @@ ficta/
 │   ├── sql-schema.js        # SQL DDL/DML generator with dialect support (universal)
 │   ├── ddl-parser.js        # SQL DDL → TableDef parser (universal, pure)
 │   ├── schema-generator.js  # Multi-table FK-aware data orchestrator (universal)
-│   └── schema-builder.js    # Fluent table/schema builder API (universal)
+│   ├── schema-builder.js    # Fluent table/schema builder API (universal)
+│   ├── infer.js             # Schema inference from sample rows (universal)
+│   ├── openapi-bridge.js    # OpenAPI/JSON Schema → Ficta columns (universal)
+│   └── graphql-bridge.js    # GraphQL SDL → Ficta columns (universal)
 ├── cli.js                   # CLI entry point
-├── tests/                   # Test files (737 tests, 100% coverage)
-│   ├── sql-schema.test.js   # SQL schema generator tests
-│   ├── ddl-parser.test.js   # DDL parser tests
-│   ├── schema-generator.test.js # Orchestrator tests
-│   └── schema-builder.test.js   # Fluent builder tests
+├── tests/                   # Test files (921 tests across 13 suites, 100% coverage)
+│   ├── core.test.js               # Core generation logic tests
+│   ├── formatters.test.js         # Node.js formatter tests
+│   ├── formatters.browser.test.js # Browser formatter tests
+│   ├── node.test.js               # Node.js API tests
+│   ├── browser.test.js            # Browser API tests
+│   ├── cli.test.js                # CLI interface tests
+│   ├── sql-schema.test.js         # SQL schema generator tests
+│   ├── ddl-parser.test.js         # DDL parser tests
+│   ├── schema-generator.test.js   # Orchestrator tests
+│   ├── schema-builder.test.js     # Fluent builder tests
+│   ├── infer.test.js              # Schema inference tests
+│   ├── openapi-bridge.test.js     # OpenAPI bridge tests
+│   └── graphql-bridge.test.js     # GraphQL bridge tests
 ├── examples/                # Usage examples
 │   ├── sql-schema.html      # Interactive browser SQL demo
+│   ├── schema-builder.html  # Visual schema builder UI (browser)
 │   └── node/
 │       ├── sql-simple.js          # Basic SQL examples
 │       └── sql-schema-examples.js # Advanced multi-table examples
@@ -161,6 +174,13 @@ handlePattern(options, counter) → string
 - `generateData(options)` - Generate data in specified format
 - `generateAndSave(options)` - Generate and save to file
 - `generateFromDDL(options)` - Read a `.sql` file, generate test data, optionally save
+- `generateFromSchemaFile(options)` - Read a `ficta.schema.json` file, generate SQL
+- `generateStream(options)` - Return a Node.js `Readable` stream (CSV or NDJSON)
+- `inferSchemaFromFile(filePath)` - Infer column types from a `.csv` or `.json` file
+- `fromOpenAPIFile(filePath, options?)` - Convert OpenAPI YAML/JSON to ficta.schema.json object
+- `fromGraphQLFile(filePath, options?)` - Convert GraphQL SDL to ficta.schema.json object
+- `watchAndGenerate(options)` - Watch a DDL file, regenerate on change
+- `writeFile(content, filepath)` - Write file content to disk
 - `listTypes()` - Export from core
 - `listTemplates()` - Export from core
 - `templates` - Export from core
@@ -172,17 +192,18 @@ handlePattern(options, counter) → string
   rows: number,         // Rows per table (default: 10)
   outputMode: string,   // 'insert' | 'upsert' | 'truncate+insert' | 'ddl+insert'
   dialect: string,      // 'postgres' | 'mysql' | 'sqlite' | 'generic'
-  output: string        // Optional: write generated SQL to this file path
+  output: string,       // Optional: write generated SQL to this file path
+  locale: string        // Optional: Faker.js locale (e.g. 'fr', 'de', 'pt_BR')
 }
 ```
 
 **`generateFromSchemaFile` options (Node.js only):**
 ```javascript
 {
-  schemaFile: string,   // Required: path to ficta.schema.json file
-  rows: number,         // Override row count for all tables
-  outputMode: string,   // 'insert' | 'upsert' | 'truncate+insert' | 'ddl+insert'
-  output: string        // Optional: write generated SQL to this file path
+  schemaFile: string,             // Required: path to ficta.schema.json file
+  rows: number | Record<string,number>, // Override row count — uniform or per-table
+  outputMode: string,             // 'insert' | 'upsert' | 'truncate+insert' | 'ddl+insert'
+  output: string                  // Optional: write generated SQL to this file path
 }
 ```
 
@@ -204,7 +225,7 @@ handlePattern(options, counter) → string
 {
   columns: string | Array,  // Column definitions
   rows: number,             // Number of rows (default: 100)
-  format: string,          // csv|json|xml|xlsx|tsv|sql|yaml|yml|toml
+  format: string,          // csv|json|xml|xlsx|tsv|sql|yaml|yml|toml|parquet
   output: string,          // Output filename
   template: string,        // Template name
   preview: boolean,        // Return data without saving
@@ -293,6 +314,43 @@ Orchestrates multi-table generation from DDL. Pure module; Faker must be initial
   - `options.tableName`, `options.records`, `options.columns`, `options.dialect`, `options.outputMode`, `options.conflictColumns`
 
 **FK-aware data generation:** When generating child-table rows the orchestrator samples parent PK values stored in `pkStore`, so referential integrity is maintained across generated data.
+
+### Schema Inference (`src/infer.js`)
+
+Pure module. Infers Ficta column types from an array of sample data rows. Zero Node.js dependencies; works in browser and Node.js.
+
+**Exports:**
+- `inferSchema(rows)` - Infer column types from an array of row objects
+  - Returns `{ columns: string, columnList: Array<{name, type}> }`
+  - Cascade: name hints → UUID regex → ISO date → email/URL → small closed set (enum) → numeric → fallback to `word`
+
+Node.js helper (reads from disk): `inferSchemaFromFile(filePath)` in `src/node.js`.
+
+### OpenAPI Bridge (`src/openapi-bridge.js`)
+
+Pure module. Converts a parsed OpenAPI 3.x or JSON Schema document into a `ficta.schema.json`-compatible object. Zero Node.js dependencies.
+
+**Exports:**
+- `openAPIToFictaSchema(doc, options?)` - Convert `doc` (parsed object) to Ficta schema
+  - `options.schemaName` — target a specific `#/components/schemas/<name>` entry
+  - `options.rows` — rows per table (default 100)
+  - `options.dialect` — SQL dialect (default `'postgres'`)
+- `fromOpenAPISchema(doc, options?)` - Alias for `openAPIToFictaSchema`
+
+Node.js file helper: `fromOpenAPIFile(filePath, options?)` in `src/node.js`.
+
+### GraphQL Bridge (`src/graphql-bridge.js`)
+
+Pure module. Parses a GraphQL SDL string (using the `graphql` package) and maps object types to Ficta column definitions.
+
+**Exports:**
+- `graphQLToFictaSchema(sdl, options?)` - Convert SDL string to Ficta schema
+  - `options.typeName` — target a specific GraphQL object type (defaults to first)
+  - `options.rows` — rows per table (default 100)
+  - `options.dialect` — SQL dialect (default `'postgres'`)
+- `fromGraphQLSDL(sdl, options?)` - Alias for `graphQLToFictaSchema`
+
+Node.js file helper: `fromGraphQLFile(filePath, options?)` in `src/node.js`.
 
 ---
 
@@ -805,6 +863,15 @@ Ficta.createUI('#app');
 
 Fluent code-first alternative to raw DDL strings.
 
+`SchemaBuilder.toSQL()` delegates to `generateFromSchema()` from
+`src/schema-generator.js` for FK-aware topological generation. FK column
+values in child tables reference actual PK values generated for parent
+tables, producing referentially-consistent test data — the same behaviour
+as `generateFromDDL()`.
+
+`TableBuilder.toSQL()` (single-table) uses the direct `generateData()` +
+`generateSchema()` path and is unaffected by this delegation.
+
 ```javascript
 import { table, schema } from './src/schema-builder.js';
 
@@ -1011,6 +1078,9 @@ if (value.includes(',') || value.includes('"')) {
 - DDL parser: `src/ddl-parser.js`
 - Multi-table orchestrator: `src/schema-generator.js`
 - Fluent schema builder: `src/schema-builder.js`
+- Schema inference: `src/infer.js`
+- OpenAPI bridge: `src/openapi-bridge.js`
+- GraphQL bridge: `src/graphql-bridge.js`
 - CLI: `cli.js`
 - Tests: `tests/*.test.js`
 
@@ -1064,5 +1134,4 @@ node cli.js --help         # CLI help
 ---
 
 **Last Updated:** 2026-02-23
-**Agent Version:** 2.1.0
-**Project Version:** 1.1.7
+**Project Version:** 1.1.8

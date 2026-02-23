@@ -5,12 +5,20 @@
   "type": "module",
   "main": "basic-usage.js",
   "scripts": {
-    "start":      "node basic-usage.js",
-    "advanced":   "node advanced-usage.js",
-    "ddl":        "node ddl-usage.js",
-    "sql":        "node sql-simple.js",
-    "sql-schema": "node sql-schema-examples.js",
-    "quick":      "node quick-test.js"
+    "start":          "node basic-usage.js",
+    "advanced":       "node advanced-usage.js",
+    "stream":         "node stream-usage.js",
+    "plugin":         "node plugin-api.js",
+    "schema-builder": "node schema-builder-usage.js",
+    "schema-file":    "node schema-file-usage.js",
+    "infer":          "node infer-usage.js",
+    "openapi":        "node openapi-usage.js",
+    "graphql":        "node graphql-usage.js",
+    "watch":          "node watch-usage.js",
+    "ddl":            "node ddl-usage.js",
+    "sql":            "node sql-simple.js",
+    "sql-schema":     "node sql-schema-examples.js",
+    "quick":          "node quick-test.js"
   },
   "keywords": [
     "ficta",
@@ -21,6 +29,6 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "ficta": "^1.1.7"
+    "ficta": "^1.1.8"
   }
 }

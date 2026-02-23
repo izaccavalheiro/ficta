@@ -180,10 +180,14 @@ ficta/
 │   ├── sql-schema.js        # SQL DDL/DML generator (universal)
 │   ├── ddl-parser.js        # SQL DDL → TableDef parser (universal, pure)
 │   ├── schema-generator.js  # Multi-table FK-aware orchestrator (universal)
-│   └── schema-builder.js    # Fluent table/schema builder API (universal)
+│   ├── schema-builder.js    # Fluent table/schema builder API (universal)
+│   ├── infer.js             # Schema inference from sample rows (universal)
+│   ├── openapi-bridge.js    # OpenAPI/JSON Schema → Ficta columns (universal)
+│   └── graphql-bridge.js    # GraphQL SDL → Ficta columns (universal)
 ├── cli.js                   # CLI interface
 ├── build.js                 # Build script for bundles
-├── tests/                   # Test suite (737 tests, 100% coverage)
+├── ficta-schema.v1.json     # JSON Schema for ficta.schema.json files
+├── tests/                   # Test suite (921 tests across 13 suites, 100% coverage)
 │   ├── core.test.js
 │   ├── formatters.test.js
 │   ├── formatters.browser.test.js
@@ -193,7 +197,10 @@ ficta/
 │   ├── sql-schema.test.js
 │   ├── ddl-parser.test.js
 │   ├── schema-generator.test.js
-│   └── schema-builder.test.js
+│   ├── schema-builder.test.js
+│   ├── infer.test.js
+│   ├── openapi-bridge.test.js
+│   └── graphql-bridge.test.js
 └── dist/                    # Built browser bundles
     ├── ficta.browser.js     # IIFE bundle (self-contained)
     ├── ficta.browser.min.js # Minified IIFE bundle (self-contained)
@@ -332,9 +339,13 @@ ficta/
 - `generateFromDDL(options)` - Reads a DDL `.sql` file and writes a seed SQL file
 - `generateFromSchemaFile(options)` - Reads a `ficta.schema.json` file and generates SQL
 - `generateStream(options)` - Returns a Node.js `Readable` stream (CSV or NDJSON)
+- `inferSchemaFromFile(filePath)` - Infer column types from a `.csv` or `.json` file
+- `fromOpenAPIFile(filePath, options?)` - Convert OpenAPI YAML/JSON spec to ficta.schema.json object
+- `fromGraphQLFile(filePath, options?)` - Convert GraphQL SDL file to ficta.schema.json object
+- `watchAndGenerate(options)` - Watch a DDL file and regenerate output on changes
 - Re-exports from core (`templates`, `listTypes`, `listTemplates`, etc.)
 
-**Dependencies:** core.js, formatters.js, schema-generator.js, ddl-parser.js, fs (Node.js built-in)
+**Dependencies:** core.js, formatters.js, schema-generator.js, ddl-parser.js, infer.js, openapi-bridge.js, graphql-bridge.js, fs (Node.js built-in)
 
 #### `sql-schema.js` - SQL DDL/DML Generator
 **Responsibilities:**
@@ -394,8 +405,40 @@ ficta/
 
 **Dependencies:** core.js, schema-generator.js
 
-#### `browser.js` - Browser Adapter
+#### `infer.js` - Schema Inference
 **Responsibilities:**
+- Infer Ficta column types from an array of sample data rows
+- Apply name-hint lookup cascade, regex detection (UUID, ISO date, email, URL), enum detection, numeric type detection
+- Zero Node.js built-ins; works in browser and Node.js
+
+**Exports:**
+- `inferSchema(rows)` - Returns `{ columns: string, columnList: Array<{name, type}> }`
+
+**Dependencies:** None (pure JS, universal)
+
+#### `openapi-bridge.js` - OpenAPI Bridge
+**Responsibilities:**
+- Convert parsed OpenAPI 3.x or JSON Schema objects to ficta.schema.json-compatible format
+- Resolve `$ref` references one level deep within component schemas
+- Map JSON Schema types/formats to Ficta types
+
+**Exports:**
+- `openAPIToFictaSchema(doc, options?)` - Primary conversion function
+- `fromOpenAPISchema(doc, options?)` - Alias
+
+**Dependencies:** None (pure JS, universal)
+
+#### `graphql-bridge.js` - GraphQL Bridge
+**Responsibilities:**
+- Parse GraphQL SDL strings using the `graphql` package
+- Map GraphQL object types and scalars to Ficta column definitions
+- Handle enum types from SDL
+
+**Exports:**
+- `graphQLToFictaSchema(sdl, options?)` - Primary conversion function
+- `fromGraphQLSDL(sdl, options?)` - Alias
+
+**Dependencies:** `graphql` npm package (universal)
 - Browser API entry point (self-contained: Faker bundled in)
 - File downloads via Blob API
 - Global `window.Ficta` exposure
@@ -414,7 +457,8 @@ ficta/
 #### `cli.js` - Command Line Interface
 **Responsibilities:**
 - Argument parsing with yargs
-- User-friendly CLI interface
+- User-friendly CLI interface with subcommands: `schema`, `infer`, `from-openapi`, `from-graphql`
+- Watch mode (`schema --watch`) via `watchAndGenerate()`
 - Preview mode support
 - Help documentation
 
@@ -667,11 +711,13 @@ Use conditional exports and environment detection:
   "exports": {
     ".": {
       "node": "./src/node.js",
-      "browser": "./dist/csv-generator.esm.js",
+      "browser": "./dist/ficta.esm.js",
       "default": "./src/node.js"
     },
     "./browser": "./src/browser.js",
-    "./node": "./src/node.js"
+    "./core": "./src/core.js",
+    "./node": "./src/node.js",
+    "./schema-builder": "./src/schema-builder.js"
   }
 }
 ```
@@ -722,25 +768,37 @@ Browser bundles created with esbuild:
 
 ```javascript
 // build.js
-import esbuild from 'esbuild';
+import * as esbuild from 'esbuild';
 
-// UMD bundle for <script> tags
+// IIFE (self-contained + Faker bundled)
 await esbuild.build({
   entryPoints: ['src/browser.js'],
   bundle: true,
   format: 'iife',
   globalName: 'Ficta',
+  platform: 'browser',
+  target: ['es2020'],
   outfile: 'dist/ficta.browser.js',
-  external: ['@faker-js/faker']
 });
 
-// ES Module for modern imports
+// Minified IIFE
+await esbuild.build({
+  entryPoints: ['src/browser.js'],
+  bundle: true,
+  format: 'iife',
+  globalName: 'Ficta',
+  platform: 'browser',
+  minify: true,
+  outfile: 'dist/ficta.browser.min.js',
+});
+
+// ES Module for modern browsers
 await esbuild.build({
   entryPoints: ['src/browser.js'],
   bundle: true,
   format: 'esm',
-  outfile: 'dist/csv-generator.esm.js',
-  external: ['@faker-js/faker']
+  platform: 'browser',
+  outfile: 'dist/ficta.esm.js',
 });
 ```
 
@@ -1029,48 +1087,45 @@ function sanitizeFilename(filename) {
 
 ## Future Roadmap
 
-### Implemented (as of 2026-02-22)
+### Implemented (as of 2026-02-23)
 
 1. ✅ **SQL Schema Generation** — DDL, foreign keys, 4 dialects, multi-mode output
 2. ✅ **DDL Import (Schema Import)** — Parse existing `.sql` schemas, generate FK-aware test data
 3. ✅ **Multi-table orchestration** — Topological sort, parent-to-child FK resolution, pkStore
+4. ✅ **Streaming API** — CSV and NDJSON streams for large datasets (`generateStream`)
+5. ✅ **Plugin System** — `registerType()`, `registerTemplate()`, `unregisterType()`, `unregisterTemplate()`
+6. ✅ **Schema Inference** — Auto-detect column types from CSV/JSON files (`inferSchemaFromFile`)
+7. ✅ **OpenAPI Bridge** — Convert OpenAPI 3.x / JSON Schema to `ficta.schema.json`
+8. ✅ **GraphQL Bridge** — Convert GraphQL SDL to `ficta.schema.json`
+9. ✅ **Watch Mode** — Auto-regenerate on DDL file changes (`watchAndGenerate`)
+10. ✅ **Parquet Output** — Apache Parquet columnar storage format (Node.js)
 
-### Planned Features
+### Potential Future Enhancements
 
-1. **Streaming API**
-   - Generate files without loading all data in memory
-   - Support for millions of rows
-
-2. **Plugin System**
-   - User-defined types
-   - User-defined formatters
-   - Middleware hooks
-
-3. **Advanced Types**
-   - Conditional values
-   - Computed columns
+1. **Advanced Types**
+   - Conditional values based on other column values
+   - Computed columns with expressions
    - Cross-field dependencies
 
-4. **Schema Import Extensions**
-   - Import from JSON Schema
-   - OpenAPI integration
-   - PostgreSQL ENUM type creation
-   - Indexes and composite keys
+2. **Schema Import Extensions**
+   - PostgreSQL ENUM type DDL creation
+   - Composite primary keys
    - CHECK constraints
+   - Index definitions
 
-5. **Performance Optimizations**
+3. **Performance Optimizations**
    - Worker threads for parallel generation
-   - WebAssembly for formatters
-   - Streaming Excel generation
+   - Streaming Excel generation for very large files
+   - WebAssembly formatters
 
-### Architecture Evolution
+4. **Additional Formats**
+   - Avro
+   - MessagePack
+   - Protocol Buffers (protobuf)
 
-**Current:** Functional core with adapters
-**Future:** Plugin-based architecture with:
-- Type registry
-- Formatter registry
-- Middleware chain
-- Event hooks
+5. **Schema Registry**
+   - Persist registered custom types/templates across sessions
+   - Share type registries between projects
 
 ---
 
@@ -1086,5 +1141,5 @@ The universal core with environment adapters pattern allows sharing 80% of code 
 
 ---
 
-**Last Updated:** 2026-02-22
-**Version:** 1.1.0
+**Last Updated:** 2026-02-23
+**Version:** 1.1.8

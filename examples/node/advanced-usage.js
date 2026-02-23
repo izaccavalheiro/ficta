@@ -5,7 +5,7 @@
  *   node advanced-usage.js
  *
  * Covers:
- *   - Large datasets across all formats
+ *   - Large datasets across all formats (including Parquet)
  *   - Complex column definitions with every special type
  *   - SQL: all four dialects × all output modes
  *   - UPSERT with conflict resolution
@@ -54,11 +54,14 @@ async function allFormats() {
   await generateAndSave({ columns, rows, output: 'output/data.yaml' });
   await generateAndSave({ columns, rows, output: 'output/data.toml' });
 
+  // Parquet (columnar binary format; useful for big-data / analytics pipelines)
+  await generateAndSave({ columns, rows, output: 'output/data.parquet' });
+
   // SQL — plain INSERT (backward-compatible, works without DDL)
   await generateAndSave({ columns, rows, output: 'output/data-insert.sql',
     tableName: 'employees' });
 
-  console.log('All formats written to output/\n');
+  console.log('All formats written to output/ (including Parquet)\n');
 }
 
 // ============================================================================

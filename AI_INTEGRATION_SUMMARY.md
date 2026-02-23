@@ -40,7 +40,7 @@
 ### 3. **AI_WORKFLOWS.md** - Step-by-Step Task Workflows
 **Purpose**: Detailed procedures for common development tasks
 **Contents**:
-10 complete workflows:
+18 complete workflows:
 1. Add New Faker Data Type
 2. Add New Template
 3. Add New Output Format
@@ -51,6 +51,14 @@
 8. Add Validation
 9. Update Documentation
 10. Refactor Code
+11. Generate Data from SQL DDL Schema
+12. Use the Schema Builder API
+13. Use the Plugin API
+14. Stream Large Datasets
+15. Infer Schema from Existing Data
+16. Convert OpenAPI Spec to Ficta Schema
+17. Convert GraphQL SDL to Ficta Schema
+18. Watch DDL File and Auto-Regenerate
 
 Each workflow includes:
 - Objective
@@ -190,6 +198,10 @@ ARCHITECTURE.md (deep understanding)
 | Find file locations? | AI_CONTEXT.md | Code Organization |
 | Write tests? | AGENTS.md | Testing Strategy |
 | Optimize performance? | AI_WORKFLOWS.md | Workflow 7 |
+| Infer schema from data? | AI_WORKFLOWS.md | Workflow 15 |
+| Use OpenAPI with ficta? | AI_WORKFLOWS.md | Workflow 16 |
+| Use GraphQL with ficta? | AI_WORKFLOWS.md | Workflow 17 |
+| Watch DDL auto-regen? | AI_WORKFLOWS.md | Workflow 18 |
 
 ### "Where is...?"
 
@@ -202,6 +214,10 @@ ARCHITECTURE.md (deep understanding)
 | CSV formatter | `src/formatters.shared.js` → `toCSV()` |
 | JSON formatter | `src/formatters.shared.js` → `toJSON()` |
 | Excel formatter | `src/formatters.js` → `toExcel()` |
+| Schema inference | `src/infer.js` → `inferSchema()` |
+| OpenAPI conversion | `src/openapi-bridge.js` → `openAPIToFictaSchema()` |
+| GraphQL conversion | `src/graphql-bridge.js` → `graphQLToFictaSchema()` |
+| Watch & regenerate | `src/node.js` → `watchAndGenerate()` |
 | CLI logic | `cli.js` |
 | Tests | `tests/*.test.js` |
 
@@ -253,7 +269,7 @@ Every change should:
 - ✅ Project overview
 - ✅ Architecture details
 - ✅ Code patterns
-- ✅ Common tasks (10 workflows)
+- ✅ Common tasks (18 workflows)
 - ✅ API reference (complete)
 - ✅ Testing guide
 - ✅ Troubleshooting
@@ -351,6 +367,6 @@ This project now has **enterprise-grade AI integration documentation** that:
 
 ---
 
-**Documentation Suite Version**: 1.0.0  
-**Last Updated**: February 21, 2026  
+**Documentation Suite Version**: 1.1.8  
+**Last Updated**: February 23, 2026  
 **Status**: ✅ Production Ready

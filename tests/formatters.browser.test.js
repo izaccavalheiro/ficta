@@ -109,8 +109,8 @@ describe('Formatters Browser Module', () => {
   });
 
   describe('toXML', () => {
-    test('generates XML with default root and record elements', () => {
-      const xml = formatters.toXML(sampleRecords);
+    test('generates XML with default root and record elements', async () => {
+      const xml = await formatters.toXML(sampleRecords);
       
       expect(xml).toContain('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>');
       expect(xml).toContain('<data>');
@@ -121,8 +121,8 @@ describe('Formatters Browser Module', () => {
       expect(xml).toContain('<name>John Doe</name>');
     });
 
-    test('generates XML with custom root and record elements', () => {
-      const xml = formatters.toXML(sampleRecords, 'users', 'user');
+    test('generates XML with custom root and record elements', async () => {
+      const xml = await formatters.toXML(sampleRecords, 'users', 'user');
       
       expect(xml).toContain('<users>');
       expect(xml).toContain('</users>');
@@ -130,13 +130,13 @@ describe('Formatters Browser Module', () => {
       expect(xml).toContain('</user>');
     });
 
-    test('escapes special XML characters', () => {
+    test('escapes special XML characters', async () => {
       const records = [{ 
         id: 1, 
         name: 'John & Jane <test>', 
         email: 'test@"example".com' 
       }];
-      const xml = formatters.toXML(records);
+      const xml = await formatters.toXML(records);
       
       expect(xml).toContain('&amp;');
       expect(xml).toContain('&lt;');
@@ -144,21 +144,26 @@ describe('Formatters Browser Module', () => {
       expect(xml).toContain('&quot;');
     });
 
-    test('converts non-string values to strings', () => {
+    test('converts non-string values to strings', async () => {
       const records = [{ id: 1, active: true, count: 42 }];
-      const xml = formatters.toXML(records);
+      const xml = await formatters.toXML(records);
       
       expect(xml).toContain('<id>1</id>');
       expect(xml).toContain('<active>true</active>');
       expect(xml).toContain('<count>42</count>');
     });
 
-    test('handles empty records', () => {
-      const xml = formatters.toXML([]);
+    test('handles empty records', async () => {
+      const xml = await formatters.toXML([]);
       
       expect(xml).toContain('<data>');
       expect(xml).toContain('</data>');
       expect(xml).not.toContain('<record>');
+    });
+
+    test('returns a Promise (M2: signature parity with Node.js toXML)', () => {
+      const result = formatters.toXML(sampleRecords);
+      expect(result instanceof Promise).toBe(true);
     });
   });
 
@@ -498,19 +503,19 @@ describe('Formatters Browser Module', () => {
       expect(result).not.toMatch(/\n\s+/);
     });
 
-    test('formats data as XML', () => {
-      const result = formatters.formatData(sampleRecords, sampleColumns, 'xml');
+    test('formats data as XML', async () => {
+      const result = await formatters.formatData(sampleRecords, sampleColumns, 'xml');
       expect(result).toContain('<data>');
       expect(result).toContain('<record>');
     });
 
-    test('formats data as XML with custom root element', () => {
-      const result = formatters.formatData(sampleRecords, sampleColumns, 'xml', { rootElement: 'users' });
+    test('formats data as XML with custom root element', async () => {
+      const result = await formatters.formatData(sampleRecords, sampleColumns, 'xml', { rootElement: 'users' });
       expect(result).toContain('<users>');
     });
 
-    test('formats data as XML with custom record element', () => {
-      const result = formatters.formatData(sampleRecords, sampleColumns, 'xml', { recordElement: 'user' });
+    test('formats data as XML with custom record element', async () => {
+      const result = await formatters.formatData(sampleRecords, sampleColumns, 'xml', { recordElement: 'user' });
       expect(result).toContain('<user>');
     });
 

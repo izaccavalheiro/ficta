@@ -8,7 +8,7 @@
  *   - All built-in Faker data types
  *   - All special types (autoIncrement, enum, range, pattern, static)
  *   - All five predefined templates
- *   - All output formats (CSV, JSON, XML, XLSX, TSV, SQL, YAML, TOML)
+ *   - All output formats (CSV, JSON, XML, XLSX, TSV, SQL, YAML, TOML, Parquet)
  *   - The `preview` option
  *   - Reproducible output with seedFaker()
  *   - Localised data with setLocale()
@@ -103,6 +103,9 @@ async function main() {
   await generateAndSave({ columns, rows: 20, output: 'output/users.tsv' });
   await generateAndSave({ columns, rows: 20, output: 'output/users.yaml' });
   await generateAndSave({ columns, rows: 20, output: 'output/users.toml' });
+
+  // Parquet (Node.js only — columnar binary format used in big-data pipelines)
+  await generateAndSave({ columns, rows: 20, output: 'output/users.parquet' });
 
   // SQL — basic INSERT (backward-compatible)
   await generateAndSave({ columns, rows: 20, output: 'output/users-insert.sql',

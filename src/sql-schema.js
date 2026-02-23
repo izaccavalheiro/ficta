@@ -15,6 +15,8 @@ export const sqlTypeMap = {
   // Text types
   firstName: { postgres: 'VARCHAR(50)', mysql: 'VARCHAR(50)', sqlite: 'TEXT', generic: 'VARCHAR(50)' },
   lastName: { postgres: 'VARCHAR(50)', mysql: 'VARCHAR(50)', sqlite: 'TEXT', generic: 'VARCHAR(50)' },
+  prefix: { postgres: 'VARCHAR(20)', mysql: 'VARCHAR(20)', sqlite: 'TEXT', generic: 'VARCHAR(20)' },
+  suffix: { postgres: 'VARCHAR(20)', mysql: 'VARCHAR(20)', sqlite: 'TEXT', generic: 'VARCHAR(20)' },
   fullName: { postgres: 'VARCHAR(100)', mysql: 'VARCHAR(100)', sqlite: 'TEXT', generic: 'VARCHAR(100)' },
   email: { postgres: 'VARCHAR(255)', mysql: 'VARCHAR(255)', sqlite: 'TEXT', generic: 'VARCHAR(255)' },
   username: { postgres: 'VARCHAR(50)', mysql: 'VARCHAR(50)', sqlite: 'TEXT', generic: 'VARCHAR(50)' },
@@ -44,6 +46,7 @@ export const sqlTypeMap = {
   pastDate: { postgres: 'DATE', mysql: 'DATE', sqlite: 'TEXT', generic: 'DATE' },
   futureDate: { postgres: 'DATE', mysql: 'DATE', sqlite: 'TEXT', generic: 'DATE' },
   recentDate: { postgres: 'DATE', mysql: 'DATE', sqlite: 'TEXT', generic: 'DATE' },
+  date: { postgres: 'DATE', mysql: 'DATE', sqlite: 'TEXT', generic: 'DATE' },
   timestamp: { postgres: 'TIMESTAMP', mysql: 'DATETIME', sqlite: 'TEXT', generic: 'TIMESTAMP' },
   
   // Boolean type
@@ -178,8 +181,9 @@ export function generateDDL(tableName, columns, options = {}) {
         } else if (dialect === 'postgres') {
           def += ' PRIMARY KEY';
         } else if (dialect === 'sqlite') {
-          // SQLite uses INTEGER PRIMARY KEY AUTOINCREMENT
-          def = `  ${col.name} INTEGER PRIMARY KEY AUTOINCREMENT`;
+          // getSQLType() already returns 'INTEGER PRIMARY KEY AUTOINCREMENT' for
+          // sqlite + autoIncrement — do not reassign def so that additional
+          // constraints (NOT NULL, DEFAULT) added below are preserved.
         } else {
           def += ' PRIMARY KEY';
         }
@@ -365,7 +369,13 @@ export function generateUpserts(tableName, records, columns, options = {}) {
         `INSERT OR REPLACE INTO ${tableName} (${columnNames.join(', ')}) VALUES (${values.join(', ')});`
       );
     } else {
-      // Generic: fallback to regular INSERT
+      // Generic: UPSERT is not supported; fall back to plain INSERT
+      // Add a one-time warning comment before the first INSERT statement.
+      if (statements.length === 0) {
+        statements.push(
+          `-- Note: UPSERT is not supported for the "generic" dialect; INSERT used instead.`
+        );
+      }
       statements.push(
         `INSERT INTO ${tableName} (${columnNames.join(', ')}) VALUES (${values.join(', ')});`
       );

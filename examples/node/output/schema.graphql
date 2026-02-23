@@ -1,0 +1,32 @@
+scalar DateTime
+
+  enum ProductCategory {
+    ELECTRONICS
+    BOOKS
+    CLOTHING
+    SPORTS
+    HOME
+  }
+
+  type Product {
+    id:          ID!
+    sku:         String!
+    name:        String!
+    description: String
+    price:       Float!
+    stock:       Int!
+    category:    ProductCategory!
+    available:   Boolean!
+    created_at:  DateTime
+  }
+
+  type Customer {
+    id:         ID!
+    email:      String!
+    first_name: String!
+    last_name:  String
+    phone:      String
+    city:       String
+    country:    String
+    created_at: DateTime
+  }

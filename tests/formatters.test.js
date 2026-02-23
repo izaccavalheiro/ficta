@@ -688,6 +688,70 @@ describe('Formatters Module', () => {
     });
   });
 
+  describe('toParquet', () => {
+    test('returns a Buffer containing valid Parquet magic bytes', async () => {
+      const records = [{ id: 1, name: 'Alice', score: 99.5, active: true }];
+      const columns = [
+        { name: 'id', type: 'autoIncrement' },
+        { name: 'name', type: 'fullName' },
+        { name: 'score', type: 'price' },
+        { name: 'active', type: 'boolean' },
+      ];
+      const buf = await formatters.toParquet(records, columns);
+      expect(Buffer.isBuffer(buf)).toBe(true);
+      // Parquet files start and end with the 4-byte magic number PAR1
+      expect(buf.slice(0, 4).toString('ascii')).toBe('PAR1');
+    });
+
+    test('returns a Buffer from a single-column integer dataset', async () => {
+      const records = [{ id: 1 }, { id: 2 }];
+      const columns = [{ name: 'id', type: 'number' }];
+      const buf = await formatters.toParquet(records, columns);
+      expect(Buffer.isBuffer(buf)).toBe(true);
+      expect(buf.slice(0, 4).toString('ascii')).toBe('PAR1');
+    });
+
+    test('formatData dispatches to toParquet for parquet format', async () => {
+      const records = [{ id: 1, label: 'test' }];
+      const columns = [
+        { name: 'id', type: 'autoIncrement' },
+        { name: 'label', type: 'word' },
+      ];
+      const buf = await formatters.formatData(records, columns, 'parquet');
+      expect(Buffer.isBuffer(buf)).toBe(true);
+      expect(buf.slice(0, 4).toString('ascii')).toBe('PAR1');
+    });
+
+    test('covers float/amount column types and null value branches', async () => {
+      // Tests DOUBLE type path (float/amount) and null-value ternary branches
+      const records = [
+        { qty: null, rate: null, active: null, label: null },
+        { qty: 1.5, rate: 2.5, active: false, label: 'test' },
+      ];
+      const columns = [
+        { name: 'qty', type: 'float' },
+        { name: 'rate', type: 'amount' },
+        { name: 'active', type: 'boolean' },
+        { name: 'label', type: 'word' },
+      ];
+      const buf = await formatters.toParquet(records, columns);
+      expect(Buffer.isBuffer(buf)).toBe(true);
+      expect(buf.slice(0, 4).toString('ascii')).toBe('PAR1');
+    });
+
+    test('covers integer/int column types and null INT64 branch', async () => {
+      const records = [
+        { count: null },
+        { count: 5 },
+      ];
+      const columns = [
+        { name: 'count', type: 'integer' },
+      ];
+      const buf = await formatters.toParquet(records, columns);
+      expect(Buffer.isBuffer(buf)).toBe(true);
+    });
+  });
+
   describe('formatters.shared.js direct exports', () => {
     test('formatColumnName, toCSV, and detectFormat are exported directly from formatters.shared.js', async () => {
       const shared = await import('../src/formatters.shared.js');

@@ -789,4 +789,18 @@ describe('Browser Module', () => {
       expect(templateOptionsCount + 1).toBe(expectedCount);
     });
   });
+
+  describe('parseDDL re-export', () => {
+    test('parseDDL is exported from the browser module', async () => {
+      const mod = await import('../src/browser.js');
+      expect(typeof mod.parseDDL).toBe('function');
+    });
+
+    test('parseDDL parses a simple CREATE TABLE statement', async () => {
+      const mod = await import('../src/browser.js');
+      const tables = mod.parseDDL('CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(100));');
+      expect(tables.length).toBe(1);
+      expect(tables[0].tableName).toBe('users');
+    });
+  });
 });

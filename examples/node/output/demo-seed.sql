@@ -14,13 +14,13 @@ CREATE TABLE books (
 );
 
 -- Table: authors
-INSERT INTO authors (id, name, email) VALUES (1, 'Roosevelt Kunze', 'Carole0@hotmail.com');
-INSERT INTO authors (id, name, email) VALUES (2, 'Tracey Emmerich', 'Dianne_Bayer@hotmail.com');
-INSERT INTO authors (id, name, email) VALUES (3, 'Melissa Krajcik', 'Coralie_Daugherty9@yahoo.com');
-INSERT INTO authors (id, name, email) VALUES (4, 'Dr. Lily Metz', 'Franklin71@yahoo.com');
+INSERT INTO authors (id, name, email) VALUES (1, 'America Keebler', 'Lee_Dietrich@gmail.com');
+INSERT INTO authors (id, name, email) VALUES (2, 'Norman Gerhold', 'Stephen83@hotmail.com');
+INSERT INTO authors (id, name, email) VALUES (3, 'Daisy Hermiston', 'Christine.Oberbrunner@yahoo.com');
+INSERT INTO authors (id, name, email) VALUES (4, 'Jane Rogahn', 'Francisco.Spinka70@gmail.com');
 
 -- Table: books
-INSERT INTO books (id, author_id, title, published) VALUES (1, 2, 'Senior Optimization Manager', '2024-10-05');
-INSERT INTO books (id, author_id, title, published) VALUES (2, 2, 'National Usability Director', '2024-08-22');
-INSERT INTO books (id, author_id, title, published) VALUES (3, 3, 'Chief Configuration Consultant', '2024-11-17');
-INSERT INTO books (id, author_id, title, published) VALUES (4, 1, 'Product Directives Administrator', '2025-10-12');
+INSERT INTO books (id, author_id, title, published) VALUES (1, 1, 'Conforto vulticulus dedico aestivus unus conspergo celebrer sum.', '2024-04-19');
+INSERT INTO books (id, author_id, title, published) VALUES (2, 2, 'Viridis credo alveus aegrus tempus cauda turbo textor pectus.', '2024-09-10');
+INSERT INTO books (id, author_id, title, published) VALUES (3, 3, 'Cras vere sunt doloremque consectetur.', '2025-04-02');
+INSERT INTO books (id, author_id, title, published) VALUES (4, 2, 'Porro venio dedecor distinctio adamo turba tametsi tristis uxor corrumpo.', '2025-04-14');

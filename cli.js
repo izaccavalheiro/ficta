@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
-import { generateAndSave, generateFromDDL, generateFromSchemaFile, listTypes, listTemplates, templates } from './src/node.js';
+import { generateAndSave, generateFromDDL, generateFromSchemaFile, listTypes, listTemplates, templates, inferSchemaFromFile, fromOpenAPIFile, fromGraphQLFile, watchAndGenerate } from './src/node.js';
 
 // CLI setup
 function setupCLI() {
@@ -24,7 +24,7 @@ function setupCLI() {
       alias: 'f',
       describe: 'Output format',
       type: 'string',
-      choices: ['csv', 'json', 'xml', 'xlsx', 'tsv', 'sql', 'yaml', 'yml', 'toml']
+      choices: ['csv', 'json', 'xml', 'xlsx', 'tsv', 'sql', 'yaml', 'yml', 'toml', 'parquet']
     })
     .option('columns', {
       alias: 'c',
@@ -35,11 +35,11 @@ function setupCLI() {
       alias: 'r',
       describe: 'Number of rows to generate',
       type: 'number',
-      default: 100
+      default: undefined
     })
     .option('template', {
       alias: 't',
-      describe: 'Use predefined template',
+      describe: 'Use predefined template. Built-in templates only; custom registered templates are not reflected here.',
       type: 'string',
       choices: Object.keys(templates)
     })
@@ -145,19 +145,191 @@ function setupCLI() {
           .option('locale', {
             describe: 'Faker.js locale for localized data (e.g. fr, de, ja, pt_BR)',
             type: 'string'
+          })
+          .option('watch', {
+            alias: 'w',
+            describe: 'Watch input file and regenerate on change',
+            type: 'boolean',
+            default: false
           });
       },
       async (argv) => {
         try {
-          const sql = await generateFromDDL({
+          const ddlOptions = {
             schemaFile: argv.file,
             rows: argv.rows,
             dialect: argv.dialect,
             outputMode: argv.mode,
             output: argv.output,
+            locale: argv.locale,
+          };
+          if (argv.watch) {
+            // Run once immediately
+            const sql = await generateFromDDL(ddlOptions);
+            if (!argv.output) process.stdout.write(sql);
+            process.stderr.write(`Watching ${argv.file} for changes…\n`);
+            /* istanbul ignore next -- callback only fires on successful file-change regeneration during live watch session */
+            const _onWatchSuccess = (outputPath, elapsedMs) => {
+              const ts = new Date().toISOString();
+              process.stderr.write(`[${ts}] Regenerated → ${outputPath} (${elapsedMs}ms)\n`);
+            };
+            /* istanbul ignore next -- callback only fires when file-change regeneration errors during live watch session */
+            const _onWatchError = (err) => {
+              const ts = new Date().toISOString();
+              process.stderr.write(`[${ts}] Error: ${err.message}\n`);
+            };
+            const watcher = watchAndGenerate({
+              ...ddlOptions,
+              onSuccess: _onWatchSuccess,
+              onError: _onWatchError,
+            });
+            process.on('SIGINT', /* istanbul ignore next -- SIGINT can't be triggered in tests */ () => { watcher.stop(); process.exit(0); });
+          } else {
+            const sql = await generateFromDDL(ddlOptions);
+            if (!argv.output) {
+              process.stdout.write(sql);
+            }
+          }
+        } catch (err) {
+          console.error('Error:', err.message);
+          process.exit(1);
+        }
+      }
+    )
+    .command(
+      'infer <file>',
+      'Infer Ficta column definitions from an existing CSV or JSON file',
+      (yargs) => {
+        return yargs
+          .positional('file', {
+            describe: 'Path to the .csv or .json input file',
+            type: 'string'
+          })
+          .option('format', {
+            describe: 'Output format: "string" (default) or "json"',
+            type: 'string',
+            choices: ['string', 'json'],
+            default: 'string'
+          })
+          .option('output', {
+            alias: 'o',
+            describe: 'Write output to a file instead of stdout',
+            type: 'string'
           });
-          if (!argv.output) {
-            process.stdout.write(sql);
+      },
+      async (argv) => {
+        try {
+          const result = await inferSchemaFromFile(argv.file);
+          const out = argv.format === 'json'
+            ? JSON.stringify(result.columnList, null, 2)
+            : result.columns;
+          if (argv.output) {
+            const fs = await import('fs');
+            await fs.promises.writeFile(argv.output, out, 'utf-8');
+          } else {
+            process.stdout.write(out + '\n');
+          }
+        } catch (err) {
+          console.error('Error:', err.message);
+          process.exit(1);
+        }
+      }
+    )
+    .command(
+      'from-openapi <file>',
+      'Convert an OpenAPI 3.x or JSON Schema file to a ficta.schema.json structure',
+      (yargs) => {
+        return yargs
+          .positional('file', {
+            describe: 'Path to the .json, .yaml, or .yml OpenAPI file',
+            type: 'string'
+          })
+          .option('schema', {
+            describe: 'Component schema name to target (OpenAPI)',
+            type: 'string'
+          })
+          .option('rows', {
+            alias: 'r',
+            describe: 'Rows per table in the generated ficta.schema.json',
+            type: 'number',
+            default: 100
+          })
+          .option('dialect', {
+            describe: 'SQL dialect',
+            type: 'string',
+            choices: ['postgres', 'mysql', 'sqlite', 'generic'],
+            default: 'postgres'
+          })
+          .option('output', {
+            alias: 'o',
+            describe: 'Write ficta.schema.json to a file; if omitted, prints to stdout',
+            type: 'string'
+          });
+      },
+      async (argv) => {
+        try {
+          const schema = await fromOpenAPIFile(argv.file, {
+            schemaName: argv.schema,
+            rows: argv.rows,
+            dialect: argv.dialect,
+          });
+          const out = JSON.stringify(schema, null, 2);
+          if (argv.output) {
+            const fs = await import('fs');
+            await fs.promises.writeFile(argv.output, out, 'utf-8');
+          } else {
+            process.stdout.write(out + '\n');
+          }
+        } catch (err) {
+          console.error('Error:', err.message);
+          process.exit(1);
+        }
+      }
+    )
+    .command(
+      'from-graphql <file>',
+      'Convert a GraphQL SDL file to a ficta.schema.json structure',
+      (yargs) => {
+        return yargs
+          .positional('file', {
+            describe: 'Path to the .graphql or .gql file',
+            type: 'string'
+          })
+          .option('type', {
+            describe: 'GraphQL object type to target (defaults to first)',
+            type: 'string'
+          })
+          .option('rows', {
+            alias: 'r',
+            describe: 'Rows per table',
+            type: 'number',
+            default: 100
+          })
+          .option('dialect', {
+            describe: 'SQL dialect',
+            type: 'string',
+            choices: ['postgres', 'mysql', 'sqlite', 'generic'],
+            default: 'postgres'
+          })
+          .option('output', {
+            alias: 'o',
+            describe: 'Write ficta.schema.json to a file; if omitted, prints to stdout',
+            type: 'string'
+          });
+      },
+      async (argv) => {
+        try {
+          const schema = await fromGraphQLFile(argv.file, {
+            typeName: argv.type,
+            rows: argv.rows,
+            dialect: argv.dialect,
+          });
+          const out = JSON.stringify(schema, null, 2);
+          if (argv.output) {
+            const fs = await import('fs');
+            await fs.promises.writeFile(argv.output, out, 'utf-8');
+          } else {
+            process.stdout.write(out + '\n');
           }
         } catch (err) {
           console.error('Error:', err.message);
@@ -169,8 +341,8 @@ function setupCLI() {
       if (argv.listTypes || argv.listTemplates) {
         return true;
       }
-      // 'schema' subcommand has its own required positional arg — skip check
-      if (argv._[0] === 'schema') {
+      // Subcommands with their own positional args — skip check
+      if (['schema', 'infer', 'from-openapi', 'from-graphql'].includes(argv._[0])) {
         return true;
       }
       if (argv.schemaFile) {
@@ -202,7 +374,7 @@ async function main(argv) {
   if (argv.schemaFile) {
     const sql = await generateFromSchemaFile({
       schemaFile: argv.schemaFile,
-      rows: argv.rows !== 100 ? argv.rows : undefined,
+      rows: argv.rows,
       outputMode: argv.sqlMode || 'ddl+insert',
       output: argv.output,
     });
@@ -257,7 +429,7 @@ async function main(argv) {
   if (argv.template) {
     const template = templates[argv.template];
     options.columns = template.columns;
-    if (!argv.rows || argv.rows === 100) {
+    if (!argv.rows) {
       options.rows = template.rows;
     }
   }
@@ -269,12 +441,12 @@ async function main(argv) {
 async function runCLI() {
   // Check for schema subcommand before yargs processes args (yargs v18 returns
   // undefined for argv._ after command dispatch, so we check raw process.argv)
-  const isSchemaCommand = process.argv[2] === 'schema';
+  const isSubcommand = ['schema', 'infer', 'from-openapi', 'from-graphql'].includes(process.argv[2]);
 
   const argv = setupCLI();
 
-  // 'schema' subcommand is fully handled by its own yargs command handler
-  if (isSchemaCommand) {
+  // Subcommands are fully handled by their own yargs command handlers
+  if (isSubcommand) {
     return;
   }
   

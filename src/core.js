@@ -11,7 +11,7 @@ if (typeof window !== 'undefined' && window.faker) {
 }
 
 // Get faker instance (lazy initialization)
-function getFaker() {
+export function getFaker() {
   if (!fakerInstance) {
     throw new Error('Faker.js not initialized. Import faker or call setFaker()');
   }
@@ -208,10 +208,16 @@ export function generateRow(columns, index) {
     } else if (col.type.startsWith('enum:')) {
       // Enum: enum:value1|value2|value3
       const values = col.type.replace('enum:', '').split('|');
+      if (values.length === 0 || values.every(v => v === '')) {
+        throw new Error(`enum type requires at least one value. Got: "${col.type}"`);
+      }
       row[col.name] = getFaker().helpers.arrayElement(values);
     } else if (col.type.startsWith('range:')) {
       // Number range: range:1-100
       const [min, max] = col.type.replace('range:', '').split('-').map(Number);
+      if (min > max) {
+        throw new Error(`range min (${min}) must be less than or equal to max (${max}). Got: "${col.type}"`);
+      }
       row[col.name] = getFaker().number.int({ min, max });
     } else if (col.type.startsWith('pattern:')) {
       // Pattern: pattern:PRD-###### or pattern:user+{COUNTER}@example.com

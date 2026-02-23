@@ -12,6 +12,9 @@ export * from './core.js';
 // Re-export formatters
 export * from './formatters.browser.js';
 
+// Re-export DDL parser so browser apps can use parseDDL
+export { parseDDL } from './ddl-parser.js';
+
 /**
  * Download file in browser
  * @param {string} content - File content

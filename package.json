@@ -1,6 +1,6 @@
 {
   "name": "ficta",
-  "version": "1.1.7",
+  "version": "1.1.8",
   "type": "module",
   "main": "./src/node.js",
   "types": "./index.d.ts",
@@ -30,7 +30,7 @@
   "scripts": {
     "build": "node build.js",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
-    "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
+    "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage --runInBand",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
@@ -66,7 +66,9 @@
     "@faker-js/faker": "^10.1.0",
     "@iarna/toml": "^2.2.5",
     "exceljs": "^4.4.0",
+    "graphql": "^16.12.0",
     "js-yaml": "^4.1.1",
+    "parquetjs-lite": "^0.8.7",
     "xml2js": "^0.6.2",
     "yargs": "^18.0.0"
   },

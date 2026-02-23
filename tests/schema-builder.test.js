@@ -113,6 +113,13 @@ describe('Schema Builder — table()', () => {
       'rows: n must be a non-negative number'
     );
   });
+
+  // M4: dialect validation in TableBuilder
+  test('.dialect() throws for unsupported dialect (M4)', () => {
+    expect(() => table('t').column('id', 'autoIncrement').dialect('mssql')).toThrow(
+      'dialect: "mssql" is not supported'
+    );
+  });
 });
 
 describe('Schema Builder — schema()', () => {
@@ -196,5 +203,50 @@ describe('Schema Builder — schema()', () => {
     expect(typeof sb.rows).toBe('function');
     expect(typeof sb.build).toBe('function');
     expect(typeof sb.toSQL).toBe('function');
+  });
+
+  // M4: dialect validation in SchemaBuilder
+  test('.dialect() throws for unsupported dialect (M4)', () => {
+    expect(() => schema().dialect('mssql')).toThrow(
+      'dialect: "mssql" is not supported'
+    );
+  });
+
+  // C4: SchemaBuilder.toSQL() with FK references generates correct SQL for both parent and child tables (C4)
+  test('.toSQL() with FK references generates SQL for both parent and child tables (C4)', () => {
+    const sql = schema()
+      .table('authors', t => t
+        .column('id', 'autoIncrement', { primaryKey: true })
+        .column('name', 'fullName')
+        .rows(2))
+      .table('books', t => t
+        .column('id', 'autoIncrement', { primaryKey: true })
+        .column('author_id', 'number', { references: { table: 'authors', column: 'id' } })
+        .column('title', 'sentence')
+        .rows(3))
+      .toSQL('insert');
+    expect(sql).toContain('INSERT INTO authors');
+    expect(sql).toContain('INSERT INTO books');
+  });
+
+  // Cover col.default branch in SchemaBuilder.toSQL() (line 203 true path)
+  test('.toSQL() with a column default value covers the col.default branch', () => {
+    const sql = schema()
+      .table('tbl_with_default', t => t
+        .column('id', 'autoIncrement', { primaryKey: true })
+        .column('status', 'word', { default: 'active' })
+        .rows(2))
+      .toSQL('insert');
+    expect(sql).toContain('INSERT INTO tbl_with_default');
+  });
+
+  // Cover primaryKey.length === 0 null path in SchemaBuilder.toSQL() (line 222 null path)
+  test('.toSQL() with no primary key column returns null primaryKey (line 222 null path)', () => {
+    const sql = schema()
+      .table('no_pk_tbl', t => t
+        .column('val', 'word')
+        .rows(2))
+      .toSQL('insert');
+    expect(sql).toContain('INSERT INTO no_pk_tbl');
   });
 });

@@ -23,7 +23,7 @@ node basic-usage.js
 | All built-in Faker types | `firstName`, `email`, `price`, `uuid`, … |
 | Special types | `autoIncrement`, `enum:`, `range:`, `pattern:` (`#` / `{COUNTER}`), `static:` |
 | Predefined templates | `users`, `products`, `transactions`, `addresses`, `contacts` |
-| All output formats | CSV, JSON, XML, XLSX, TSV, SQL, YAML, TOML |
+| All output formats | CSV, JSON, XML, XLSX, TSV, SQL, YAML, TOML, Parquet |
 | `preview: true` | Prints the first 3 rows to the console |
 | `seedFaker()` | Reproducible data across runs |
 | `setLocale()` | Localised data (`fr`, `de`, …) |
@@ -118,6 +118,112 @@ const sql = table('users')
 
 ---
 
+### [infer-usage.js](./infer-usage.js) — Schema inference
+
+| Covered feature | Details |
+|----------------|---------|
+| `inferSchema()` | Pure function: infer Ficta column types from an array of row objects |
+| `inferSchemaFromFile()` | Node.js helper: read a `.csv` or `.json` file and infer its schema |
+| Type cascade | name hints → UUID regex → ISO date → email/URL → enum (small set) → numeric → `word` |
+| Generating matching data | Use inferred columns to produce synthetic data with the same shape |
+| Edge cases | Nulls, mixed types, empty-string values |
+| CLI equivalent | `ficta infer data.csv` / `ficta infer data.json --format json` |
+
+```javascript
+import { inferSchemaFromFile, generateAndSave } from '../../src/node.js';
+
+const { columns } = await inferSchemaFromFile('./users.csv');
+await generateAndSave({ columns, rows: 500, output: 'output/users-synthetic.csv' });
+```
+
+---
+
+### [openapi-usage.js](./openapi-usage.js) — OpenAPI / JSON Schema bridge
+
+| Covered feature | Details |
+|----------------|---------|
+| `fromOpenAPISchema()` | Pure: convert one component schema's properties → Ficta column list |
+| `openAPIToFictaSchema()` | Pure: convert ALL component schemas → `ficta.schema.json` |
+| `fromOpenAPIFile()` | Node.js: read a `.json` or `.yaml` OpenAPI file from disk |
+| Format mapping | `email`, `uri`, `uuid`, `date`, `date-time`, `ipv4`, `password`, `hostname` |
+| Enum properties | `enum: [...]` → `enum:val1\|val2\|…` Ficta type |
+| `$ref` resolution | One-level-deep `#/components/schemas/…` references resolved |
+| Skipped types | Array and nested object properties are intentionally omitted |
+| Standalone JSON Schema | Root-level `properties` object (no OpenAPI wrapper) |
+| SQL generation | Pipe result into `generateFromSchemaFile()` to produce seed SQL |
+| CLI equivalent | `ficta from-openapi api.yaml -o ficta.schema.json` |
+
+```javascript
+import { fromOpenAPIFile, generateFromSchemaFile } from '../../src/node.js';
+import { writeFileSync } from 'fs';
+
+const schema = await fromOpenAPIFile('./api.yaml', { rows: 50, dialect: 'postgres' });
+writeFileSync('ficta.schema.json', JSON.stringify(schema, null, 2));
+const sql = await generateFromSchemaFile({ schemaFile: 'ficta.schema.json', outputMode: 'ddl+insert' });
+```
+
+---
+
+### [graphql-usage.js](./graphql-usage.js) — GraphQL SDL bridge
+
+| Covered feature | Details |
+|----------------|---------|
+| `fromGraphQLSDL()` | Pure: convert one GraphQL object type → Ficta column list |
+| `graphQLToFictaSchema()` | Pure: convert all object types → `ficta.schema.json` |
+| `fromGraphQLFile()` | Node.js: read a `.graphql` or `.gql` file from disk |
+| Type mapping | `ID` → uuid, `String` → word, `Int` → number, `Float` → price, `Boolean` → boolean |
+| Custom scalars | `EmailAddress` → email, `URL` → url, `DateTime`/`Date` → timestamp |
+| Name-hint overrides | Fields named `email`, `phone`, `city`, etc. get semantic types |
+| Enum types | GraphQL enum types mapped to `enum:VAL1\|VAL2\|…` |
+| Non-null fields | `!` → `nullable: false` in the column definition |
+| List fields | Skipped (not representable as flat columns) |
+| Default type | First object type selected when `typeName` option is omitted |
+| SQL generation | Pipe result into `generateFromSchemaFile()` to produce seed SQL |
+| CLI equivalent | `ficta from-graphql schema.graphql --type User -o ficta.schema.json` |
+
+```javascript
+import { fromGraphQLFile, generateFromSchemaFile } from '../../src/node.js';
+import { writeFileSync } from 'fs';
+
+const schema = await fromGraphQLFile('./schema.graphql', { rows: 20, dialect: 'postgres' });
+writeFileSync('ficta.schema.json', JSON.stringify(schema, null, 2));
+const sql = await generateFromSchemaFile({ schemaFile: 'ficta.schema.json', outputMode: 'ddl+insert' });
+```
+
+---
+
+### [watch-usage.js](./watch-usage.js) — Live schema file watching
+
+| Covered feature | Details |
+|----------------|---------|
+| `watchAndGenerate()` | Watch a DDL file and re-run `generateFromDDL` on every change |
+| `onSuccess` callback | Called with `(outputPath, elapsedMs)` after each successful rebuild |
+| `onError` callback | Catches generation failures without crashing the process |
+| `debounceMs` option | Collapse rapid consecutive edits into a single rebuild |
+| `watcher.stop()` | Cleanly shut down the `fs.watch` listener |
+| Complete round-trip | Write schema → start watcher → edit schema → verify rebuild |
+| CLI equivalent | `ficta schema schema.sql --watch --output seed.sql` |
+
+```javascript
+import { watchAndGenerate } from '../../src/node.js';
+
+const watcher = watchAndGenerate({
+  schemaFile: 'schema.sql',
+  rows: 10,
+  outputMode: 'ddl+insert',
+  dialect: 'postgres',
+  output: 'seed.sql',
+  onSuccess: (path, ms) => console.log(`Rebuilt ${path} in ${ms}ms`),
+  onError:   err => console.error('Error:', err.message),
+  debounceMs: 300,
+});
+
+// Later, to stop watching:
+// watcher.stop();
+```
+
+---
+
 ### [schema-file-usage.js](./schema-file-usage.js) — JSON schema files
 
 | Covered feature | Details |
@@ -207,41 +313,33 @@ Minimal, copy-paste-ready snippets using the high-level `generateAndSave()` API.
 
 ## Feature Coverage Matrix
 
-| Feature | basic | advanced | stream | plugin-api | schema-builder | schema-file | ddl |
-|---------|:-----:|:--------:|:------:|:----------:|:--------------:|:-----------:|:---:|
-| Faker types | ✓ | ✓ | | | ✓ | | |
-| Special types | ✓ | ✓ | | | ✓ | | |
-| Templates | ✓ | | ✓ | ✓ | | | |
-| All formats | ✓ | ✓ | | | ✓ | | |
-| `seedFaker` | ✓ | | ✓ | | | | |
-| `setLocale` | ✓ | | ✓ | | | | |
-| `generateStream` | | | ✓ | | | | |
-| `registerType` | | | | ✓ | | | |
-| `registerTemplate` | | | | ✓ | | | |
-| `table()` builder | | ✓ | | | ✓ | | |
-| `schema()` builder | | ✓ | | | ✓ | | |
-| `generateFromSchemaFile` | | | | | | ✓ | |
-| `generateFromDDL` | ✓ | ✓ | | | | | ✓ |
-| `generateFromSchema` | | ✓ | | | | | ✓ |
-| `parseDDL` | | ✓ | | | | | ✓ |
-| `buildInsertStatements` | | ✓ | | | | | ✓ |
-| SQL dialects × modes | | ✓ | | | ✓ | ✓ | ✓ |
-
-## Learn More
-
-- [Main Documentation](../../README.md)
-- [AGENTS.md — AI/API reference](../../AGENTS.md)
-- [ARCHITECTURE.md](../../ARCHITECTURE.md)
-
-|------|-------------|
-| `insert` | Plain `INSERT INTO … VALUES (…)` |
-| `upsert` | Dialect-aware upsert (ON CONFLICT / ON DUPLICATE KEY / INSERT OR REPLACE) |
-| `truncate+insert` | `TRUNCATE` in reverse FK order, then `INSERT` |
-| `ddl+insert` | `CREATE TABLE` DDL for every table, then inserts |
-
-## SQL Dialects
-
-`postgres` · `mysql` · `sqlite` · `generic`
+| Feature | basic | advanced | stream | plugin | builder | schema-file | ddl | infer | openapi | graphql | watch |
+|---------|:-----:|:--------:|:------:|:------:|:-------:|:-----------:|:---:|:-----:|:-------:|:-------:|:-----:|
+| Faker types | ✓ | ✓ | | | ✓ | | | | | | |
+| Special types | ✓ | ✓ | | | ✓ | | | | | | |
+| Templates | ✓ | | ✓ | ✓ | | | | | | | |
+| All formats | ✓ | ✓ | | | ✓ | | | | | | |
+| Parquet format | ✓ | ✓ | | | | | | | | | |
+| `seedFaker` | ✓ | | ✓ | | | | | | | | |
+| `setLocale` | ✓ | | ✓ | | | | | | | | |
+| `generateStream` | | | ✓ | | | | | | | | |
+| `registerType` | | | | ✓ | | | | | | | |
+| `registerTemplate` | | | | ✓ | | | | | | | |
+| `table()` builder | | ✓ | | | ✓ | | | | | | |
+| `schema()` builder | | ✓ | | | ✓ | | | | | | |
+| `generateFromSchemaFile` | | | | | | ✓ | | | ✓ | ✓ | |
+| `generateFromDDL` | ✓ | ✓ | | | | | ✓ | | | | |
+| `generateFromSchema` | | ✓ | | | | | ✓ | | | | |
+| `parseDDL` | | ✓ | | | | | ✓ | | | | |
+| `buildInsertStatements` | | ✓ | | | | | ✓ | | | | |
+| SQL dialects × modes | | ✓ | | | ✓ | ✓ | ✓ | | | | |
+| `inferSchema` | | | | | | | | ✓ | | | |
+| `inferSchemaFromFile` | | | | | | | | ✓ | | | |
+| `fromOpenAPIFile` | | | | | | | | | ✓ | | |
+| `openAPIToFictaSchema` | | | | | | | | | ✓ | | |
+| `fromGraphQLFile` | | | | | | | | | | ✓ | |
+| `graphQLToFictaSchema` | | | | | | | | | | ✓ | |
+| `watchAndGenerate` | | | | | | | | | | | ✓ |
 
 ## Learn More
 

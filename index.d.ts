@@ -38,7 +38,7 @@ export interface GenerateAndSaveOptions {
   columns?: string | ColumnDefinition[];
   rows?: number;
   output?: string;
-  format?: 'csv' | 'json' | 'xml' | 'xlsx' | 'tsv' | 'sql' | 'yaml' | 'yml' | 'toml';
+  format?: 'csv' | 'json' | 'xml' | 'xlsx' | 'tsv' | 'sql' | 'yaml' | 'yml' | 'toml' | 'parquet';
   template?: string;
   preview?: boolean;
   seed?: number;
@@ -54,6 +54,8 @@ export interface GenerateFromDDLOptions {
   dialect?: 'postgres' | 'mysql' | 'sqlite' | 'generic';
   /** Optional file path to write the generated SQL to */
   output?: string;
+  /** Optional Faker.js locale for localized data (e.g. 'fr', 'de', 'pt_BR') */
+  locale?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -160,7 +162,11 @@ export interface SchemaFileTable {
 }
 export interface SchemaFileOptions {
   schemaFile: string;
-  rows?: number;
+  /**
+   * Row count override. Pass a number to apply the same count to all tables,
+   * or a `Record<string, number>` to set per-table counts.
+   */
+  rows?: number | Record<string, number>;
   outputMode?: 'insert' | 'upsert' | 'truncate+insert' | 'ddl+insert';
   output?: string;
 }
@@ -213,6 +219,12 @@ export function toYAML(records: Record<string, unknown>[]): string;
 
 /** Convert records to a TOML string. */
 export function toTOML(records: Record<string, unknown>[]): string;
+
+/** Convert records to a Parquet binary buffer. */
+export function toParquet(
+  records: Record<string, unknown>[],
+  columns: ColumnDefinition[]
+): Promise<Buffer>;
 
 /** Convert a camelCase column name to Title Case display form. */
 export function formatColumnName(name: string): string;
@@ -283,3 +295,132 @@ export function table(tableName: string): TableBuilderInterface;
 
 /** Create a multi-table schema builder. */
 export function schema(schemaName?: string): SchemaBuilderInterface;
+
+// ---------------------------------------------------------------------------
+// Schema inference (Node.js only)
+// ---------------------------------------------------------------------------
+
+export interface InferredColumn {
+  name: string;
+  type: string;
+}
+
+export interface InferResult {
+  /** Ficta column string, e.g. "id:autoIncrement,email,score:number" */
+  columns: string;
+  /** Structured array of inferred column definitions */
+  columnList: InferredColumn[];
+}
+
+/**
+ * Infer Ficta column types from an existing CSV or JSON file.
+ * CSV files are parsed with csv-parse/sync; JSON files accept arrays or
+ * objects with a `data` key.
+ */
+export function inferSchemaFromFile(filePath: string): Promise<InferResult>;
+
+/**
+ * Infer schema from an in-memory array of row objects.
+ * Works in both Node.js and browser environments.
+ */
+export function inferSchema(rows: Record<string, unknown>[]): InferResult;
+
+// ---------------------------------------------------------------------------
+// OpenAPI bridge (Node.js only)
+// ---------------------------------------------------------------------------
+
+export interface OpenAPIBridgeOptions {
+  /** Component schema name to target (defaults to first) */
+  schemaName?: string;
+  /** Rows per table in the generated schema (default: 100) */
+  rows?: number;
+  /** SQL dialect (default: 'postgres') */
+  dialect?: 'postgres' | 'mysql' | 'sqlite' | 'generic';
+}
+
+/**
+ * Read an OpenAPI 3.x or JSON Schema file (.json, .yaml, .yml) and return
+ * a ficta.schema.json-compatible object.
+ */
+export function fromOpenAPIFile(filePath: string, options?: OpenAPIBridgeOptions): Promise<Record<string, unknown>>;
+
+/**
+ * Convert an in-memory OpenAPI / JSON Schema document to Ficta column
+ * definitions. Works in both Node.js and browser environments.
+ */
+export function fromOpenAPISchema(
+  docOrSchema: Record<string, unknown>,
+  options?: { schemaName?: string }
+): Array<{ name: string; type: string }>;
+
+/**
+ * Convert an in-memory OpenAPI document to a ficta.schema.json-compatible
+ * object. Works in both Node.js and browser environments.
+ */
+export function openAPIToFictaSchema(
+  openApiDoc: Record<string, unknown>,
+  options?: OpenAPIBridgeOptions
+): Record<string, unknown>;
+
+// ---------------------------------------------------------------------------
+// GraphQL bridge (Node.js only)
+// ---------------------------------------------------------------------------
+
+export interface GraphQLBridgeOptions {
+  /** GraphQL object type to target (defaults to first) */
+  typeName?: string;
+  /** Rows per table in the generated schema (default: 100) */
+  rows?: number;
+  /** SQL dialect (default: 'postgres') */
+  dialect?: 'postgres' | 'mysql' | 'sqlite' | 'generic';
+}
+
+/**
+ * Read a GraphQL SDL file (.graphql, .gql) and return a
+ * ficta.schema.json-compatible object.
+ */
+export function fromGraphQLFile(filePath: string, options?: GraphQLBridgeOptions): Promise<Record<string, unknown>>;
+
+/**
+ * Convert fields from a GraphQL SDL object type to Ficta column definitions.
+ * Works in both Node.js and browser environments.
+ */
+export function fromGraphQLSDL(
+  sdlString: string,
+  options?: { typeName?: string }
+): Array<{ name: string; type: string; nullable: boolean }>;
+
+/**
+ * Convert all object types in a GraphQL SDL document to a
+ * ficta.schema.json-compatible object.
+ * Works in both Node.js and browser environments.
+ */
+export function graphQLToFictaSchema(
+  sdlString: string,
+  options?: GraphQLBridgeOptions
+): Record<string, unknown>;
+
+// ---------------------------------------------------------------------------
+// Watch mode (Node.js only)
+// ---------------------------------------------------------------------------
+
+export interface WatchAndGenerateOptions extends GenerateFromDDLOptions {
+  /** Debounce delay in milliseconds between file changes (default: 300) */
+  debounceMs?: number;
+  /** Called when generation succeeds. `outputPath` is the saved file or ''. */
+  onSuccess?: (outputPath: string, elapsedMs: number) => void;
+  /** Called when generation fails. If omitted, errors are re-thrown. */
+  onError?: (err: Error) => void;
+}
+
+export interface FileWatcher {
+  /** Stop watching for changes. */
+  stop(): void;
+}
+
+/**
+ * Watch a DDL schema file for changes and re-generate output on every save.
+ * Returns a watcher handle with a `stop()` method.
+ */
+export function watchAndGenerate(options: WatchAndGenerateOptions): FileWatcher;
+

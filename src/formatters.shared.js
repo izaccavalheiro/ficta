@@ -128,7 +128,8 @@ export function getFileExtension(format) {
     sql: 'sql',
     yaml: 'yaml',
     yml: 'yml',
-    toml: 'toml'
+    toml: 'toml',
+    parquet: 'parquet'
   };
 
   return extensions[format.toLowerCase()] || format.toLowerCase();
@@ -151,7 +152,8 @@ export function detectFormat(filename) {
     sql: 'sql',
     yaml: 'yaml',
     yml: 'yml',
-    toml: 'toml'
+    toml: 'toml',
+    parquet: 'parquet'
   };
 
   return formatMap[ext] || 'csv';

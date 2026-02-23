@@ -1,0 +1,62 @@
+{
+  "dialect": "mysql",
+  "defaultRows": 5,
+  "tables": [
+    {
+      "name": "blogpost",
+      "rows": 5,
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid"
+        },
+        {
+          "name": "title",
+          "type": "word"
+        },
+        {
+          "name": "content",
+          "type": "word"
+        },
+        {
+          "name": "published",
+          "type": "boolean"
+        },
+        {
+          "name": "views",
+          "type": "number"
+        },
+        {
+          "name": "rating",
+          "type": "price"
+        },
+        {
+          "name": "status",
+          "type": "enum:draft|published|archived"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp"
+        }
+      ]
+    },
+    {
+      "name": "tag",
+      "rows": 5,
+      "columns": [
+        {
+          "name": "id",
+          "type": "number"
+        },
+        {
+          "name": "name",
+          "type": "word"
+        },
+        {
+          "name": "slug",
+          "type": "word"
+        }
+      ]
+    }
+  ]
+}

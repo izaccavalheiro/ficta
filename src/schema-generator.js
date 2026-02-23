@@ -9,7 +9,7 @@
  */
 
 import { parseDDL, orderByDependencies } from './ddl-parser.js';
-import { generateRow } from './core.js';
+import { generateRow, getFaker } from './core.js';
 import {
   generateDDL,
   generateInserts,
@@ -79,7 +79,8 @@ function generateTableData({ tableDef, rows, pkStore }) {
         const { refTable, refColumn } = fkMap.get(col.name);
         const parentValues = pkStore[refTable]?.[refColumn] ?? [];
         if (parentValues.length > 0) {
-          row[col.name] = parentValues[Math.floor(Math.random() * parentValues.length)];
+          const idx = getFaker().number.int({ min: 0, max: parentValues.length - 1 });
+          row[col.name] = parentValues[idx];
           continue;
         }
         // Parent not available — fall through to normal generation
@@ -142,7 +143,10 @@ function storePKValues(tableDef, records, pkStore) {
  * @param {Object}  options
  * @param {string}  [options.ddl]                 - Raw DDL SQL string
  * @param {Array}   [options.tables]              - Pre-parsed TableDef array (from parseDDL)
- * @param {number}  [options.rows=10]             - Rows to generate per table
+ * @param {number|Object}  [options.rows=10]      - Rows to generate per table.
+ *   Pass a number for the same count on all tables, or a
+ *   `Record<string, number>` mapping table names to row counts.
+ *   Tables not present in the object fall back to 10.
  * @param {string}  [options.outputMode='insert'] - SQL output mode
  * @param {string}  [options.dialect='generic']   - SQL dialect
  * @returns {string} Complete SQL script
@@ -204,7 +208,10 @@ export function generateFromSchema({
   const tableResults = [];
 
   for (const tableDef of orderedTables) {
-    const records = generateTableData({ tableDef, rows, pkStore });
+    const tableRows = typeof rows === 'object' && rows !== null
+      ? (tableDef.tableName in rows ? rows[tableDef.tableName] : 10)
+      : rows;
+    const records = generateTableData({ tableDef, rows: tableRows, pkStore });
     storePKValues(tableDef, records, pkStore);
     tableResults.push({
       tableDef,

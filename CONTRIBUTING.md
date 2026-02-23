@@ -71,7 +71,7 @@ npm run build
 ficta/
 ├── src/                     # Source code
 │   ├── core.js              # Universal core (no Node/browser deps)
-│   ├── formatters.js        # Node.js formatters
+│   ├── formatters.js        # Node.js formatters (CSV, JSON, XML, Excel, TSV, SQL, YAML, TOML, Parquet)
 │   ├── formatters.shared.js # Shared pure utilities (CSV, TSV, JSON)
 │   ├── formatters.browser.js # Browser formatters
 │   ├── node.js              # Node.js adapter + generateFromDDL/Stream/SchemaFile
@@ -79,9 +79,13 @@ ficta/
 │   ├── sql-schema.js        # SQL DDL/DML generator (universal)
 │   ├── ddl-parser.js        # SQL DDL → TableDef parser (universal, pure)
 │   ├── schema-generator.js  # Multi-table FK-aware orchestrator (universal)
-│   └── schema-builder.js    # Fluent table/schema builder API (universal)
-├── cli.js                   # CLI interface
-├── tests/                   # Test suite (737 tests, 100% coverage)
+│   ├── schema-builder.js    # Fluent table/schema builder API (universal)
+│   ├── infer.js             # Schema inference from sample rows (universal, pure)
+│   ├── openapi-bridge.js    # OpenAPI 3.x/JSON Schema → Ficta columns (universal, pure)
+│   └── graphql-bridge.js    # GraphQL SDL → Ficta columns (universal)
+├── cli.js                   # CLI interface (4 subcommands: schema, infer, from-openapi, from-graphql)
+├── ficta-schema.v1.json     # JSON Schema definition for ficta.schema.json files
+├── tests/                   # Test suite (921 tests across 13 suites, 100% coverage)
 ├── examples/                # Usage examples
 └── dist/                    # Built browser bundles
 ```
@@ -183,6 +187,48 @@ const sql = await generateFromDDL({
   dialect: 'postgres'
 });
 ```
+
+#### Infer Schema from Existing Data
+
+```javascript
+import { inferSchemaFromFile } from './src/node.js';
+const { columns } = await inferSchemaFromFile('./data.csv');  // or .json
+console.log(columns); // e.g. 'id:autoIncrement,email:email,name:fullName'
+```
+
+**CLI:** `ficta infer ./data.csv`
+
+#### Convert OpenAPI Spec to ficta.schema.json
+
+```javascript
+import { fromOpenAPIFile } from './src/node.js';
+const schema = await fromOpenAPIFile('./openapi.yaml', { rows: 100, dialect: 'postgres' });
+// Returns ficta.schema.json-compatible object
+```
+
+**CLI:** `ficta from-openapi ./openapi.yaml -o ficta.schema.json`
+
+#### Convert GraphQL SDL to ficta.schema.json
+
+```javascript
+import { fromGraphQLFile } from './src/node.js';
+const schema = await fromGraphQLFile('./schema.graphql', { typeName: 'User' });
+```
+
+**CLI:** `ficta from-graphql ./schema.graphql -o ficta.schema.json`
+
+#### Watch DDL File and Auto-Regenerate
+
+```javascript
+import { watchAndGenerate } from './src/node.js';
+const watcher = watchAndGenerate({
+  schemaFile: './schema.sql', rows: 10, outputMode: 'ddl+insert', output: './seed.sql',
+  onSuccess: (path, ms) => console.log(`Regenerated ${path} in ${ms}ms`)
+});
+// later: watcher.stop()
+```
+
+**CLI:** `ficta schema ./schema.sql -o seed.sql --watch`
 
 ---
 

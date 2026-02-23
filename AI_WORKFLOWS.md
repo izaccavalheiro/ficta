@@ -22,6 +22,10 @@ This guide provides detailed workflows for AI assistants to handle typical devel
 - [Workflow 12: Use the Schema Builder API](#workflow-12-use-the-schema-builder-api)
 - [Workflow 13: Use the Plugin API](#workflow-13-use-the-plugin-api)
 - [Workflow 14: Stream Large Datasets](#workflow-14-stream-large-datasets)
+- [Workflow 15: Infer Schema from Existing Data](#workflow-15-infer-schema-from-existing-data)
+- [Workflow 16: Convert OpenAPI Spec to Ficta Schema](#workflow-16-convert-openapi-spec-to-ficta-schema)
+- [Workflow 17: Convert GraphQL SDL to Ficta Schema](#workflow-17-convert-graphql-sdl-to-ficta-schema)
+- [Workflow 18: Watch DDL File and Auto-Regenerate](#workflow-18-watch-ddl-file-and-auto-regenerate)
 
 ---
 
@@ -1486,6 +1490,407 @@ test('stream produces CSV with header', async () => {
 ---
 
 ## General Workflow Tips
+
+### Before Starting Any Task
+1. Read relevant documentation (AGENTS.md, ARCHITECTURE.md)
+2. Understand current code structure
+3. Check existing tests for patterns
+4. Run tests to ensure starting state is good
+
+### During Development
+1. Make small, incremental changes
+2. Test frequently (after each change)
+3. Keep commits atomic and focused
+4. Write tests alongside code
+
+### After Completing Task
+1. Run full test suite
+2. Check coverage report
+3. Manually test if user-facing
+4. Update documentation
+5. Clean up temporary files
+
+### If Stuck
+1. Check similar existing code
+2. Review tests for usage examples
+3. Consult ARCHITECTURE.md for design patterns
+4. Try simplest solution first
+
+---
+
+**Remember:** The goal is maintainable, tested, documented code that follows project patterns.
+
+---
+
+## Workflow 15: Infer Schema from Existing Data
+
+### Objective
+Automatically detect column types from an existing CSV or JSON file, producing a Ficta column string that can drive further data generation.
+
+### Steps
+
+#### Step 1: Choose Entry Point
+
+| Scenario | API |
+|----------|-----|
+| Node.js, read from disk | `inferSchemaFromFile(filePath)` in `src/node.js` |
+| Universal, already have rows array | `inferSchema(rows)` in `src/infer.js` |
+| CLI | `ficta infer <file>` |
+
+#### Step 2: Node.js — Infer from File
+
+```javascript
+import { inferSchemaFromFile } from 'ficta';
+
+const { columns, columnList } = await inferSchemaFromFile('./users.csv');
+// columns → 'id:autoIncrement,email:email,firstName:firstName,...'
+// columnList → [{ name: 'id', type: 'autoIncrement' }, ...]
+
+console.log(columns);
+```
+
+Supported input: `.csv` and `.json` files.
+
+#### Step 3: Universal — Infer from Row Array
+
+```javascript
+import { inferSchema } from './src/infer.js';
+
+const rows = [
+  { id: 1, email: 'alice@example.com', name: 'Alice' },
+  { id: 2, email: 'bob@example.com', name: 'Bob' }
+];
+
+const { columns } = inferSchema(rows);
+// columns → 'id:autoIncrement,email:email,name:word'
+```
+
+#### Step 4: CLI Usage
+
+```bash
+# Print inferred columns to stdout
+ficta infer ./users.csv
+
+# Save as a schema file suitable for generateFromSchemaFile
+ficta infer ./users.csv -o ficta.schema.json
+```
+
+#### Step 5: Use Inferred Schema to Generate More Data
+
+```javascript
+import { inferSchemaFromFile, generateAndSave } from 'ficta';
+
+const { columns } = await inferSchemaFromFile('./sample.csv');
+await generateAndSave({ columns, rows: 1000, output: 'synth-data.csv' });
+```
+
+#### Step 6: Add Tests
+
+```javascript
+import { inferSchema } from '../src/infer.js';
+
+test('infers email type from email-like values', () => {
+  const rows = [{ contact: 'alice@example.com' }, { contact: 'bob@test.org' }];
+  const { columnList } = inferSchema(rows);
+  expect(columnList[0].type).toBe('email');
+});
+
+test('infers enum for small closed value sets', () => {
+  const rows = [{ status: 'active' }, { status: 'inactive' }, { status: 'active' }];
+  const { columnList } = inferSchema(rows);
+  expect(columnList[0].type).toMatch(/^enum:/);
+});
+```
+
+### Success Criteria
+- [ ] Inferred `columns` string is valid for `generateData()`
+- [ ] `inferSchemaFromFile` resolves for both `.csv` and `.json`
+- [ ] Tests pass (`npm test -- infer.test.js`)
+
+---
+
+## Workflow 16: Convert OpenAPI Spec to Ficta Schema
+
+### Objective
+Convert an OpenAPI 3.x YAML/JSON specification (or raw JSON Schema) into a `ficta.schema.json`-compatible object so Ficta can generate realistic test data matching the API contract.
+
+### Steps
+
+#### Step 1: Choose Entry Point
+
+| Scenario | API |
+|----------|-----|
+| Node.js, read YAML/JSON file from disk | `fromOpenAPIFile(filePath, options?)` in `src/node.js` |
+| Universal, already parsed object | `openAPIToFictaSchema(doc, options?)` in `src/openapi-bridge.js` |
+| CLI | `ficta from-openapi <file>` |
+
+#### Step 2: Node.js — Convert an OpenAPI File
+
+```javascript
+import { fromOpenAPIFile } from 'ficta';
+
+const schema = await fromOpenAPIFile('./openapi.yaml', {
+  schemaName: 'User',    // Optional: target a specific component schema
+  rows: 50,             // Rows per table (default: 100)
+  dialect: 'postgres'  // SQL dialect if exporting SQL
+});
+
+// schema is a ficta.schema.json-compatible object
+console.log(JSON.stringify(schema, null, 2));
+```
+
+#### Step 3: Universal — Convert a Parsed Document
+
+```javascript
+import { openAPIToFictaSchema } from './src/openapi-bridge.js';
+
+const doc = JSON.parse(fs.readFileSync('api.json', 'utf-8'));
+const schema = openAPIToFictaSchema(doc, { rows: 20 });
+```
+
+#### Step 4: CLI Usage
+
+```bash
+# Print schema to stdout
+ficta from-openapi ./openapi.yaml
+
+# Save to ficta.schema.json
+ficta from-openapi ./openapi.yaml -o ficta.schema.json
+
+# Target a specific component
+ficta from-openapi ./openapi.yaml --schema-name Product -o product.schema.json
+```
+
+#### Step 5: Use the Generated Schema
+
+```javascript
+import { generateFromSchemaFile } from 'ficta';
+import { writeFileSync } from 'fs';
+
+const schema = await fromOpenAPIFile('./openapi.yaml', { rows: 100 });
+writeFileSync('ficta.schema.json', JSON.stringify(schema, null, 2));
+const sql = await generateFromSchemaFile({ schemaFile: 'ficta.schema.json', outputMode: 'ddl+insert' });
+console.log(sql);
+```
+
+#### Step 6: Add Tests
+
+```javascript
+import { openAPIToFictaSchema } from '../src/openapi-bridge.js';
+
+test('converts OpenAPI schema to ficta format', () => {
+  const doc = {
+    openapi: '3.0.0',
+    components: {
+      schemas: {
+        User: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer', format: 'int64' },
+            email: { type: 'string', format: 'email' },
+            name: { type: 'string' }
+          }
+        }
+      }
+    }
+  };
+
+  const schema = openAPIToFictaSchema(doc);
+  expect(schema.tables).toHaveLength(1);
+  expect(schema.tables[0].name).toBe('User');
+  const emailCol = schema.tables[0].columns.find(c => c.name === 'email');
+  expect(emailCol.type).toBe('email');
+});
+```
+
+### Success Criteria
+- [ ] Generated schema `tables[].columns` are valid Ficta types
+- [ ] `fromOpenAPIFile` resolves for `.yaml` and `.json` inputs
+- [ ] Tests pass (`npm test -- openapi-bridge.test.js`)
+
+---
+
+## Workflow 17: Convert GraphQL SDL to Ficta Schema
+
+### Objective
+Convert a GraphQL Schema Definition Language (SDL) file into a `ficta.schema.json`-compatible object to generate typed test data for GraphQL APIs.
+
+### Steps
+
+#### Step 1: Choose Entry Point
+
+| Scenario | API |
+|----------|-----|
+| Node.js, read `.graphql` file from disk | `fromGraphQLFile(filePath, options?)` in `src/node.js` |
+| Universal, already have SDL string | `graphQLToFictaSchema(sdl, options?)` in `src/graphql-bridge.js` |
+| CLI | `ficta from-graphql <file>` |
+
+#### Step 2: Node.js — Convert a GraphQL File
+
+```javascript
+import { fromGraphQLFile } from 'ficta';
+
+const schema = await fromGraphQLFile('./schema.graphql', {
+  typeName: 'User',   // Optional: target object type (defaults to first)
+  rows: 50,
+  dialect: 'postgres'
+});
+
+console.log(JSON.stringify(schema, null, 2));
+```
+
+#### Step 3: Universal — Convert an SDL String
+
+```javascript
+import { graphQLToFictaSchema } from './src/graphql-bridge.js';
+
+const sdl = `
+  type User {
+    id: ID!
+    email: String!
+    name: String
+    age: Int
+  }
+`;
+
+const schema = graphQLToFictaSchema(sdl, { typeName: 'User', rows: 100 });
+```
+
+#### Step 4: CLI Usage
+
+```bash
+# Print schema to stdout
+ficta from-graphql ./schema.graphql
+
+# Save to ficta.schema.json
+ficta from-graphql ./schema.graphql -o ficta.schema.json
+
+# Target a specific type
+ficta from-graphql ./schema.graphql --type-name Product -o product.schema.json
+```
+
+#### Step 5: Use the Generated Schema
+
+```javascript
+import { fromGraphQLFile, generateAndSave } from 'ficta';
+import { writeFileSync } from 'fs';
+
+const schema = await fromGraphQLFile('./schema.graphql');
+writeFileSync('ficta.schema.json', JSON.stringify(schema, null, 2));
+// then: ficta schema ficta.schema.json -o seed.sql
+```
+
+#### Step 6: Add Tests
+
+```javascript
+import { graphQLToFictaSchema } from '../src/graphql-bridge.js';
+
+test('converts GraphQL SDL to ficta schema', () => {
+  const sdl = `
+    type Product {
+      id: ID!
+      name: String!
+      price: Float
+      inStock: Boolean
+    }
+  `;
+  const schema = graphQLToFictaSchema(sdl, { typeName: 'Product' });
+  expect(schema.tables[0].name).toBe('Product');
+  const nameCol = schema.tables[0].columns.find(c => c.name === 'name');
+  expect(nameCol).toBeDefined();
+});
+```
+
+### Success Criteria
+- [ ] Generated schema `tables[].columns` map correctly from GraphQL scalars
+- [ ] `fromGraphQLFile` resolves for `.graphql` and `.gql` files
+- [ ] Tests pass (`npm test -- graphql-bridge.test.js`)
+
+---
+
+## Workflow 18: Watch DDL File and Auto-Regenerate
+
+### Objective
+Set up a file watcher that detects changes to a `.sql` DDL schema file and automatically regenerates seed data, useful in active database development.
+
+### Steps
+
+#### Step 1: API Overview
+
+`watchAndGenerate(options)` in `src/node.js` returns an object `{ stop() }`.
+
+```javascript
+import { watchAndGenerate } from 'ficta';
+
+const watcher = watchAndGenerate({
+  schemaFile: './db/schema.sql',   // Required: path to watch
+  rows: 10,                        // Rows per table
+  outputMode: 'ddl+insert',        // 'insert' | 'upsert' | 'truncate+insert' | 'ddl+insert'
+  dialect: 'postgres',
+  output: './db/seed.sql',         // Optional: write SQL here
+  onSuccess: (filePath, ms) => console.log(`✓ ${filePath} regenerated in ${ms}ms`),
+  onError: (err) => console.error('Watch error:', err.message)
+});
+
+// Generate once immediately, then watch for changes
+// Stop watching when done
+process.on('SIGINT', () => watcher.stop());
+```
+
+#### Step 2: CLI Usage
+
+```bash
+# Watch + regenerate on change
+ficta schema ./db/schema.sql -o ./db/seed.sql --watch
+
+# With dialect and row count
+ficta schema ./db/schema.sql -o seed.sql --watch --dialect mysql --rows 20
+```
+
+#### Step 3: Integration in Development Workflow
+
+Typical use: run alongside `nodemon` or other dev servers so your seed data stays in sync with schema migrations:
+
+```bash
+# Terminal 1: watch schema changes
+ficta schema ./migrations/latest.sql -o ./seeds/dev.sql --watch
+
+# Terminal 2: start your dev server
+npm run dev
+```
+
+#### Step 4: Add Tests
+
+Because `watchAndGenerate` relies on the filesystem watcher, test the underlying `generateFromDDL` logic directly, and write a minimal integration test that verifies the watcher calls `onSuccess`:
+
+```javascript
+import { generateFromDDL } from '../src/node.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+test('generateFromDDL produces valid SQL output', async () => {
+  const sql = await generateFromDDL({
+    schemaFile: path.join(__dirname, 'fixtures', 'simple.sql'),
+    rows: 3,
+    outputMode: 'ddl+insert',
+    dialect: 'postgres'
+  });
+  expect(sql).toContain('CREATE TABLE');
+  expect(sql).toContain('INSERT INTO');
+});
+```
+
+### Success Criteria
+- [ ] `watchAndGenerate()` regenerates output on file change
+- [ ] `watcher.stop()` terminates without errors
+- [ ] `onSuccess` callback receives file path and elapsed ms
+- [ ] `generateFromDDL` unit tests still pass (`npm test -- node.test.js`)
+
+---
+
+### General AI Workflow Principles
 
 ### Before Starting Any Task
 1. Read relevant documentation (AGENTS.md, ARCHITECTURE.md)

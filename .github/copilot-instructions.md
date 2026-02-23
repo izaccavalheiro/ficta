@@ -4,7 +4,17 @@
 
 ## Project Context
 
-This is **Ficta** - a universal test data generator that works in Node.js, browsers, and CLI. It generates realistic fake data in multiple formats (CSV, JSON, XML, Excel, TSV, SQL, YAML, TOML) using Faker.js.
+This is **Ficta** - a universal test data generator that works in Node.js, browsers, and CLI. It generates realistic fake data in multiple formats (CSV, JSON, XML, Excel, TSV, SQL, YAML, TOML, Parquet) using Faker.js.
+
+**Test suite:** 921 tests across 13 suites, 100% coverage.
+
+**Key modules (beyond core adapters):**
+- `src/infer.js` — infer Ficta column types from existing data rows
+- `src/openapi-bridge.js` — convert OpenAPI 3.x/JSON Schema → Ficta schema
+- `src/graphql-bridge.js` — convert GraphQL SDL → Ficta schema
+- `ficta-schema.v1.json` — JSON Schema for `ficta.schema.json` files
+
+**CLI subcommands:** `ficta schema <file>`, `ficta infer <file>`, `ficta from-openapi <file>`, `ficta from-graphql <file>`
 
 ## Code Style & Patterns
 
@@ -151,9 +161,12 @@ npm test
 | New format (Node) | `src/formatters.js` → Add `toFormatName()` + update `node.js` |
 | Shared format util | `src/formatters.shared.js` → Pure CSV/JSON/TSV helpers |
 | New format (Browser) | `src/formatters.browser.js` → Add `toFormatName()` |
-| CLI option | `cli.js` → Update yargs config |
+| CLI option/subcommand | `cli.js` → Update yargs config |
 | Fluent schema | `src/schema-builder.js` → `table()` / `schema()` |
 | Plugin type/template | `src/core.js` → `registerType()` / `registerTemplate()` |
+| Schema inference logic | `src/infer.js` → `inferSchema()` |
+| OpenAPI conversion | `src/openapi-bridge.js` → `openAPIToFictaSchema()` |
+| GraphQL conversion | `src/graphql-bridge.js` → `graphQLToFictaSchema()` |
 | Tests | `tests/[module].test.js` |
 
 ## Common Tasks
@@ -199,10 +212,30 @@ switch (format) {
 
 // 3. Update CLI (cli.js)
 .option('format', {
-  choices: ['csv', 'json', 'xml', 'xlsx', 'tsv', 'sql', 'yaml', 'yml', 'toml', 'myformat']
+  choices: ['csv', 'json', 'xml', 'xlsx', 'tsv', 'sql', 'yaml', 'yml', 'toml', 'parquet', 'myformat']
 })
 
 // 4. Add tests (tests/formatters.test.js)
+```
+
+### Infer Schema from Existing Data
+```javascript
+import { inferSchemaFromFile } from './src/node.js';
+const { columns } = await inferSchemaFromFile('./data.csv');
+// CLI: ficta infer ./data.csv
+```
+
+### Convert OpenAPI/GraphQL to ficta.schema.json
+```javascript
+// OpenAPI
+import { fromOpenAPIFile } from './src/node.js';
+const schema = await fromOpenAPIFile('./openapi.yaml', { rows: 50 });
+
+// GraphQL
+import { fromGraphQLFile } from './src/node.js';
+const schema2 = await fromGraphQLFile('./schema.graphql', { typeName: 'User' });
+// CLI: ficta from-openapi ./openapi.yaml -o ficta.schema.json
+// CLI: ficta from-graphql ./schema.graphql -o ficta.schema.json
 ```
 
 ## Code Quality Checklist
@@ -242,6 +275,8 @@ export function myFunction({ option }) {
 - `js-yaml` - YAML formatting
 - `@iarna/toml` - TOML formatting
 - `yargs` - CLI argument parsing
+- `graphql` - GraphQL SDL parsing (for `graphql-bridge.js`)
+- `parquetjs-lite` - Parquet file generation (Node.js)
 
 ### Development
 - `jest` - Testing framework

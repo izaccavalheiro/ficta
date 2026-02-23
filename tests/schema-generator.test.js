@@ -1,5 +1,5 @@
 import { faker } from '@faker-js/faker';
-import { setFaker } from '../src/core.js';
+import { setFaker, seedFaker } from '../src/core.js';
 import { generateFromSchema, buildInsertStatements } from '../src/schema-generator.js';
 import { parseDDL } from '../src/ddl-parser.js';
 import { toSQL } from '../src/formatters.js';
@@ -416,3 +416,58 @@ describe('generateFromSchema — edge cases', () => {
     ).toThrow();
   });
 });
+
+// ---------------------------------------------------------------------------
+// C3 — FK column sampling uses Faker seeded PRNG (reproducible output)
+// ---------------------------------------------------------------------------
+
+describe('generateFromSchema — seeded FK sampling (C3)', () => {
+  test('two runs with the same seed produce identical FK column values', () => {
+    seedFaker(12345);
+    const sql1 = generateFromSchema({ ddl: TWO_TABLE_DDL, rows: 3, outputMode: 'insert' });
+    seedFaker(12345);
+    const sql2 = generateFromSchema({ ddl: TWO_TABLE_DDL, rows: 3, outputMode: 'insert' });
+    expect(sql1).toBe(sql2);
+  });
+
+  test('FK column values in child table are a subset of parent PKs', () => {
+    const sql = generateFromSchema({ ddl: TWO_TABLE_DDL, rows: 3, outputMode: 'insert' });
+    // Extract user INSERT id values (first column in INSERT INTO users ...)
+    const userMatches = [...sql.matchAll(/INSERT INTO users \(id, email\) VALUES \((\d+),/g)];
+    const userIds = new Set(userMatches.map(m => parseInt(m[1], 10)));
+    // Extract user_id values from posts INSERT
+    const postMatches = [...sql.matchAll(/INSERT INTO posts \(id, user_id, title\) VALUES \(\d+, (\d+),/g)];
+    const postUserIds = postMatches.map(m => parseInt(m[1], 10));
+    postUserIds.forEach(uid => expect(userIds.has(uid)).toBe(true));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// M6 — Per-table row count support
+// ---------------------------------------------------------------------------
+
+describe('generateFromSchema — per-table rows (M6)', () => {
+  test('rows as Record<string,number> produces correct row counts', () => {
+    const sql = generateFromSchema({
+      ddl: TWO_TABLE_DDL,
+      rows: { users: 3, posts: 7 },
+      outputMode: 'insert',
+    });
+    const userInserts = (sql.match(/INSERT INTO users/g) || []).length;
+    const postInserts = (sql.match(/INSERT INTO posts/g) || []).length;
+    expect(userInserts).toBe(3);
+    expect(postInserts).toBe(7);
+  });
+
+  test('rows object with missing table falls back to 10 rows', () => {
+    // Only provide row count for 'users'; posts should fall back to 10
+    const sql = generateFromSchema({
+      ddl: TWO_TABLE_DDL,
+      rows: { users: 2 },
+      outputMode: 'insert',
+    });
+    const postInserts = (sql.match(/INSERT INTO posts/g) || []).length;
+    expect(postInserts).toBe(10); // default fallback
+  });
+});
+

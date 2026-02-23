@@ -8,7 +8,11 @@
  */
 
 import { generateData } from './core.js';
-import { generateSchema } from './sql-schema.js';
+import { generateSchema, getSQLType } from './sql-schema.js';
+import { generateFromSchema } from './schema-generator.js';
+
+// Valid SQL dialects
+const VALID_DIALECTS = ['postgres', 'mysql', 'sqlite', 'generic'];
 
 // ---------------------------------------------------------------------------
 // TableBuilder
@@ -62,6 +66,9 @@ class TableBuilder {
    * @returns {this}
    */
   dialect(d) {
+    if (!VALID_DIALECTS.includes(d)) {
+      throw new Error(`dialect: "${d}" is not supported. Valid values: ${VALID_DIALECTS.join(', ')}`);
+    }
     this._dialect = d;
     return this;
   }
@@ -143,6 +150,9 @@ class SchemaBuilder {
    * @returns {this}
    */
   dialect(d) {
+    if (!VALID_DIALECTS.includes(d)) {
+      throw new Error(`dialect: "${d}" is not supported. Valid values: ${VALID_DIALECTS.join(', ')}`);
+    }
     this._dialect = d;
     return this;
   }
@@ -171,24 +181,60 @@ class SchemaBuilder {
 
   /**
    * Generate SQL for the entire schema.
+   * Delegates to generateFromSchema() for FK-aware topological generation.
+   * FK column values in child tables will reference actual PK values from
+   * parent tables, matching what generateFromDDL() produces.
    * @param {string} [mode='ddl+insert']
    * @returns {string}
    */
   toSQL(mode = 'ddl+insert') {
     const built = this.build();
+    const dialect = built.dialect;
 
-    // Generate data for each table and attach records
-    const tablesWithData = built.tables.map(tbl => {
-      const colString = tbl.columns.map(c => `${c.name}:${c.type}`).join(',');
-      const result = generateData({ columns: colString, rows: tbl.rows });
-      return { ...tbl, records: result.records };
+    // Convert schema-builder table definitions to TableDef format expected by
+    // generateFromSchema so we bypass DDL round-trip and retain Ficta types.
+    const tableDefs = built.tables.map(tbl => {
+      const columns = tbl.columns.map(col => ({
+        name: col.name,
+        fictaType: col.type,
+        sqlType: col.sqlType || getSQLType({ type: col.type }, dialect),
+        nullable: col.nullable !== false,
+        autoIncrement: col.type === 'autoIncrement',
+        defaultValue: col.default !== undefined ? col.default : null,
+        enumValues: null,
+      }));
+
+      const primaryKey = tbl.columns
+        .filter(c => c.primaryKey)
+        .map(c => c.name);
+
+      const foreignKeys = tbl.columns
+        .filter(c => c.references)
+        .map(c => ({
+          column: c.name,
+          refTable: c.references.table,
+          refColumn: c.references.column,
+        }));
+
+      return {
+        tableName: tbl.table,
+        columns,
+        primaryKey: primaryKey.length > 0 ? primaryKey : null,
+        foreignKeys,
+      };
     });
 
-    return generateSchema({
-      schema: built.schema,
-      tables: tablesWithData,
-      dialect: built.dialect,
-      mode,
+    // Build per-table row counts
+    const rows = {};
+    built.tables.forEach(tbl => {
+      rows[tbl.table] = tbl.rows;
+    });
+
+    return generateFromSchema({
+      tables: tableDefs,
+      rows,
+      outputMode: mode,
+      dialect,
     });
   }
 }

@@ -759,3 +759,85 @@ describe('orderByDependencies — diamond dependency', () => {
     expect(names.indexOf('b')).toBeLessThan(names.indexOf('c'));
   });
 });
+
+// ---------------------------------------------------------------------------
+// H3 — title column maps to sentence, not jobTitle
+// ---------------------------------------------------------------------------
+
+describe('parseDDL — NAME_HINTS title fix (H3)', () => {
+  test('column named "title" resolves to fictaType "sentence"', () => {
+    const [tbl] = parseDDL(`CREATE TABLE posts (id INT PRIMARY KEY, title VARCHAR(255));`);
+    const titleCol = tbl.columns.find(c => c.name === 'title');
+    expect(titleCol).toBeDefined();
+    expect(titleCol.fictaType).toBe('sentence');
+  });
+
+  test('column named "job_title" resolves to fictaType "jobTitle"', () => {
+    const [tbl] = parseDDL(`CREATE TABLE employees (id INT PRIMARY KEY, job_title VARCHAR(100));`);
+    const col = tbl.columns.find(c => c.name === 'job_title');
+    expect(col).toBeDefined();
+    expect(col.fictaType).toBe('jobTitle');
+  });
+
+  test('column named "jobTitle" resolves to fictaType "jobTitle"', () => {
+    const [tbl] = parseDDL(`CREATE TABLE staff (id INT PRIMARY KEY, jobTitle VARCHAR(100));`);
+    const col = tbl.columns.find(c => c.name === 'jobTitle');
+    expect(col).toBeDefined();
+    expect(col.fictaType).toBe('jobTitle');
+  });
+
+  test('more-specific "job_title" pattern wins over generic "title" pattern', () => {
+    // job_title matches /\bjob_?title\b/i before /\btitle\b/i — order matters
+    const [tbl] = parseDDL(`CREATE TABLE roles (id INT, job_title TEXT);`);
+    const col = tbl.columns.find(c => c.name === 'job_title');
+    expect(col.fictaType).toBe('jobTitle');
+    expect(col.fictaType).not.toBe('sentence');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// H6 — Named UNIQUE constraint is skipped gracefully
+// ---------------------------------------------------------------------------
+
+describe('parseDDL — named UNIQUE constraint (H6)', () => {
+  test('CONSTRAINT name UNIQUE (...) is skipped via H6 guard and table parses correctly', () => {
+    const tables = parseDDL(`
+      CREATE TABLE users (
+        id INT PRIMARY KEY,
+        email VARCHAR(255),
+        CONSTRAINT uq_email UNIQUE (email)
+      );
+    `);
+    expect(tables[0].columns).toHaveLength(2);
+    expect(tables[0].columns.map(c => c.name)).toEqual(['id', 'email']);
+  });
+
+  test('table with multiple named UNIQUE constraints parses all data columns', () => {
+    const tables = parseDDL(`
+      CREATE TABLE orders (
+        id INT PRIMARY KEY,
+        order_no VARCHAR(50),
+        ref_code VARCHAR(20),
+        CONSTRAINT uq_order_no UNIQUE (order_no),
+        CONSTRAINT uq_ref_code UNIQUE (ref_code)
+      );
+    `);
+    expect(tables[0].columns).toHaveLength(3);
+    expect(tables[0].columns.map(c => c.name)).toEqual(['id', 'order_no', 'ref_code']);
+  });
+
+  test('CONSTRAINT name CHECK (...) falls through to parseColumnClause and returns null', () => {
+    // This exercises the /^...|CONSTRAINT\s+/ guard inside parseColumnClause (line 247 return null)
+    const tables = parseDDL(`
+      CREATE TABLE accounts (
+        id INT PRIMARY KEY,
+        balance DECIMAL(10,2),
+        CONSTRAINT chk_balance CHECK (balance >= 0)
+      );
+    `);
+    // The CHECK constraint is silently discarded; only real columns remain
+    expect(tables[0].columns).toHaveLength(2);
+    expect(tables[0].columns.map(c => c.name)).toEqual(['id', 'balance']);
+  });
+});
+

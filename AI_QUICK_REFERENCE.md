@@ -3,7 +3,7 @@
 > **Print this! Keep handy while developing with AI assistance**
 
 ## 🎯 Project: Ficta
-Universal test data generator: Node.js + Browser + CLI → CSV/JSON/XML/Excel/TSV/SQL/YAML/TOML
+Universal test data generator: Node.js + Browser + CLI → CSV/JSON/XML/Excel/TSV/SQL/YAML/TOML/Parquet
 
 ---
 
@@ -15,14 +15,18 @@ Universal test data generator: Node.js + Browser + CLI → CSV/JSON/XML/Excel/TS
 | `src/formatters.js` | Format converters (Node.js) |
 | `src/formatters.shared.js` | Shared pure utilities (CSV, TSV, JSON) |
 | `src/formatters.browser.js` | Format converters (browser) |
-| `src/node.js` | Node.js API: `generateAndSave`, `generateFromDDL`, `generateStream` |
+| `src/node.js` | Node.js API: `generateAndSave`, `generateFromDDL`, `generateStream`, `inferSchemaFromFile`, `fromOpenAPIFile`, `fromGraphQLFile`, `watchAndGenerate` |
 | `src/browser.js` | Browser API: `generateAndDownload`, `createUI` |
 | `src/sql-schema.js` | SQL DDL/DML generator (universal) |
 | `src/ddl-parser.js` | SQL schema → TableDef parser (universal, pure) |
 | `src/schema-generator.js` | Multi-table FK-aware orchestrator (universal) |
 | `src/schema-builder.js` | Fluent table/schema builder API (universal) |
-| `cli.js` | CLI interface |
-| `tests/*.test.js` | 737 tests, 100% coverage |
+| `src/infer.js` | Schema inference from sample rows (universal, pure) |
+| `src/openapi-bridge.js` | OpenAPI 3.x / JSON Schema → Ficta columns (universal, pure) |
+| `src/graphql-bridge.js` | GraphQL SDL → Ficta columns (universal, uses `graphql` package) |
+| `ficta-schema.v1.json` | JSON Schema definition for `ficta.schema.json` files |
+| `cli.js` | CLI interface with 4 subcommands: `schema`, `infer`, `from-openapi`, `from-graphql` |
+| `tests/*.test.js` | 921 tests across 13 suites, 100% coverage |
 
 ---
 
@@ -78,6 +82,34 @@ generateFromSchema({ ddl: createTableSQL, rows: 10 });
 // Parse-only
 import { parseDDL, orderByDependencies } from './src/ddl-parser.js';
 const tables = orderByDependencies(parseDDL(ddlString));
+```
+
+### Infer Schema from Existing Data
+```javascript
+import { inferSchemaFromFile } from './src/node.js';
+const { columns } = await inferSchemaFromFile('./users.csv');
+// CLI: ficta infer ./users.csv
+```
+
+### Convert OpenAPI Spec
+```javascript
+import { fromOpenAPIFile } from './src/node.js';
+const schema = await fromOpenAPIFile('./openapi.yaml', { rows: 50, dialect: 'postgres' });
+// CLI: ficta from-openapi ./openapi.yaml -o ficta.schema.json
+```
+
+### Convert GraphQL SDL
+```javascript
+import { fromGraphQLFile } from './src/node.js';
+const schema = await fromGraphQLFile('./schema.graphql', { typeName: 'User' });
+// CLI: ficta from-graphql ./schema.graphql -o ficta.schema.json
+```
+
+### Watch DDL and Auto-Regenerate
+```javascript
+import { watchAndGenerate } from './src/node.js';
+const watcher = watchAndGenerate({ schemaFile: './schema.sql', rows: 10, output: './seed.sql' });
+// CLI: ficta schema ./schema.sql -o seed.sql --watch
 ```
 
 ---
@@ -161,6 +193,8 @@ if (value.includes(',') || value.includes('"') || value.includes('\n')) {
 - `exceljs`, `xml2js` - Formatters (Node.js)
 - `js-yaml`, `@iarna/toml` - YAML/TOML formatters
 - `yargs` - CLI
+- `graphql` - GraphQL SDL parsing (`graphql-bridge.js`)
+- `parquetjs-lite` - Parquet file generation (Node.js)
 - `jest`, `c8` - Testing & coverage
 - `esbuild` - Browser bundles
 
@@ -185,6 +219,12 @@ if (value.includes(',') || value.includes('"') || value.includes('\n')) {
 | Fluent builder | `src/schema-builder.js` → `table()`, `schema()` |
 | DDL file import | `src/node.js` → `generateFromDDL()` |
 | Streaming API | `src/node.js` → `generateStream()` |
+| Schema inference | `src/infer.js` → `inferSchema()` |
+| Infer from file | `src/node.js` → `inferSchemaFromFile()` |
+| OpenAPI → schema | `src/openapi-bridge.js` → `openAPIToFictaSchema()` |
+| GraphQL → schema | `src/graphql-bridge.js` → `graphQLToFictaSchema()` |
+| Watch DDL | `src/node.js` → `watchAndGenerate()` |
+| ficta.schema.json spec | `ficta-schema.v1.json` |
 
 ---
 
@@ -249,4 +289,4 @@ node cli.js --list-types   # Show types
 
 ---
 
-**Version**: 1.1.7 | **Updated**: 2026-02-23 | **Status**: ✅ Ready
+**Version**: 1.1.8 | **Updated**: 2026-02-23 | **Status**: ✅ Ready

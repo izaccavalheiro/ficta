@@ -7,11 +7,13 @@ export { formatColumnName, toCSV, toJSON, toTSV, getFileExtension, detectFormat 
 import { formatColumnName, toCSV, toJSON, toTSV } from './formatters.shared.js';
 
 /**
- * Convert array of objects to XML string
+ * Convert array of objects to XML string.
+ * Returns a resolved Promise<string> so that the return type matches the
+ * Node.js toXML() signature (which uses xml2js and is async).
  * @param {Array} records - Array of row objects
  * @param {string} rootElement - Root element name
  * @param {string} recordElement - Individual record element name
- * @returns {string} XML string
+ * @returns {Promise<string>} Resolved promise containing the XML string
  */
 export function toXML(records, rootElement = 'data', recordElement = 'record') {
   const escapeXML = (str) => {
@@ -38,7 +40,7 @@ export function toXML(records, rootElement = 'data', recordElement = 'record') {
   });
   
   xml += `</${rootElement}>`;
-  return xml;
+  return Promise.resolve(xml);
 }
 
 /**

@@ -198,6 +198,73 @@ export function toTOML(records) {
 }
 
 /**
+ * Generate a Parquet file buffer from records.
+ *
+ * Column type mapping:
+ * - `number` / `autoIncrement` / `integer` / `int` → INT64
+ * - `price` / `float` / `amount`                  → DOUBLE
+ * - `boolean`                                      → BOOLEAN
+ * - all others                                     → UTF8
+ *
+ * @param {Array<Record<string, unknown>>} records - Array of row objects
+ * @param {Array<{name: string, type: string}>} columns - Column definitions
+ * @returns {Promise<Buffer>} Parquet file buffer
+ */
+export async function toParquet(records, columns) {
+  const parquet = await import('parquetjs-lite');
+  /* istanbul ignore next -- CJS/ESM interop; parquet.default always present in test env */
+  const { ParquetSchema, ParquetWriter } = parquet.default || parquet;
+  const os = await import('os');
+  const fs = await import('fs');
+  const path = await import('path');
+
+  // Build Parquet schema fields
+  const schemaFields = {};
+  for (const col of columns) {
+    const t = col.type;
+    if (t === 'number' || t === 'autoIncrement' || t === 'integer' || t === 'int') {
+      schemaFields[col.name] = { type: 'INT64', optional: true };
+    } else if (t === 'price' || t === 'float' || t === 'amount') {
+      schemaFields[col.name] = { type: 'DOUBLE', optional: true };
+    } else if (t === 'boolean') {
+      schemaFields[col.name] = { type: 'BOOLEAN', optional: true };
+    } else {
+      schemaFields[col.name] = { type: 'UTF8', optional: true };
+    }
+  }
+
+  const schema = new ParquetSchema(schemaFields);
+  const tmpFile = path.join(
+    os.tmpdir(),
+    `ficta-${Date.now()}-${Math.random().toString(36).slice(2)}.parquet`
+  );
+
+  const writer = await ParquetWriter.openFile(schema, tmpFile);
+  for (const record of records) {
+    const row = {};
+    for (const col of columns) {
+      const val = record[col.name];
+      const t = col.type;
+      if (t === 'number' || t === 'autoIncrement' || t === 'integer' || t === 'int') {
+        row[col.name] = val !== null && val !== undefined ? BigInt(Math.round(Number(val))) : null;
+      } else if (t === 'price' || t === 'float' || t === 'amount') {
+        row[col.name] = val !== null && val !== undefined ? Number(val) : null;
+      } else if (t === 'boolean') {
+        row[col.name] = val !== null && val !== undefined ? Boolean(val) : null;
+      } else {
+        row[col.name] = val !== null && val !== undefined ? String(val) : null;
+      }
+    }
+    await writer.appendRow(row);
+  }
+  await writer.close();
+
+  const buf = await fs.promises.readFile(tmpFile);
+  await fs.promises.unlink(tmpFile);
+  return buf;
+}
+
+/**
  * Format data according to specified format
  * @param {Array} records - Array of row objects
  * @param {Array} columns - Column definitions
@@ -251,8 +318,11 @@ export async function formatData(records, columns, format, options = {}) {
     
     case 'toml':
       return toTOML(records);
-    
+
+    case 'parquet':
+      return await toParquet(records, columns);
+
     default:
-      throw new Error(`Unsupported format: ${format}. Supported formats: csv, json, xml, xlsx, tsv, sql, yaml, yml, toml`);
+      throw new Error(`Unsupported format: ${format}. Supported formats: csv, json, xml, xlsx, tsv, sql, yaml, yml, toml, parquet`);
   }
 }

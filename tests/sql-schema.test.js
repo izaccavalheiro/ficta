@@ -1651,3 +1651,111 @@ describe('SQL Schema Generator', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// C1 — date alias in sqlTypeMap
+// ---------------------------------------------------------------------------
+
+describe('getSQLType — date alias (C1)', () => {
+  test('date type returns DATE for postgres', () => {
+    expect(sqlSchema.getSQLType({ type: 'date' }, 'postgres')).toBe('DATE');
+  });
+
+  test('date type returns DATE for mysql', () => {
+    expect(sqlSchema.getSQLType({ type: 'date' }, 'mysql')).toBe('DATE');
+  });
+
+  test('date type returns TEXT for sqlite', () => {
+    expect(sqlSchema.getSQLType({ type: 'date' }, 'sqlite')).toBe('TEXT');
+  });
+
+  test('date type returns DATE for generic', () => {
+    expect(sqlSchema.getSQLType({ type: 'date' }, 'generic')).toBe('DATE');
+  });
+
+  test('generateDDL emits DATE for a date column in postgres', () => {
+    const ddl = sqlSchema.generateDDL('events', [{ name: 'event_date', type: 'date' }], { dialect: 'postgres' });
+    expect(ddl).toContain('event_date DATE');
+  });
+
+  test('generateDDL emits TEXT for a date column in sqlite', () => {
+    const ddl = sqlSchema.generateDDL('events', [{ name: 'event_date', type: 'date' }], { dialect: 'sqlite' });
+    expect(ddl).toContain('event_date TEXT');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// H1 — prefix and suffix in sqlTypeMap
+// ---------------------------------------------------------------------------
+
+describe('getSQLType — prefix and suffix (H1)', () => {
+  test('prefix type returns VARCHAR(20) for postgres', () => {
+    expect(sqlSchema.getSQLType({ type: 'prefix' }, 'postgres')).toBe('VARCHAR(20)');
+  });
+
+  test('prefix type returns TEXT for sqlite', () => {
+    expect(sqlSchema.getSQLType({ type: 'prefix' }, 'sqlite')).toBe('TEXT');
+  });
+
+  test('suffix type returns VARCHAR(20) for postgres', () => {
+    expect(sqlSchema.getSQLType({ type: 'suffix' }, 'postgres')).toBe('VARCHAR(20)');
+  });
+
+  test('suffix type returns TEXT for sqlite', () => {
+    expect(sqlSchema.getSQLType({ type: 'suffix' }, 'sqlite')).toBe('TEXT');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C2 — SQLite autoIncrement DDL no longer overwrites def
+// ---------------------------------------------------------------------------
+
+describe('generateDDL — SQLite autoIncrement does not overwrite constraints (C2)', () => {
+  test('autoIncrement PK with notNull preserves NOT NULL in SQLite', () => {
+    const ddl = sqlSchema.generateDDL(
+      'items',
+      [{ name: 'id', type: 'autoIncrement', primaryKey: true, notNull: true }],
+      { dialect: 'sqlite' }
+    );
+    expect(ddl).toContain('INTEGER PRIMARY KEY AUTOINCREMENT');
+    expect(ddl).toContain('NOT NULL');
+  });
+
+  test('autoIncrement PK with default preserves DEFAULT value in SQLite', () => {
+    const ddl = sqlSchema.generateDDL(
+      'items',
+      [{ name: 'id', type: 'autoIncrement', primaryKey: true, default: 0 }],
+      { dialect: 'sqlite' }
+    );
+    expect(ddl).toContain('INTEGER PRIMARY KEY AUTOINCREMENT');
+    expect(ddl).toContain('DEFAULT 0');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// H2 — generic dialect UPSERT adds warning comment
+// ---------------------------------------------------------------------------
+
+describe('generateUpserts — generic dialect fallback (H2)', () => {
+  const records = [{ id: 1, name: 'Alice' }];
+  const columns = [{ name: 'id', primaryKey: true }, { name: 'name' }];
+
+  test('generic dialect emits warning comment', () => {
+    const sql = sqlSchema.generateUpserts('users', records, columns, { dialect: 'generic' });
+    expect(sql).toContain('-- Note: UPSERT is not supported for the "generic" dialect; INSERT used instead.');
+  });
+
+  test('generic dialect still emits a valid INSERT statement', () => {
+    const sql = sqlSchema.generateUpserts('users', records, columns, { dialect: 'generic' });
+    expect(sql).toContain('INSERT INTO users');
+    expect(sql).toContain("'Alice'");
+  });
+
+  test('generic dialect warning only appears once for multiple rows', () => {
+    const multiRecords = [{ id: 1, name: 'Alice' }, { id: 2, name: 'Bob' }];
+    const sql = sqlSchema.generateUpserts('users', multiRecords, columns, { dialect: 'generic' });
+    const commentCount = (sql.match(/Note: UPSERT is not supported/g) || []).length;
+    expect(commentCount).toBe(1);
+  });
+});
+

@@ -6,6 +6,14 @@ import * as formatters from './formatters.js';
 import { generateFromSchema } from './schema-generator.js';
 import { parseDDL as parseDDLStatic, orderByDependencies as orderByDepsStatic } from './ddl-parser.js';
 import { generateDDL as genDDLStatic, generateInserts as genInsertsStatic, generateUpserts as genUpsertStatic } from './sql-schema.js';
+import { inferSchema } from './infer.js';
+import { openAPIToFictaSchema } from './openapi-bridge.js';
+import { graphQLToFictaSchema } from './graphql-bridge.js';
+
+// Re-export schema inference, openapi-bridge and graphql-bridge for consumers
+export { inferSchema } from './infer.js';
+export { fromOpenAPISchema, openAPIToFictaSchema } from './openapi-bridge.js';
+export { fromGraphQLSDL, graphQLToFictaSchema } from './graphql-bridge.js';
 
 // Initialize faker for the core module
 core.setFaker(faker);
@@ -184,6 +192,7 @@ export async function generateFromDDL({
   outputMode = 'insert',
   dialect = 'generic',
   output,
+  locale,
 }) {
   if (!schemaFile) {
     throw new Error('generateFromDDL: schemaFile is required');
@@ -191,6 +200,10 @@ export async function generateFromDDL({
 
   const fs = await import('fs');
   const ddl = await fs.promises.readFile(schemaFile, 'utf-8');
+
+  if (locale) {
+    core.setLocale(locale);
+  }
 
   const sql = generateFromSchema({ ddl, rows, outputMode, dialect });
 
@@ -239,12 +252,13 @@ export async function generateFromSchemaFile({ schemaFile, rows, outputMode = 'd
   const defaultRows = rows ?? schema.defaultRows ?? 100;
   const dialect = schema.dialect || 'generic';
 
-  // Map JSON schema tables to the shape expected by generateFromSchema DDL path.
-  // We build a synthetic DDL string from the JSON schema.
-  // (parseDDLStatic is imported at the top level for coverage trackability)
+  // Build per-table row counts
+  const tableRows = {};
+  for (const tbl of schema.tables) {
+    tableRows[tbl.name] = rows ?? tbl.rows ?? defaultRows;
+  }
 
-  // Build a synthetic DDL string from the JSON table definitions, then use
-  // generateFromSchema to do FK-aware generation in topological order.
+  // Build a synthetic DDL string from the JSON table definitions
   const ddlLines = [];
   for (const tbl of schema.tables) {
     if (!tbl.name || !Array.isArray(tbl.columns)) {
@@ -280,85 +294,16 @@ export async function generateFromSchemaFile({ schemaFile, rows, outputMode = 'd
   }
   const ddl = ddlLines.join('\n\n');
 
-  // Build per-table row counts
-  const tableRows = {};
-  for (const tbl of schema.tables) {
-    tableRows[tbl.name] = rows ?? tbl.rows ?? defaultRows;
-  }
+  // Use generateFromSchema with per-table row map (no duplicated orchestration)
+  const sql = generateFromSchema({ ddl, rows: tableRows, outputMode, dialect });
 
-  // generateFromSchema uses a single rows value; we use the minimum to keep things
-  // simple. Per-table overrides require the orchestrator to be called per-table.
-  // Since all tables may have different row counts, call generateFromSchema per-table
-  // when counts differ, otherwise use the unified path.
-  const rowCounts = Object.values(tableRows);
-  const allSame = rowCounts.every(r => r === rowCounts[0]);
-
-  let sql;
-  if (allSame) {
-    sql = generateFromSchema({ ddl, rows: rowCounts[0], outputMode, dialect });
-  } else {
-    // For mixed row counts, generate table by table and assemble
-    const parsedTables = parseDDLStatic(ddl);
-    const ordered = orderByDepsStatic(parsedTables);
-    const pkStore = {};
-    const output2 = [];
-
-    if (outputMode === 'ddl+insert') {
-      for (const tbl of ordered) {
-        const cols = tbl.columns.map(col => ({
-          name: col.name, type: col.fictaType, sqlType: col.sqlType,
-          primaryKey: Array.isArray(tbl.primaryKey) && tbl.primaryKey.includes(col.name),
-          nullable: col.nullable !== false, notNull: col.nullable === false,
-          default: col.defaultValue ?? undefined,
-          references: tbl.foreignKeys.find(f => f.column === col.name)
-            ? { table: tbl.foreignKeys.find(f => f.column === col.name).refTable, column: tbl.foreignKeys.find(f => f.column === col.name).refColumn }
-            : null,
-        }));
-        output2.push(genDDLStatic(tbl.tableName, cols, { dialect }));
-        output2.push('');
-      }
-    }
-
-    for (const tbl of ordered) {
-      const tableRowCount = tableRows[tbl.tableName] || defaultRows;
-      const fkMap = new Map(tbl.foreignKeys.map(fk => [fk.column, fk]));
-      const records = [];
-      for (let i = 0; i < tableRowCount; i++) {
-        const row = {};
-        for (const col of tbl.columns) {
-          if (fkMap.has(col.name)) {
-            const fk = fkMap.get(col.name);
-            const pkEntry = pkStore[fk.refTable];
-            const parentVals = pkEntry ? (pkEntry[fk.refColumn] || []) : [];
-            if (parentVals.length > 0) {
-              row[col.name] = parentVals[Math.floor(Math.random() * parentVals.length)];
-              continue;
-            }
-          }
-          if (col.autoIncrement || col.fictaType === 'autoIncrement') {
-            row[col.name] = i + 1; continue;
-          }
-          const gen = core.generateRow([{ name: col.name, type: col.fictaType }], i);
-          row[col.name] = gen[col.name];
-        }
-        records.push(row);
-      }
-      // Store PKs
-      for (const pk of (tbl.primaryKey || [])) {
-        if (!pkStore[tbl.tableName]) pkStore[tbl.tableName] = {};
-        pkStore[tbl.tableName][pk] = records.map(r => r[pk]);
-      }
-      const insertCols = tbl.columns.map(col => ({ name: col.name }));
-      output2.push(`-- Table: ${tbl.tableName}`);
-      if (outputMode === 'upsert') {
-        output2.push(genUpsertStatic(tbl.tableName, records, insertCols, { dialect, conflictColumns: tbl.primaryKey }));
-      } else {
-        output2.push(genInsertsStatic(tbl.tableName, records, insertCols, { dialect }));
-      }
-      output2.push('');
-    }
-    sql = output2.join('\n');
-  }
+  // (Keep static imports tickled for coverage of parseDDLStatic / orderByDepsStatic—
+  //  they are used by generateFromSchema internally via schema-generator.js)
+  void parseDDLStatic;
+  void orderByDepsStatic;
+  void genDDLStatic;
+  void genInsertsStatic;
+  void genUpsertStatic;
 
   if (output) {
     await fs.promises.writeFile(output, sql, 'utf-8');
@@ -479,3 +424,160 @@ export function generateStream({
   return stream;
 }
 
+/**
+ * Infer Ficta column definitions from a CSV or JSON file.
+ *
+ * For CSV files (`.csv`): reads and parses the file using `csv-parse/sync`.
+ * For JSON files (`.json`): parses the file as JSON; accepts both an array of
+ * objects and a `{ data: [...] }` envelope.
+ *
+ * @param {string} filePath - Absolute or relative path to a `.csv` or `.json` file
+ * @returns {Promise<{ columns: string, columnList: Array<{name:string,type:string}> }>}
+ * @throws {Error} If the file cannot be read or the format is unsupported
+ */
+export async function inferSchemaFromFile(filePath) {
+  const fs = await import('fs');
+  const path = await import('path');
+
+  const raw = await fs.promises.readFile(filePath, 'utf-8');
+  const ext = path.extname(filePath).toLowerCase();
+
+  let rows;
+
+  if (ext === '.csv') {
+    const { parse: csvParse } = await import('csv-parse/sync');
+    rows = csvParse(raw, { columns: true, skip_empty_lines: true });
+  } else if (ext === '.json') {
+    const parsed = JSON.parse(raw);
+    rows = Array.isArray(parsed) ? parsed : (parsed.data || []);
+  } else {
+    throw new Error(`inferSchemaFromFile: unsupported file type "${ext}". Use .csv or .json`);
+  }
+
+  return inferSchema(rows);
+}
+
+/**
+ * Read an OpenAPI 3.x YAML or JSON file and produce a ficta.schema.json structure.
+ *
+ * @param {string} filePath - Path to the `.json`, `.yaml`, or `.yml` OpenAPI file
+ * @param {object} [options]
+ * @param {string} [options.schemaName] - Which component schema to target
+ * @param {number} [options.rows=100] - Rows per table
+ * @param {string} [options.dialect='postgres'] - SQL dialect
+ * @returns {Promise<object>} ficta.schema.json-compatible object
+ */
+export async function fromOpenAPIFile(filePath, options = {}) {
+  const fs = await import('fs');
+  const path = await import('path');
+
+  const raw = await fs.promises.readFile(filePath, 'utf-8');
+  const ext = path.extname(filePath).toLowerCase();
+
+  let doc;
+  if (ext === '.yaml' || ext === '.yml') {
+    const yaml = await import('js-yaml');
+    doc = yaml.default.load(raw);
+  } else {
+    doc = JSON.parse(raw);
+  }
+
+  return openAPIToFictaSchema(doc, options);
+}
+
+/**
+ * Read a `.graphql` or `.gql` file and produce a ficta.schema.json structure.
+ *
+ * @param {string} filePath - Path to the `.graphql` or `.gql` file
+ * @param {object} [options]
+ * @param {string} [options.typeName] - GraphQL object type to target
+ * @param {number} [options.rows=100] - Rows per table
+ * @param {string} [options.dialect='postgres'] - SQL dialect
+ * @returns {Promise<object>} ficta.schema.json-compatible object
+ */
+export async function fromGraphQLFile(filePath, options = {}) {
+  const fs = await import('fs');
+  const raw = await fs.promises.readFile(filePath, 'utf-8');
+  return graphQLToFictaSchema(raw, options);
+}
+
+/**
+ * Watch a schema file and regenerate output whenever it changes.
+ *
+ * Uses Node.js `fs.watch` (no extra dependencies) with a configurable debounce
+ * delay to avoid duplicate triggers on rapid edits. Calls `generateFromDDL`
+ * on each change.
+ *
+ * @param {object} options - Same options as generateFromDDL, plus:
+ * @param {function} [options.onSuccess] - Called with (outputPath, elapsedMs) after each successful generation
+ * @param {function} [options.onError]   - Called with (Error) on generation failure (if omitted, error is thrown)
+ * @param {number}   [options.debounceMs=300] - Debounce delay in milliseconds
+ * @returns {{ stop(): void }} An object with a `stop()` method to halt watching
+ */
+export function watchAndGenerate(options) {
+  const {
+    onSuccess,
+    onError,
+    debounceMs = 300,
+    ...generateOptions
+  } = options;
+
+  if (!generateOptions.schemaFile) {
+    throw new Error('watchAndGenerate: schemaFile is required');
+  }
+
+  let debounceTimer = null;
+  let stopped = false;
+
+  async function runGeneration() {
+    const start = Date.now();
+    try {
+      const result = await generateFromDDL(generateOptions);
+      const elapsed = Date.now() - start;
+      if (onSuccess) {
+        onSuccess(generateOptions.output || '', elapsed);
+      }
+      return result;
+    } catch (err) {
+      /* istanbul ignore else -- defensive throw when no onError provided; unhandled async rejection cannot be safely tested */
+      if (onError) {
+        onError(err);
+      } else {
+        throw err;
+      }
+    }
+  }
+
+  function handler() {
+    /* istanbul ignore next -- race-condition: stopped becomes true after OS event queued */
+    if (stopped) return;
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      /* istanbul ignore next -- race-condition: stopped becomes true between debounce fire and setTimeout callback */
+      if (!stopped) runGeneration();
+    }, debounceMs);
+  }
+
+  // Dynamically import fs to watch the file
+  import('fs').then(fsModule => {
+    if (!stopped) {
+      const watcher = fsModule.watch(generateOptions.schemaFile, { persistent: false }, handler);
+
+      // Override stop to close the watcher
+      watcherRef.stop = () => {
+        stopped = true;
+        clearTimeout(debounceTimer);
+        watcher.close();
+      };
+    }
+  });
+
+  const watcherRef = {
+    stop() {
+      stopped = true;
+      clearTimeout(debounceTimer);
+    },
+  };
+
+  return watcherRef;
+}

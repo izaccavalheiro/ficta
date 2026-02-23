@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Schema Builder - Ficta</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
+      min-height: 100vh;
+      padding: 20px;
+      color: #333;
+    }
+    .app {
+      max-width: 1300px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 420px 1fr;
+      gap: 24px;
+      align-items: start;
+    }
+    .panel {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+      overflow: hidden;
+    }
+    .panel-header {
+      padding: 20px 24px;
+      border-bottom: 1px solid #f0f0f0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .panel-header h2 { font-size: 18px; color: #1a1a2e; }
+    .panel-body { padding: 20px 24px; }
+    /* Settings bar */
+    .settings-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .settings-grid .full-row { grid-column: 1 / -1; }
+    label.field-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: #666;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    select, input[type="text"], input[type="number"], textarea {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      font-size: 14px;
+      color: #333;
+      background: #fafafa;
+      transition: border-color 0.2s;
+    }
+    select:focus, input:focus, textarea:focus {
+      outline: none;
+      border-color: #667eea;
+      background: #fff;
+    }
+    textarea { resize: vertical; min-height: 80px; font-family: monospace; font-size: 12px; }
+    /* Column list */
+    #column-list { list-style: none; }
+    .column-row {
+      display: grid;
+      grid-template-columns: 24px 1fr 1fr 32px 32px 28px;
+      gap: 6px;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid #f5f5f5;
+    }
+    .column-row:last-child { border-bottom: none; }
+    .drag-handle {
+      cursor: grab;
+      color: #ccc;
+      font-size: 16px;
+      text-align: center;
+      user-select: none;
+    }
+    .drag-handle:active { cursor: grabbing; }
+    .col-name-input {
+      padding: 6px 8px;
+      font-size: 13px;
+    }
+    .col-type-select {
+      padding: 6px 8px;
+      font-size: 13px;
+    }
+    .icon-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 16px;
+      padding: 4px;
+      border-radius: 4px;
+      transition: background 0.15s;
+    }
+    .icon-btn:hover { background: #f0f0f0; }
+    .icon-btn.pk { color: #f5a623; }
+    .icon-btn.pk.active { color: #d4870d; background: #fff3d6; }
+    .icon-btn.nullable { color: #aaa; }
+    .icon-btn.nullable.active { color: #4caf50; background: #e8f5e9; }
+    .icon-btn.del { color: #ccc; }
+    .icon-btn.del:hover { color: #e53935; background: #ffebee; }
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 9px 16px;
+      border-radius: 7px;
+      font-size: 14px;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-primary { background: #667eea; color: #fff; }
+    .btn-primary:hover { background: #5a6ed9; }
+    .btn-secondary { background: #f0f0f0; color: #444; }
+    .btn-secondary:hover { background: #e2e2e2; }
+    .btn-success { background: #4caf50; color: #fff; }
+    .btn-success:hover { background: #43a047; }
+    .btn-sm { padding: 6px 12px; font-size: 12px; }
+    .btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
+    /* SQL Preview */
+    #sql-output {
+      background: #1e1e2e;
+      color: #cdd6f4;
+      border: none;
+      border-radius: 8px;
+      padding: 18px;
+      font-family: 'JetBrains Mono', 'Fira Code', 'Menlo', monospace;
+      font-size: 12.5px;
+      line-height: 1.6;
+      min-height: 400px;
+      white-space: pre;
+      overflow: auto;
+      resize: vertical;
+    }
+    /* Import DDL */
+    .import-section { margin-top: 16px; padding-top: 16px; border-top: 1px solid #f0f0f0; }
+    /* Drag state */
+    .column-row.dragging { opacity: 0.4; }
+    .column-row.drag-over { border-top: 2px solid #667eea; }
+    /* Badge */
+    .badge {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .badge-blue { background: #e8eeff; color: #667eea; }
+    /* Title */
+    .app-title {
+      text-align: center;
+      color: #fff;
+      margin-bottom: 20px;
+    }
+    .app-title h1 { font-size: 28px; margin-bottom: 4px; }
+    .app-title p { opacity: 0.7; font-size: 14px; }
+    /* Responsive */
+    @media (max-width: 860px) {
+      .app { grid-template-columns: 1fr; }
+    }
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: #666;
+      padding: 10px 24px;
+      background: #f9f9f9;
+      border-top: 1px solid #f0f0f0;
+    }
+    .status-bar .ok { color: #4caf50; }
+    .status-bar .err { color: #e53935; }
+  </style>
+</head>
+<body>
+  <div class="app-title">
+    <h1>⚡ Ficta Schema Builder</h1>
+    <p>Visually assemble SQL schemas and generate realistic test data</p>
+  </div>
+
+  <div class="app">
+    <!-- Left: column builder -->
+    <div>
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Schema Settings</h2>
+          <span class="badge badge-blue" id="col-count">0 columns</span>
+        </div>
+        <div class="panel-body">
+          <div class="settings-grid">
+            <div>
+              <label class="field-label">Table Name</label>
+              <input type="text" id="table-name" value="users" placeholder="table_name">
+            </div>
+            <div>
+              <label class="field-label">Rows</label>
+              <input type="number" id="rows" value="10" min="1" max="10000">
+            </div>
+            <div>
+              <label class="field-label">Dialect</label>
+              <select id="dialect">
+                <option value="postgres" selected>PostgreSQL</option>
+                <option value="mysql">MySQL</option>
+                <option value="sqlite">SQLite</option>
+                <option value="generic">Generic</option>
+              </select>
+            </div>
+            <div>
+              <label class="field-label">Output Mode</label>
+              <select id="output-mode">
+                <option value="ddl+insert" selected>DDL + INSERT</option>
+                <option value="insert">INSERT only</option>
+                <option value="upsert">UPSERT</option>
+                <option value="truncate+insert">TRUNCATE + INSERT</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Column list -->
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <label class="field-label" style="margin:0">Columns</label>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-secondary btn-sm" onclick="addColumn()">+ Add Column</button>
+              <button class="btn btn-secondary btn-sm" onclick="clearColumns()">Clear</button>
+            </div>
+          </div>
+          <div style="font-size:11px;color:#aaa;display:grid;grid-template-columns:24px 1fr 1fr 32px 32px 28px;gap:6px;padding:0 0 6px 0">
+            <span></span><span>Name</span><span>Type</span>
+            <span title="Primary Key" style="text-align:center">PK</span>
+            <span title="Nullable" style="text-align:center">NULL</span>
+            <span></span>
+          </div>
+          <ul id="column-list"></ul>
+
+          <div class="btn-group" style="margin-top:16px">
+            <button class="btn btn-primary" onclick="generateSQL()">⚡ Generate SQL</button>
+            <button class="btn btn-secondary" onclick="exportSchema()">📤 Export Schema JSON</button>
+          </div>
+
+          <!-- Import DDL -->
+          <div class="import-section">
+            <label class="field-label">Import from DDL</label>
+            <textarea id="ddl-input" placeholder="Paste CREATE TABLE ... SQL here"></textarea>
+            <div class="btn-group" style="margin-top:8px">
+              <button class="btn btn-secondary btn-sm" onclick="importDDL()">Parse DDL</button>
+            </div>
+          </div>
+        </div>
+        <div class="status-bar" id="status-bar">
+          <span>Ready</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: SQL preview -->
+    <div class="panel">
+      <div class="panel-header">
+        <h2>SQL Preview</h2>
+        <div class="btn-group">
+          <button class="btn btn-secondary btn-sm" onclick="copySql()">📋 Copy</button>
+          <button class="btn btn-success btn-sm" onclick="downloadSql()">⬇ Download .sql</button>
+        </div>
+      </div>
+      <div class="panel-body" style="padding:0">
+        <pre id="sql-output">-- Click "Generate SQL" to see output here --</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Load Ficta browser bundle -->
+  <script>
+    // Try loading from dist (production) or fallback to relative src path
+    const FICTA_DIST = '../dist/ficta.browser.js';
+  </script>
+  <script type="module">
+    // -------------------------------------------------------------------------
+    // Ficta integration — import from browser bundle or src
+    // -------------------------------------------------------------------------
+    let Ficta;
+
+    // Try importing the built browser bundle; fall back gracefully
+    try {
+      const mod = await import(FICTA_DIST);
+      Ficta = mod.default || mod;
+    } catch (_) {
+      // If dist isn't built yet, fall back to the full ESM source entry (works
+      // during development when running a local HTTP server in the repo root).
+      try {
+        const mod = await import('../src/browser.js');
+        Ficta = mod;
+        // Ficta browser.js uses lazy-init; manually set faker for the demo
+        const { faker } = await import('https://esm.sh/@faker-js/faker');
+        if (Ficta.setFaker) Ficta.setFaker(faker);
+      } catch (e2) {
+        document.getElementById('sql-output').textContent =
+          '-- Could not load Ficta. Please run `npm run build` or serve from repo root. --\n-- Error: ' + e2.message + ' --';
+      }
+    }
+
+    window.FictaLib = Ficta;
+
+    // -------------------------------------------------------------------------
+    // Data types available for selection
+    // -------------------------------------------------------------------------
+    const TYPES = [
+      'autoIncrement','uuid','fullName','firstName','lastName','email','phone',
+      'company','jobTitle','word','sentence','paragraph','url','ip','username',
+      'password','number','price','boolean','date','timestamp','pastDate',
+      'futureDate','street','city','state','zipCode','country','latitude',
+      'longitude','creditCard','iban','currency','product','productDescription',
+      'department','color','hex','json',
+    ];
+
+    let columns = [
+      { name: 'id', type: 'autoIncrement', pk: true, nullable: false },
+      { name: 'firstName', type: 'firstName', pk: false, nullable: false },
+      { name: 'lastName',  type: 'lastName',  pk: false, nullable: false },
+      { name: 'email',     type: 'email',     pk: false, nullable: false },
+    ];
+
+    let dragSrcIndex = null;
+
+    // -------------------------------------------------------------------------
+    // Render column list
+    // -------------------------------------------------------------------------
+    function render() {
+      const list = document.getElementById('column-list');
+      list.innerHTML = '';
+      columns.forEach((col, i) => {
+        const li = document.createElement('li');
+        li.className = 'column-row';
+        li.draggable = true;
+        li.dataset.index = i;
+
+        const typeOptions = TYPES.map(t =>
+          `<option value="${t}" ${t === col.type ? 'selected' : ''}>${t}</option>`
+        ).join('');
+
+        li.innerHTML = `
+          <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+          <input class="col-name-input" type="text" value="${col.name}"
+            onchange="updateColumn(${i},'name',this.value)" placeholder="col_name">
+          <select class="col-type-select" onchange="updateColumn(${i},'type',this.value)">
+            ${typeOptions}
+          </select>
+          <button class="icon-btn pk ${col.pk ? 'active' : ''}"
+            title="Primary Key" onclick="togglePK(${i})">🔑</button>
+          <button class="icon-btn nullable ${col.nullable ? 'active' : ''}"
+            title="Nullable" onclick="toggleNullable(${i})">◌</button>
+          <button class="icon-btn del" title="Remove column"
+            onclick="removeColumn(${i})">✕</button>
+        `;
+
+        // Drag & drop wiring
+        li.addEventListener('dragstart', e => {
+          dragSrcIndex = i;
+          li.classList.add('dragging');
+          e.dataTransfer.effectAllowed = 'move';
+        });
+        li.addEventListener('dragend', () => li.classList.remove('dragging'));
+        li.addEventListener('dragover', e => {
+          e.preventDefault();
+          li.classList.add('drag-over');
+        });
+        li.addEventListener('dragleave', () => li.classList.remove('drag-over'));
+        li.addEventListener('drop', e => {
+          e.preventDefault();
+          li.classList.remove('drag-over');
+          if (dragSrcIndex !== null && dragSrcIndex !== i) {
+            const moved = columns.splice(dragSrcIndex, 1)[0];
+            columns.splice(i, 0, moved);
+            dragSrcIndex = null;
+            render();
+          }
+        });
+
+        list.appendChild(li);
+      });
+
+      document.getElementById('col-count').textContent = `${columns.length} column${columns.length !== 1 ? 's' : ''}`;
+    }
+
+    // -------------------------------------------------------------------------
+    // Column CRUD
+    // -------------------------------------------------------------------------
+    window.addColumn = function() {
+      columns.push({ name: `col${columns.length + 1}`, type: 'word', pk: false, nullable: true });
+      render();
+    };
+
+    window.removeColumn = function(i) {
+      columns.splice(i, 1);
+      render();
+    };
+
+    window.clearColumns = function() {
+      columns = [];
+      render();
+    };
+
+    window.updateColumn = function(i, field, value) {
+      columns[i][field] = value;
+    };
+
+    window.togglePK = function(i) {
+      columns[i].pk = !columns[i].pk;
+      if (columns[i].pk) columns[i].nullable = false;
+      render();
+    };
+
+    window.toggleNullable = function(i) {
+      columns[i].nullable = !columns[i].nullable;
+      if (columns[i].nullable) columns[i].pk = false;
+      render();
+    };
+
+    // -------------------------------------------------------------------------
+    // Generate SQL using Ficta schema builder API
+    // -------------------------------------------------------------------------
+    window.generateSQL = function() {
+      if (!window.FictaLib) {
+        setStatus('Ficta library not loaded', 'err');
+        return;
+      }
+
+      const tableName = document.getElementById('table-name').value.trim() || 'data_table';
+      const rows = parseInt(document.getElementById('rows').value, 10) || 10;
+      const dialect = document.getElementById('dialect').value;
+      const mode = document.getElementById('output-mode').value;
+
+      if (columns.length === 0) {
+        setStatus('Add at least one column first', 'err');
+        return;
+      }
+
+      try {
+        const { table } = window.FictaLib;
+        let builder = table(tableName).dialect(dialect).rows(rows);
+
+        for (const col of columns) {
+          const opts = {};
+          if (col.pk)       opts.primaryKey = true;
+          if (col.nullable) opts.nullable   = true;
+          builder = builder.column(col.name, col.type, opts);
+        }
+
+        const sql = builder.toSQL(mode);
+        document.getElementById('sql-output').textContent = sql;
+        setStatus(`Generated ${rows} rows for table "${tableName}" (${dialect})`, 'ok');
+      } catch (err) {
+        document.getElementById('sql-output').textContent = `-- Error: ${err.message} --`;
+        setStatus(err.message, 'err');
+      }
+    };
+
+    // -------------------------------------------------------------------------
+    // Export schema JSON
+    // -------------------------------------------------------------------------
+    window.exportSchema = function() {
+      const tableName = document.getElementById('table-name').value.trim() || 'data_table';
+      const rows = parseInt(document.getElementById('rows').value, 10) || 10;
+      const dialect = document.getElementById('dialect').value;
+
+      const schema = {
+        dialect,
+        tables: [{
+          name: tableName,
+          rows,
+          columns: columns.map(col => ({
+            name: col.name,
+            type: col.type,
+            ...(col.pk       ? { primaryKey: true }  : {}),
+            ...(col.nullable ? { nullable: true }     : {}),
+          }))
+        }]
+      };
+
+      const json = JSON.stringify(schema, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = `${tableName}.schema.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setStatus('Schema JSON exported', 'ok');
+    };
+
+    // -------------------------------------------------------------------------
+    // Import from DDL
+    // -------------------------------------------------------------------------
+    window.importDDL = function() {
+      if (!window.FictaLib || !window.FictaLib.parseDDL) {
+        setStatus('parseDDL not available - rebuild browser bundle', 'err');
+        return;
+      }
+
+      const ddl = document.getElementById('ddl-input').value.trim();
+      if (!ddl) {
+        setStatus('Paste a DDL snippet first', 'err');
+        return;
+      }
+
+      try {
+        const tables = window.FictaLib.parseDDL(ddl);
+        if (!tables.length) {
+          setStatus('No CREATE TABLE found in input', 'err');
+          return;
+        }
+
+        const t = tables[0];
+        document.getElementById('table-name').value = t.tableName;
+        columns = t.columns.map(c => ({
+          name: c.name,
+          type: c.fictaType || 'word',
+          pk: (t.primaryKey || []).includes(c.name),
+          nullable: c.nullable !== false,
+        }));
+        render();
+        setStatus(`Imported "${t.tableName}" with ${columns.length} columns`, 'ok');
+      } catch (err) {
+        setStatus('Parse error: ' + err.message, 'err');
+      }
+    };
+
+    // -------------------------------------------------------------------------
+    // Copy & Download SQL
+    // -------------------------------------------------------------------------
+    window.copySql = function() {
+      const text = document.getElementById('sql-output').textContent;
+      navigator.clipboard.writeText(text).then(() => setStatus('SQL copied to clipboard', 'ok'));
+    };
+
+    window.downloadSql = function() {
+      const text = document.getElementById('sql-output').textContent;
+      if (!text || text.startsWith('--')) {
+        setStatus('Generate SQL first', 'err');
+        return;
+      }
+      const tableName = document.getElementById('table-name').value.trim() || 'data_table';
+      const blob = new Blob([text], { type: 'text/plain' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = `${tableName}.sql`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setStatus('SQL downloaded', 'ok');
+    };
+
+    // -------------------------------------------------------------------------
+    // Status bar
+    // -------------------------------------------------------------------------
+    function setStatus(msg, level) {
+      const bar = document.getElementById('status-bar');
+      bar.innerHTML = `<span class="${level || ''}">${msg}</span>`;
+    }
+
+    // -------------------------------------------------------------------------
+    // Init
+    // -------------------------------------------------------------------------
+    render();
+    generateSQL();
+  </script>
+</body>
+</html>

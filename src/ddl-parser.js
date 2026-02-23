@@ -17,7 +17,8 @@ const NAME_HINTS = [
   [/\bfirst_?name\b/i, 'firstName'],
   [/\blast_?name\b/i, 'lastName'],
   [/\bfull_?name\b|\bname\b/i, 'fullName'],
-  [/\bjob_?title\b|\btitle\b/i, 'jobTitle'],
+  [/\bjob_?title\b/i, 'jobTitle'],      // job_title / jobTitle only
+  [/\btitle\b/i, 'sentence'],            // generic title → descriptive text
   [/\bprefix\b/i, 'prefix'],
   [/\bsuffix\b/i, 'suffix'],
 
@@ -462,6 +463,11 @@ export function parseDDL(ddlString) {
 
       // Table-level UNIQUE / INDEX / KEY / CHECK — skip
       if (/^(UNIQUE\s+(KEY\s+|INDEX\s+)?\w*\s*\(|KEY\s+|INDEX\s+|CHECK\s*\()/i.test(trimmed)) {
+        continue;
+      }
+
+      // Named UNIQUE constraints — skip gracefully
+      if (/^CONSTRAINT\s+[`"]?\w+[`"]?\s+UNIQUE\b/i.test(trimmed)) {
         continue;
       }
 

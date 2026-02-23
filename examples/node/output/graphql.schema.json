@@ -1,0 +1,103 @@
+{
+  "dialect": "postgres",
+  "defaultRows": 10,
+  "tables": [
+    {
+      "name": "product",
+      "rows": 10,
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "sku",
+          "type": "word",
+          "nullable": false
+        },
+        {
+          "name": "name",
+          "type": "fullName",
+          "nullable": false
+        },
+        {
+          "name": "description",
+          "type": "word",
+          "nullable": true
+        },
+        {
+          "name": "price",
+          "type": "price",
+          "nullable": false
+        },
+        {
+          "name": "stock",
+          "type": "number",
+          "nullable": false
+        },
+        {
+          "name": "category",
+          "type": "enum:ELECTRONICS|BOOKS|CLOTHING|SPORTS|HOME",
+          "nullable": false
+        },
+        {
+          "name": "available",
+          "type": "boolean",
+          "nullable": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "nullable": true
+        }
+      ]
+    },
+    {
+      "name": "customer",
+      "rows": 10,
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "email",
+          "type": "email",
+          "nullable": false
+        },
+        {
+          "name": "first_name",
+          "type": "firstName",
+          "nullable": false
+        },
+        {
+          "name": "last_name",
+          "type": "lastName",
+          "nullable": true
+        },
+        {
+          "name": "phone",
+          "type": "phone",
+          "nullable": true
+        },
+        {
+          "name": "city",
+          "type": "city",
+          "nullable": true
+        },
+        {
+          "name": "country",
+          "type": "country",
+          "nullable": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "nullable": true
+        }
+      ]
+    }
+  ]
+}

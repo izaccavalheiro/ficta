@@ -1085,3 +1085,34 @@ describe('Plugin API', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// H4 — Validation for empty enum list and inverted range
+// ---------------------------------------------------------------------------
+
+describe('generateRow — input validation (H4)', () => {
+  test('enum with no values throws descriptive error', () => {
+    expect(() => generateData({ columns: 'status:enum:', rows: 1 })).toThrow(
+      'enum type requires at least one value. Got: "enum:"'
+    );
+  });
+
+  test('enum with only empty strings throws descriptive error', () => {
+    // "enum:|" splits to ['', ''] — both empty
+    expect(() => generateData({ columns: 'status:enum:|', rows: 1 })).toThrow(
+      'enum type requires at least one value'
+    );
+  });
+
+  test('range with min > max throws descriptive error', () => {
+    expect(() => generateData({ columns: 'score:range:100-1', rows: 1 })).toThrow(
+      'range min (100) must be less than or equal to max (1). Got: "range:100-1"'
+    );
+  });
+
+  test('range with equal min and max is valid (min === max)', () => {
+    const result = generateData({ columns: 'score:range:5-5', rows: 1 });
+    expect(result.records[0].score).toBe(5);
+  });
+});
+

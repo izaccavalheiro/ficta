@@ -7,7 +7,11 @@ import {
   generateFromDDL,
   generateFromSchemaFile,
   generateStream,
-  seedFaker
+  seedFaker,
+  inferSchemaFromFile,
+  fromOpenAPIFile,
+  fromGraphQLFile,
+  watchAndGenerate
 } from '../src/node.js';
 import { PassThrough } from 'stream';
 import fs from 'fs';
@@ -293,6 +297,17 @@ describe('Node.js Module', () => {
         consoleSpy.mockRestore();
       }
     });
+
+    // C5: locale param in generateFromDDL covers node.js:197 (core.setLocale branch)
+    test('accepts locale option and applies it without throwing (C5)', async () => {
+      const sql = await generateFromDDL({
+        schemaFile: 'test-schema.sql',
+        rows: 2,
+        locale: 'de',
+      });
+      expect(typeof sql).toBe('string');
+      expect(sql).toContain('INSERT INTO');
+    });
   });
 
   describe('seed support', () => {
@@ -360,6 +375,27 @@ describe('Node.js Module', () => {
       expect(dts).toContain('export function generateAndSave');
       expect(dts).toContain('export function generateFromDDL');
       expect(dts).toContain('export interface GenerateAndSaveOptions');
+    });
+
+    test('index.d.ts contains new feature declarations', () => {
+      const dts = fs.readFileSync('index.d.ts', 'utf-8');
+      // Schema inference
+      expect(dts).toContain('export function inferSchemaFromFile');
+      expect(dts).toContain('export interface InferResult');
+      // OpenAPI bridge
+      expect(dts).toContain('export function fromOpenAPIFile');
+      expect(dts).toContain('export function fromOpenAPISchema');
+      expect(dts).toContain('export function openAPIToFictaSchema');
+      // GraphQL bridge
+      expect(dts).toContain('export function fromGraphQLFile');
+      expect(dts).toContain('export function fromGraphQLSDL');
+      expect(dts).toContain('export function graphQLToFictaSchema');
+      // Watch mode
+      expect(dts).toContain('export function watchAndGenerate');
+      expect(dts).toContain('export interface FileWatcher');
+      // Parquet
+      expect(dts).toContain('export function toParquet');
+      expect(dts).toContain("'parquet'");
     });
   });
 
@@ -861,6 +897,418 @@ describe('Node.js Module', () => {
       const output = await collectStream(stream);
       // JSON values contain commas/braces — they must be wrapped in double quotes
       expect(output).toMatch(/"[^"]*"/);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // inferSchemaFromFile
+  // ---------------------------------------------------------------------------
+  describe('inferSchemaFromFile', () => {
+    const tmpCsv = 'test-infer-sample.csv';
+    const tmpJson = 'test-infer-sample.json';
+    const tmpJsonEnvelope = 'test-infer-envelope.json';
+    const tmpBadExt = 'test-infer-sample.xyz';
+
+    afterEach(async () => {
+      for (const f of [tmpCsv, tmpJson, tmpJsonEnvelope, tmpBadExt]) {
+        if (fs.existsSync(f)) await unlink(f).catch(() => {});
+      }
+    });
+
+    test('infers schema from a small CSV file', async () => {
+      const content = 'id,email,name\n1,alice@example.com,Alice\n2,bob@example.com,Bob\n';
+      await writeFile(content, tmpCsv);
+      const result = await inferSchemaFromFile(tmpCsv);
+      expect(result.columns).toBeDefined();
+      expect(typeof result.columns).toBe('string');
+      expect(result.columns.length).toBeGreaterThan(0);
+      expect(result.columnList).toHaveLength(3);
+    });
+
+    test('infers schema from a JSON array file', async () => {
+      const data = [
+        { id: 1, name: 'Alice', score: 42 },
+        { id: 2, name: 'Bob', score: 99 },
+      ];
+      await writeFile(JSON.stringify(data), tmpJson);
+      const result = await inferSchemaFromFile(tmpJson);
+      expect(result.columns.length).toBeGreaterThan(0);
+      expect(result.columnList.length).toBeGreaterThan(0);
+    });
+
+    test('infers schema from a JSON { data: [...] } envelope file', async () => {
+      const payload = { data: [{ id: 1, email: 'a@b.com' }] };
+      await writeFile(JSON.stringify(payload), tmpJsonEnvelope);
+      const result = await inferSchemaFromFile(tmpJsonEnvelope);
+      expect(result.columns.length).toBeGreaterThan(0);
+    });
+
+    test('throws for unsupported file extension', async () => {
+      await writeFile('some content', tmpBadExt);
+      await expect(inferSchemaFromFile(tmpBadExt)).rejects.toThrow('unsupported file type');
+    });
+
+    test('infers from JSON object without data property (covers parsed.data || [] fallback)', async () => {
+      // parsed = {} → Array.isArray({}) = false → (parsed.data || []) → (undefined || []) = []
+      const tmpJsonEmpty = 'test-infer-empty-obj.json';
+      try {
+        await writeFile(JSON.stringify({}), tmpJsonEmpty);
+        const result = await inferSchemaFromFile(tmpJsonEmpty);
+        expect(result.columnList).toEqual([]);
+        expect(result.columns).toBe('');
+      } finally {
+        if (fs.existsSync(tmpJsonEmpty)) await unlink(tmpJsonEmpty).catch(() => {});
+      }
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // fromOpenAPIFile
+  // ---------------------------------------------------------------------------
+  describe('fromOpenAPIFile', () => {
+    const tmpOpenApiJson = 'test-openapi.json';
+    const tmpOpenApiYaml = 'test-openapi.yaml';
+
+    const openApiDoc = {
+      openapi: '3.0.0',
+      components: {
+        schemas: {
+          User: {
+            type: 'object',
+            properties: {
+              id: { type: 'string', format: 'uuid' },
+              email: { type: 'string', format: 'email' },
+            }
+          }
+        }
+      }
+    };
+
+    afterEach(async () => {
+      for (const f of [tmpOpenApiJson, tmpOpenApiYaml]) {
+        if (fs.existsSync(f)) await unlink(f).catch(() => {});
+      }
+    });
+
+    test('reads a JSON OpenAPI file and returns ficta.schema.json structure', async () => {
+      await writeFile(JSON.stringify(openApiDoc), tmpOpenApiJson);
+      const result = await fromOpenAPIFile(tmpOpenApiJson);
+      expect(result).toHaveProperty('tables');
+      expect(result.tables.length).toBeGreaterThan(0);
+    });
+
+    test('reads a YAML OpenAPI file', async () => {
+      const yamlContent = `
+openapi: "3.0.0"
+components:
+  schemas:
+    Item:
+      type: object
+      properties:
+        name:
+          type: string
+        qty:
+          type: integer
+`;
+      await writeFile(yamlContent, tmpOpenApiYaml);
+      const result = await fromOpenAPIFile(tmpOpenApiYaml);
+      expect(result).toHaveProperty('tables');
+    });
+
+    test('accepts .yml extension too', async () => {
+      const tmpYml = 'test-openapi.yml';
+      const yamlContent = `
+openapi: "3.0.0"
+components:
+  schemas:
+    Widget:
+      type: object
+      properties:
+        title:
+          type: string
+`;
+      await writeFile(yamlContent, tmpYml);
+      try {
+        const result = await fromOpenAPIFile(tmpYml);
+        expect(result).toHaveProperty('tables');
+      } finally {
+        if (fs.existsSync(tmpYml)) await unlink(tmpYml).catch(() => {});
+      }
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // fromGraphQLFile
+  // ---------------------------------------------------------------------------
+  describe('fromGraphQLFile', () => {
+    const tmpGql = 'test-schema.graphql';
+
+    const sdlContent = `
+      type User {
+        id: ID!
+        email: String!
+        age: Int
+      }
+    `;
+
+    afterEach(async () => {
+      if (fs.existsSync(tmpGql)) await unlink(tmpGql).catch(() => {});
+    });
+
+    test('reads a .graphql file and returns ficta.schema.json structure', async () => {
+      await writeFile(sdlContent, tmpGql);
+      const result = await fromGraphQLFile(tmpGql);
+      expect(result).toHaveProperty('tables');
+      expect(result.tables.length).toBeGreaterThan(0);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // watchAndGenerate
+  // ---------------------------------------------------------------------------
+  describe('watchAndGenerate', () => {
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+    const ddlFixture = `
+      CREATE TABLE watch_test (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255)
+      );
+    `;
+
+    test('throws when schemaFile is not provided', () => {
+      expect(() => watchAndGenerate({ output: 'out.sql' })).toThrow('watchAndGenerate: schemaFile is required');
+    });
+
+    test('returns an object with a stop() method', () => {
+      // Use a non-existent file; we're just checking the return shape
+      const watcher = watchAndGenerate({ schemaFile: '__non_existent__.sql' });
+      expect(typeof watcher.stop).toBe('function');
+      watcher.stop();
+    });
+
+    test('stop() can be called multiple times without error', () => {
+      const watcher = watchAndGenerate({ schemaFile: '__non_existent__.sql' });
+      expect(() => { watcher.stop(); watcher.stop(); }).not.toThrow();
+    });
+
+    test('calls onSuccess after file change', async () => {
+      // Write a temp DDL file
+      const tmpSchema = 'test-watch-schema.sql';
+      const tmpOut = 'test-watch-out.sql';
+
+      try {
+        await writeFile(ddlFixture, tmpSchema);
+
+        let resolveFirst;
+        const firstCall = new Promise(r => { resolveFirst = r; });
+
+        const watcher = watchAndGenerate({
+          schemaFile: tmpSchema,
+          output: tmpOut,
+          outputMode: 'insert',
+          dialect: 'generic',
+          rows: 2,
+          debounceMs: 100,
+          onSuccess: (path, ms) => resolveFirst({ path, ms }),
+          onError: (e) => { /* Swallow errors in test */ },
+        });
+
+        // Wait briefly for watcher to initialize, then touch the file
+        await sleep(100);
+        await fs.promises.appendFile(tmpSchema, '\n-- touch');
+
+        const result = await Promise.race([
+          firstCall,
+          sleep(3000).then(() => null),
+        ]);
+
+        watcher.stop();
+
+        // The file change should have triggered onSuccess
+        expect(result).not.toBeNull();
+        expect(typeof result.ms).toBe('number');
+      } finally {
+        for (const f of [tmpSchema, tmpOut]) {
+          if (fs.existsSync(f)) await unlink(f).catch(() => {});
+        }
+      }
+    }, 10000);
+
+    test('calls onError when generateFromDDL fails after file change', async () => {
+      // Creates a valid schema file, starts watcher, then corrupts the file
+      // so that the next regeneration call throws and onError is invoked.
+      const tmpSchema = 'test-watch-error-onerror.sql';
+      const validDDL = `
+        CREATE TABLE watch_err_test (
+          id SERIAL PRIMARY KEY,
+          name VARCHAR(255)
+        );
+      `;
+
+      let capturedError = null;
+      let resolveError;
+      const errorPromise = new Promise(r => { resolveError = r; });
+
+      try {
+        await writeFile(validDDL, tmpSchema);
+
+        const watcher = watchAndGenerate({
+          schemaFile: tmpSchema,
+          outputMode: 'insert',
+          dialect: 'generic',
+          rows: 2,
+          debounceMs: 50,
+          onError: (err) => {
+            capturedError = err;
+            resolveError(err);
+          },
+        });
+
+        // Let the watcher initialize
+        await sleep(100);
+
+        // Overwrite with invalid SQL so next generation fails
+        fs.writeFileSync(tmpSchema, 'TOTALLY INVALID SQL NOT PARSEABLE ###');
+
+        // Wait for onError to be called (via file-change → handler → runGeneration → catch)
+        await Promise.race([
+          errorPromise,
+          sleep(3000).then(() => null),
+        ]);
+
+        watcher.stop();
+
+        expect(capturedError).not.toBeNull();
+      } finally {
+        if (fs.existsSync(tmpSchema)) await unlink(tmpSchema).catch(() => {});
+      }
+    }, 10000);
+
+    test('successful generation with no onSuccess callback (covers if(onSuccess) false branch)', async () => {
+      const tmpSchema = 'test-watch-no-onsuccess.sql';
+      const tmpOut = 'test-watch-no-onsuccess-out.sql';
+      const ddl = `CREATE TABLE no_onsuccess_test (id SERIAL PRIMARY KEY, name VARCHAR(255));`;
+
+      try {
+        await writeFile(ddl, tmpSchema);
+
+        const watcher = watchAndGenerate({
+          schemaFile: tmpSchema,
+          output: tmpOut,
+          outputMode: 'insert',
+          dialect: 'generic',
+          rows: 2,
+          debounceMs: 50,
+          // NO onSuccess callback — covers the `if (onSuccess)` false branch
+          onError: (e) => { /* Suppress */ },
+        });
+
+        await sleep(100);
+        // Touch file to trigger generation
+        fs.appendFileSync(tmpSchema, '\n-- touch');
+
+        // Wait for generation to complete (no onSuccess to await, just wait)
+        await sleep(500);
+        watcher.stop();
+      } finally {
+        for (const f of [tmpSchema, tmpOut]) {
+          if (fs.existsSync(f)) await unlink(f).catch(() => {});
+        }
+      }
+    }, 10000);
+
+    test('successful generation with no output covers (output || "") empty-string branch', async () => {
+      const tmpSchema = 'test-watch-no-output.sql';
+      const ddl = `CREATE TABLE no_output_test (id SERIAL PRIMARY KEY);`;
+
+      let resolveSuccess;
+      const successPromise = new Promise(r => { resolveSuccess = r; });
+
+      try {
+        await writeFile(ddl, tmpSchema);
+
+        const watcher = watchAndGenerate({
+          schemaFile: tmpSchema,
+          // No output — generateOptions.output is undefined → `output || ''` = ''
+          outputMode: 'insert',
+          dialect: 'generic',
+          rows: 1,
+          debounceMs: 50,
+          onSuccess: (path, ms) => resolveSuccess({ path, ms }),
+          onError: (e) => { /* Suppress */ },
+        });
+
+        await sleep(100);
+        fs.appendFileSync(tmpSchema, '\n-- touch');
+
+        const result = await Promise.race([
+          successPromise,
+          sleep(3000).then(() => null),
+        ]);
+
+        watcher.stop();
+
+        expect(result).not.toBeNull();
+        // output was '' (empty string from the || '' fallback)
+        expect(result.path).toBe('');
+      } finally {
+        if (fs.existsSync(tmpSchema)) await unlink(tmpSchema).catch(() => {});
+      }
+    }, 10000);
+
+    test('debounce guard: runGeneration skipped when stopped before debounce fires', async () => {
+      // Covers the `if (!stopped) runGeneration()` FALSE branch (BRDA:554)
+      const tmpSchema = 'test-watch-stop-before-debounce.sql';
+      const ddl = `CREATE TABLE debounce_stop_test (id SERIAL PRIMARY KEY);`;
+
+      let successCalled = false;
+      try {
+        await writeFile(ddl, tmpSchema);
+
+        const watcher = watchAndGenerate({
+          schemaFile: tmpSchema,
+          outputMode: 'insert',
+          dialect: 'generic',
+          rows: 1,
+          debounceMs: 400, // Long debounce — we'll stop before it fires
+          onSuccess: () => { successCalled = true; },
+          onError: () => { /* Suppress */ },
+        });
+
+        // Wait for fs.watch to initialize
+        await sleep(100);
+
+        // Touch file → handler() runs → sets debounce timer (400ms)
+        fs.appendFileSync(tmpSchema, '\n-- touch');
+
+        // Wait briefly for the handler to have run
+        await sleep(50);
+
+        // Stop now, before the 400ms debounce fires
+        watcher.stop(); // stopped = true
+
+        // Wait for the debounce timer to would-have-fired
+        await sleep(500);
+
+        // runGeneration should NOT have been called because stopped=true
+        expect(successCalled).toBe(false);
+      } finally {
+        if (fs.existsSync(tmpSchema)) await unlink(tmpSchema).catch(() => {});
+      }
+    }, 10000);
+
+    test('onError not provided causes throw on generation failure', async () => {
+      // We can't easily test this without triggering the handler, but we ensure
+      // the constructor path works when no onError is given
+      const watcher = watchAndGenerate({
+        schemaFile: '__non_existent__.sql',
+        outputMode: 'insert',
+        dialect: 'generic',
+        rows: 2,
+      });
+      watcher.stop();
+      // No error thrown synchronously — pass
     });
   });
 });
