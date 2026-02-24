@@ -23,6 +23,19 @@ import { writeFileSync, mkdirSync } from 'fs';
 
 mkdirSync('output', { recursive: true });
 
+// Generate fresh sample input files so this script is self-contained.
+await generateAndSave({
+  template: 'users',
+  rows: 20,
+  output: 'output/users-sample.csv',
+});
+await generateAndSave({
+  template: 'products',
+  rows: 20,
+  output: 'output/products-sample.json',
+  formatOptions: { pretty: true },
+});
+
 // ===========================================================================
 // 1. inferSchema() — pure function (works in browser and Node.js)
 //    Accepts an array of row objects and returns inferred Ficta column defs.
@@ -70,11 +83,11 @@ console.log();
 // ===========================================================================
 // 3. inferSchemaFromFile() — infer from the existing users.csv
 // ===========================================================================
-console.log('=== 3. inferSchemaFromFile() — from users.csv ===\n');
+console.log('=== 3. inferSchemaFromFile() — from output/users-sample.csv ===\n');
 
-const csvResult = await inferSchemaFromFile('./users.csv');
+const csvResult = await inferSchemaFromFile('./output/users-sample.csv');
 
-console.log('Columns inferred from users.csv:');
+console.log('Columns inferred from output/users-sample.csv:');
 console.log(' ', csvResult.columns);
 console.log('\nColumn list:');
 csvResult.columnList.forEach(col =>
@@ -85,11 +98,11 @@ console.log();
 // ===========================================================================
 // 4. inferSchemaFromFile() — infer from the existing products.json
 // ===========================================================================
-console.log('=== 4. inferSchemaFromFile() — from products.json ===\n');
+console.log('=== 4. inferSchemaFromFile() — from output/products-sample.json ===\n');
 
-const jsonResult = await inferSchemaFromFile('./products.json');
+const jsonResult = await inferSchemaFromFile('./output/products-sample.json');
 
-console.log('Columns inferred from products.json:');
+console.log('Columns inferred from output/products-sample.json:');
 console.log(' ', jsonResult.columns);
 console.log();
 

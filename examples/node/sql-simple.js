@@ -5,6 +5,9 @@
  */
 
 import { generateAndSave } from 'ficta';
+import { mkdirSync } from 'fs';
+
+mkdirSync('output', { recursive: true });
 
 console.log('=== Simple SQL Schema Generation ===\n');
 
@@ -13,80 +16,81 @@ console.log('1. Basic INSERT statements');
 await generateAndSave({
   columns: 'id:autoIncrement,name:fullName,email',
   rows: 10,
-  output: 'users-inserts.sql',
+  output: 'output/users-inserts.sql',
   tableName: 'users'
 });
-console.log('✓ Created users-inserts.sql\n');
+console.log('✓ Created output/users-inserts.sql\n');
 
 // Example 2: PostgreSQL schema with DDL
 console.log('2. PostgreSQL schema with DDL + INSERT');
 await generateAndSave({
   template: 'users',
   rows: 20,
-  output: 'users-schema-postgres.sql',
+  output: 'output/users-schema-postgres.sql',
   formatOptions: {
     mode: 'ddl+insert',
     dialect: 'postgres',
     tableName: 'users'
   }
 });
-console.log('✓ Created users-schema-postgres.sql\n');
+console.log('✓ Created output/users-schema-postgres.sql\n');
 
 // Example 3: MySQL schema
 console.log('3. MySQL schema with DDL');
 await generateAndSave({
   columns: 'id:autoIncrement,productName:product,price,category:department,inStock:boolean',
   rows: 15,
-  output: 'products-mysql.sql',
+  output: 'output/products-mysql.sql',
   formatOptions: {
     mode: 'ddl+insert',
     dialect: 'mysql',
     tableName: 'products'
   }
 });
-console.log('✓ Created products-mysql.sql\n');
+console.log('✓ Created output/products-mysql.sql\n');
 
 // Example 4: SQLite schema
 console.log('4. SQLite schema (lightweight)');
 await generateAndSave({
   columns: 'id:autoIncrement,title:sentence,content:paragraph,createdAt:timestamp',
   rows: 10,
-  output: 'posts-sqlite.sql',
+  output: 'output/posts-sqlite.sql',
   formatOptions: {
     mode: 'ddl+insert',
     dialect: 'sqlite',
     tableName: 'posts'
   }
 });
-console.log('✓ Created posts-sqlite.sql\n');
+console.log('✓ Created output/posts-sqlite.sql\n');
 
 // Example 5: Batch inserts (more efficient)
 console.log('5. Batch INSERT statements');
 await generateAndSave({
   columns: 'id:autoIncrement,username,email,active:boolean',
   rows: 100,
-  output: 'users-batch.sql',
+  output: 'output/users-batch.sql',
   formatOptions: {
     mode: 'insert',
     batch: true,
     tableName: 'users'
   }
 });
-console.log('✓ Created users-batch.sql with batch inserts\n');
+console.log('✓ Created output/users-batch.sql with batch inserts\n');
 
 // Example 6: UPSERT statements
 console.log('6. UPSERT statements (PostgreSQL)');
 await generateAndSave({
   columns: 'id:autoIncrement,sku:pattern:PRD-{COUNTER},name:product,price',
   rows: 10,
-  output: 'products-upsert.sql',
+  output: 'output/products-upsert.sql',
   formatOptions: {
     mode: 'upsert',
     dialect: 'postgres',
-    tableName: 'products'
+    tableName: 'products',
+    conflictColumns: ['id']
   }
 });
-console.log('✓ Created products-upsert.sql\n');
+console.log('✓ Created output/products-upsert.sql\n');
 
 console.log('✅ All SQL files generated successfully!');
 console.log('\nCLI equivalents:');

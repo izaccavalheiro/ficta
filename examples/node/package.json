@@ -18,7 +18,8 @@
     "ddl":            "node ddl-usage.js",
     "sql":            "node sql-simple.js",
     "sql-schema":     "node sql-schema-examples.js",
-    "quick":          "node quick-test.js"
+    "quick":          "node quick-test.js",
+    "run-all":        "bash run-all.sh"
   },
   "keywords": [
     "ficta",

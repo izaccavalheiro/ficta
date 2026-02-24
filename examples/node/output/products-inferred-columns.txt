@@ -1,1 +1,0 @@
-sku:number,name:fullName,category:word,price:price,stock:number,description:sentence
