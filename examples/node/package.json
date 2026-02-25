@@ -30,6 +30,6 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "ficta": "^1.1.8"
+    "ficta": "^1.1.9"
   }
 }

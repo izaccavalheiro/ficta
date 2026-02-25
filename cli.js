@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
-import { generateAndSave, generateFromDDL, generateFromSchemaFile, listTypes, listTemplates, templates, inferSchemaFromFile, fromOpenAPIFile, fromGraphQLFile, watchAndGenerate } from './src/node.js';
+import { generateAndSave, generateStream, generateFromDDL, generateFromSchemaFile, listTypes, listTemplates, templates, inferSchemaFromFile, fromOpenAPIFile, fromGraphQLFile, watchAndGenerate } from './src/node.js';
 
 // CLI setup
 function setupCLI() {
@@ -24,7 +24,7 @@ function setupCLI() {
       alias: 'f',
       describe: 'Output format',
       type: 'string',
-      choices: ['csv', 'json', 'xml', 'xlsx', 'tsv', 'sql', 'yaml', 'yml', 'toml', 'parquet']
+      choices: ['csv', 'json', 'xml', 'xlsx', 'tsv', 'sql', 'yaml', 'yml', 'toml', 'parquet', 'ndjson']
     })
     .option('columns', {
       alias: 'c',
@@ -105,6 +105,16 @@ function setupCLI() {
       choices: ['title', 'raw'],
       default: 'title'
     })
+    .option('stream', {
+      describe: 'Stream output row-by-row instead of generating all data in memory (csv and ndjson formats only)',
+      type: 'boolean',
+      default: false
+    })
+    .option('batch-size', {
+      describe: 'Number of rows per chunk when using --stream (default: 500)',
+      type: 'number',
+      default: 500
+    })
     .option('schema-file', {
       alias: 's',
       describe: 'Path to a ficta.schema.json file for structured multi-table generation',
@@ -146,6 +156,10 @@ function setupCLI() {
             describe: 'Faker.js locale for localized data (e.g. fr, de, ja, pt_BR)',
             type: 'string'
           })
+          .option('seed', {
+            describe: 'Integer seed for reproducible output',
+            type: 'number'
+          })
           .option('watch', {
             alias: 'w',
             describe: 'Watch input file and regenerate on change',
@@ -162,6 +176,7 @@ function setupCLI() {
             outputMode: argv.mode,
             output: argv.output,
             locale: argv.locale,
+            seed: argv.seed,
           };
           if (argv.watch) {
             // Run once immediately
@@ -377,9 +392,69 @@ async function main(argv) {
       rows: argv.rows,
       outputMode: argv.sqlMode || 'ddl+insert',
       output: argv.output,
+      locale: argv.locale,
+      dialect: argv.sqlDialect,
+      seed: argv.seed !== undefined ? argv.seed : undefined,
     });
     if (!argv.output) {
       process.stdout.write(sql);
+    }
+    return;
+  }
+
+  // Handle --stream flag: use generateStream to avoid loading all rows into memory
+  if (argv.stream) {
+    const streamFormat = argv.format || 'csv';
+    if (streamFormat !== 'csv' && streamFormat !== 'ndjson') {
+      console.error(`Error: --stream only supports csv and ndjson formats (got "${streamFormat}")`);
+      process.exit(1);
+      /* istanbul ignore next */
+      return;
+    }
+
+    let streamColumns = argv.columns;
+    let streamRows = argv.rows;
+    if (argv.template) {
+      const tmpl = templates[argv.template];
+      if (!streamColumns) streamColumns = tmpl.columns;
+      if (!streamRows) streamRows = tmpl.rows;
+    }
+    if (!streamRows) {
+      console.error('Error: --rows is required when using --stream');
+      process.exit(1);
+      /* istanbul ignore next */
+      return;
+    }
+
+    const readable = generateStream({
+      columns: streamColumns,
+      rows: streamRows,
+      format: streamFormat,
+      batchSize: argv.batchSize,
+      seed: argv.seed,
+      locale: argv.locale,
+      formatOptions: {
+        header: argv.header !== false,
+        headerFormat: argv.headerFormat || 'title',
+      },
+    });
+
+    if (argv.output) {
+      const fs = await import('fs');
+      const dest = fs.createWriteStream(argv.output);
+      await new Promise((resolve, reject) => {
+        readable.pipe(dest);
+        dest.on('finish', resolve);
+        dest.on('error', reject);
+        readable.on('error', reject);
+      });
+      console.log(`✓ Streamed ${streamRows} rows to ${argv.output} (${streamFormat.toUpperCase()} format)`);
+    } else {
+      await new Promise((resolve, reject) => {
+        readable.pipe(process.stdout);
+        readable.on('end', resolve);
+        readable.on('error', reject);
+      });
     }
     return;
   }

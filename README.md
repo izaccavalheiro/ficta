@@ -1,32 +1,101 @@
 # Ficta
 
-A universal test data generator that works in **Node.js**, **browsers**, and as a **CLI tool**. Generate realistic test data in multiple formats (CSV, JSON, XML, Excel, TSV, SQL, YAML, TOML) using simple column definitions powered by Faker.js.
+**Ficta is a comprehensive, production-ready test data generator designed to eliminate the tedious manual creation of mock data across your entire development workflow.** Whether you're a QA engineer seeding test databases, a frontend developer prototyping API responses, or a DevOps engineer preparing staging environments, Ficta delivers realistic, schema-compliant data in seconds—not hours.
 
-## Features
+**Universal by design**: Run it as a CLI command, integrate it into your Node.js build scripts, or generate data directly in the browser without any backend. From a single interface, produce industry-standard formats including CSV, JSON, Excel, SQL (with full DDL and foreign key support), XML, YAML, TOML, and Apache Parquet.
 
-- ✅ **Universal**: Works in Node.js, browsers, and as CLI
-- ✅ **Multiple Formats**: CSV, JSON, XML, XLSX, TSV, SQL, YAML, TOML
-- ✅ **40+ Data Types**: Names, emails, addresses, dates, and more
-- ✅ **Smart Auto-Detection**: Format detected from file extension
-- ✅ **Special Types**: Auto-increment, enums, ranges, patterns with counters
-- ✅ **Predefined Templates**: Users, products, transactions, addresses, contacts
-- ✅ **SQL Schema Generation**: DDL, foreign keys, multi-dialect support (PostgreSQL, MySQL, SQLite)
-- ✅ **Advanced SQL Modes**: INSERT, UPSERT, DDL+INSERT, batch inserts, TRUNCATE+INSERT
-- ✅ **Zero Config Browser**: Just include a script tag
-- ✅ **TypeScript Ready**: Full type definitions included
-- ✅ **High Test Coverage**: 100% coverage with 921 tests across 13 suites
-- ✅ **Preview Mode**: See data before saving
-- ✅ **Plugin API**: Register custom types and templates at runtime
-- ✅ **Reproducible Output**: Seed Faker for deterministic data generation
-- ✅ **Locale Support**: Generate localized data in 60+ languages
-- ✅ **Streaming API**: Memory-efficient streaming for large datasets (CSV/NDJSON)
-- ✅ **Fluent Schema Builder**: Code-first table and schema construction API
-- ✅ **JSON Schema Input**: Drive multi-table generation from a `ficta.schema.json` file
-- ✅ **Schema Inference**: Auto-detect column types from existing CSV or JSON files
-- ✅ **OpenAPI Bridge**: Convert OpenAPI 3.x / JSON Schema files to `ficta.schema.json`
-- ✅ **GraphQL Bridge**: Convert a GraphQL SDL file to `ficta.schema.json`
-- ✅ **Watch Mode**: Automatically regenerate output whenever a DDL schema file changes
-- ✅ **Parquet Output**: Generate Apache Parquet files (Node.js)
+**Built for real-world complexity**: Ficta doesn't just generate random values—it understands your data structures. Import existing SQL schemas and automatically generate referentially-intact test data that respects foreign key constraints. Convert OpenAPI specifications or GraphQL schemas into test datasets. Infer column types from existing data files. Stream millions of rows without exhausting memory.
+
+**Trusted by teams who demand quality**: With 100% test coverage across 948 test cases, Ficta ensures your test data generation is as reliable as your production code. Battle-tested in production environments, it handles edge cases like CSV escaping, SQL injection prevention, multi-dialect compatibility (PostgreSQL, MySQL, SQLite), and deterministic seeding for reproducible test scenarios.
+
+## Key Capabilities
+
+### 🚀 Universal Runtime Support
+- **CLI**: One-line commands for quick data generation (`ficta -t users -r 1000 -o data.csv`)
+- **Node.js**: Full programmatic API for build scripts, test fixtures, and automation
+- **Browser**: Client-side generation via CDN—no backend required, works offline
+- **TypeScript**: Complete type definitions for IDE autocomplete and type safety
+
+### 📊 Production-Ready Format Support
+Generate data in **9 industry-standard formats** with intelligent auto-detection:
+- **CSV/TSV**: RFC 4180 compliant with proper escaping for data imports
+- **JSON**: Pretty-printed or compact for API mocking and fixtures
+- **Excel (XLSX)**: Formatted worksheets with headers for business reports
+- **SQL**: Full DDL + DML with dialect support (PostgreSQL, MySQL, SQLite, generic)
+- **XML**: Well-formed output with configurable element names
+- **YAML/TOML**: Human-readable formats perfect for configuration files
+- **Parquet**: Apache Parquet columnar format for big data pipelines (Node.js)
+
+### 🗄️ Advanced Database Features
+**For DevOps engineers, DBAs, and backend developers:**
+- **DDL Import**: Parse existing `.sql` schema files and generate FK-aware test data
+- **Foreign Key Support**: Automatically maintains referential integrity across tables
+- **Multi-Dialect SQL**: Native support for PostgreSQL, MySQL, SQLite with dialect-specific features
+- **SQL Modes**: INSERT, UPSERT (ON CONFLICT/ON DUPLICATE KEY), DDL+INSERT, TRUNCATE+INSERT, batch inserts
+- **Schema Builder**: Fluent code-first API for defining multi-table schemas with relationships
+- **Topological Ordering**: Intelligent dependency resolution ensures parent rows exist before children
+
+### 🧪 Testing & QA Workflow Integration
+**For QA engineers, testers, and automation developers:**
+- **Reproducible Data**: Seed Faker for deterministic output in CI/CD pipelines
+- **Locale Support**: Generate region-specific data in 60+ languages (names, addresses, phones)
+- **Schema Inference**: Auto-detect column types from existing CSV or JSON files
+- **Preview Mode**: Inspect first 3 rows before generating large datasets
+- **Streaming API**: Memory-efficient generation of millions of rows (CSV/NDJSON)
+- **Watch Mode**: Auto-regenerate when schema files change during development
+
+### 🔌 Schema Import & Conversion
+**For API developers and architects:**
+- **OpenAPI Bridge**: Convert OpenAPI 3.x / JSON Schema specs to Ficta schemas
+- **GraphQL Bridge**: Transform GraphQL SDL definitions into test data configurations
+- **JSON Schema Files**: Define complex multi-table schemas in `ficta.schema.json` format
+
+### 🎯 Developer Experience
+- **40+ Data Types**: Realistic names, emails, addresses, UUIDs, dates, prices, and more via Faker.js
+- **Special Types**: Auto-increment sequences, enums, numeric ranges, custom patterns with counters
+- **Plugin API**: Register custom data types and reusable templates at runtime
+- **Predefined Templates**: Battle-tested schemas for users, products, transactions, addresses, contacts
+- **Smart Detection**: Format automatically inferred from file extensions
+- **Zero Config Browser**: Single `<script>` tag or ES module import
+- **100% Test Coverage**: 921 tests across 13 suites ensure production reliability
+
+## Who Should Use Ficta?
+
+### 👨‍💻 Backend Developers
+- **Database Seeding**: Generate SQL INSERT statements with proper foreign key relationships for development databases
+- **Migration Testing**: Create realistic data to test database migrations and schema changes
+- **Performance Testing**: Stream millions of rows to test query optimization and indexing strategies
+- **Multi-Tenant Systems**: Use locales and seeds to generate region-specific test datasets
+
+### 🧪 QA Engineers & Test Automation Developers
+- **API Testing**: Generate JSON payloads matching your OpenAPI specifications for automated integration tests
+- **Data-Driven Testing**: Use seeded generation for reproducible test scenarios across CI/CD runs
+- **Edge Case Coverage**: Create boundary conditions with ranges, enums, and custom patterns
+- **Test Data Management**: Infer schemas from production samples, then generate sanitized test versions
+
+### 🎨 Frontend Developers
+- **Rapid Prototyping**: Generate mock API responses in-browser without backend dependencies
+- **Component Testing**: Create realistic datasets for UI component development and visual regression tests
+- **Demo Applications**: Build convincing demos with professional-looking data in seconds
+- **Offline Development**: Work disconnected using browser-based generation
+
+### 🔧 DevOps & Site Reliability Engineers
+- **Environment Provisioning**: Populate staging/QA databases from CI/CD pipelines using CLI commands
+- **Load Testing**: Generate large CSV/JSON datasets for stress testing data processing pipelines
+- **Disaster Recovery Drills**: Create realistic datasets to test backup/restore procedures
+- **Monitoring**: Use watch mode to continuously regenerate test data as schemas evolve
+
+### 📊 Data Engineers & Analysts
+- **Pipeline Development**: Generate Parquet files for testing ETL workflows and data transformations
+- **Schema Validation**: Test data warehouse schemas with properly typed sample data
+- **Query Development**: Create representative datasets for developing and optimizing analytics queries
+- **Format Conversion**: Transform data between CSV, JSON, Parquet, and other formats
+
+### 🏗️ Database Administrators
+- **Capacity Planning**: Generate large datasets to test storage, indexing, and query performance
+- **Schema Design**: Validate table relationships and constraints with FK-aware test data
+- **Dialect Migration**: Test schema portability across PostgreSQL, MySQL, and SQLite
+- **Backup Strategy**: Create known datasets for testing backup/restore reliability
 
 ## Table of Contents
 
@@ -1328,7 +1397,7 @@ ficta -c "key:word,value:word" -r 50 -o config.xml
 
 ```bash
 # Clone repository
-git clone https://github.com/your-username/ficta.git
+git clone https://github.com/izaccavalheiro/ficta.git
 cd ficta
 
 # Install dependencies
@@ -1410,7 +1479,7 @@ npm run test:coverage
 
 ### Test Statistics
 
-- **Total Tests**: 921
+- **Total Tests**: 948
 - **Test Suites**: 13
 
 ### Test Categories

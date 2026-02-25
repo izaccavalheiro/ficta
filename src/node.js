@@ -193,6 +193,7 @@ export async function generateFromDDL({
   dialect = 'generic',
   output,
   locale,
+  seed,
 }) {
   if (!schemaFile) {
     throw new Error('generateFromDDL: schemaFile is required');
@@ -203,6 +204,10 @@ export async function generateFromDDL({
 
   if (locale) {
     core.setLocale(locale);
+  }
+
+  if (seed !== undefined && seed !== null && Number.isFinite(seed)) {
+    core.seedFaker(seed);
   }
 
   const sql = generateFromSchema({ ddl, rows, outputMode, dialect });
@@ -223,9 +228,12 @@ export async function generateFromDDL({
  * @param {number}  [options.rows]       - Override row count for all tables
  * @param {string}  [options.outputMode='ddl+insert'] - SQL output mode
  * @param {string}  [options.output]     - Optional file path to write SQL output
+ * @param {string}  [options.locale]     - Faker.js locale for localized data (e.g. 'fr', 'de')
+ * @param {number}  [options.seed]       - Integer seed for reproducible output
+ * @param {string}  [options.dialect]    - SQL dialect override ('postgres'|'mysql'|'sqlite'|'generic')
  * @returns {Promise<string>} Generated SQL string
  */
-export async function generateFromSchemaFile({ schemaFile, rows, outputMode = 'ddl+insert', output }) {
+export async function generateFromSchemaFile({ schemaFile, rows, outputMode = 'ddl+insert', output, locale, seed, dialect: dialectOverride }) {
   if (!schemaFile) {
     throw new Error('generateFromSchemaFile: schemaFile is required');
   }
@@ -250,7 +258,15 @@ export async function generateFromSchemaFile({ schemaFile, rows, outputMode = 'd
   }
 
   const defaultRows = rows ?? schema.defaultRows ?? 100;
-  const dialect = schema.dialect || 'generic';
+  const dialect = dialectOverride || schema.dialect || 'generic';
+
+  if (locale) {
+    core.setLocale(locale);
+  }
+
+  if (seed !== undefined && seed !== null && Number.isFinite(seed)) {
+    core.seedFaker(seed);
+  }
 
   // Build per-table row counts
   const tableRows = {};

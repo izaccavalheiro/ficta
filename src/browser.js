@@ -12,8 +12,20 @@ export * from './core.js';
 // Re-export formatters
 export * from './formatters.browser.js';
 
-// Re-export DDL parser so browser apps can use parseDDL
-export { parseDDL } from './ddl-parser.js';
+// Re-export DDL parser so browser apps can use parseDDL / orderByDependencies
+export { parseDDL, orderByDependencies } from './ddl-parser.js';
+
+// Re-export schema generator for FK-aware multi-table generation in browser
+export { generateFromSchema, buildInsertStatements } from './schema-generator.js';
+
+// Re-export schema inference (pure, no Node.js deps)
+export { inferSchema } from './infer.js';
+
+// Re-export OpenAPI bridge (pure, no Node.js deps)
+export { openAPIToFictaSchema, fromOpenAPISchema } from './openapi-bridge.js';
+
+// Re-export GraphQL bridge (pure, uses the `graphql` npm package)
+export { graphQLToFictaSchema, fromGraphQLSDL } from './graphql-bridge.js';
 
 /**
  * Download file in browser

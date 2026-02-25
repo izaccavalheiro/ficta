@@ -1,51 +1,60 @@
 # Ficta React Example
 
-A complete React application demonstrating how to use Ficta in a React environment with Vite.
+A complete React application demonstrating **every browser-safe Ficta feature** through 8
+interactive tabs. Built with React 18 + Vite.
 
 ## Features
 
-- 🎨 Modern React UI with hooks
-- 🔧 Configure columns, rows, and output format
-- 📋 Use predefined templates or custom columns
-- 👀 Live preview of generated data
-- 💾 Download generated files
-- ⚡ Fast development with Vite
+All features covered in a single app — no Node.js required for any of them:
+
+| Tab | Feature | Ficta APIs |
+|-----|---------|------------|
+| ⚡ Basic Generator | 7 formats, templates, seed, locale, header options | `generateData`, `formatData`, `downloadFile`, `seedFaker`, `setLocale`, `listTemplates` |
+| 🔧 Special Types | autoIncrement, enum, range, pattern, static | column syntax: `autoIncrement`, `enum:`, `range:`, `pattern:`, `static:` |
+| 🔌 Plugin API | Custom types & templates at runtime | `registerType`, `unregisterType`, `registerTemplate`, `unregisterTemplate` |
+| 🔍 Schema Inference | Infer types from existing data rows | `inferSchema` |
+| 📄 OpenAPI Bridge | Convert OpenAPI 3.x JSON → Ficta schema | `fromOpenAPISchema`, `openAPIToFictaSchema` |
+| ◈ GraphQL Bridge | Convert GraphQL SDL → Ficta schema | `fromGraphQLSDL`, `graphQLToFictaSchema` |
+| 🗄️ DDL Multi-Table | Parse DDL, topological FK sort, generate SQL | `parseDDL`, `orderByDependencies`, `generateFromSchema` |
+| 📚 Types & Templates | Browse all 40+ types and 5 built-in templates | `listTypes`, `listTemplates` |
 
 ## Setup
 
-1. Install dependencies:
 ```bash
 npm install
+npm run dev       # http://localhost:5173
+npm run build     # production bundle
+npm run preview   # preview production build
 ```
 
-2. Start the development server:
-```bash
-npm run dev
-```
+## Architecture
 
-3. Build for production:
-```bash
-npm run build
-```
+### Environment
+- The Vite config aliases `ficta/browser` → `../../src/browser.js`, so this example
+  always runs against the local source — no `npm link` needed.
+- Faker is bundled inside the Ficta browser build; `setFaker(faker)` is still called
+  explicitly in `App.jsx` to document the pattern.
 
-## Usage
-
-The application provides an intuitive interface to:
-
-1. **Choose a template** or define custom columns
-2. **Set number of rows** to generate
-3. **Select output format** (CSV, JSON, XML, TSV, SQL, YAML)
-4. **Generate data** with live preview
-5. **Download** the generated file
+### Key modules used (all pure / browser-safe)
+| Module | Purpose |
+|--------|---------|
+| `src/core.js` | `generateData`, `formatData`, `seedFaker`, `setLocale`, plugin API |
+| `src/formatters.browser.js` | CSV, JSON, XML, TSV, SQL, YAML, TOML output |
+| `src/browser.js` | Entry point; re-exports everything below |
+| `src/infer.js` | `inferSchema` |
+| `src/openapi-bridge.js` | `fromOpenAPISchema`, `openAPIToFictaSchema` |
+| `src/graphql-bridge.js` | `fromGraphQLSDL`, `graphQLToFictaSchema` |
+| `src/ddl-parser.js` | `parseDDL`, `orderByDependencies` |
+| `src/schema-generator.js` | `generateFromSchema`, `buildInsertStatements` |
 
 ## Code Structure
 
 ```
 src/
-├── App.jsx         # Main application component
-├── App.css        # Application styles
-├── main.jsx       # React entry point
-└── index.css      # Global styles
+├── App.jsx         # Main app — 8 tab components + root App
+├── App.css         # All styles (tab nav, layout, form, preview, cards)
+├── main.jsx        # React entry point
+└── index.css       # Body / html reset
 ```
 
 ## Key Components

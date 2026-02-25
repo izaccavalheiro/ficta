@@ -56,6 +56,8 @@ export interface GenerateFromDDLOptions {
   output?: string;
   /** Optional Faker.js locale for localized data (e.g. 'fr', 'de', 'pt_BR') */
   locale?: string;
+  /** Optional integer seed for reproducible output */
+  seed?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -169,6 +171,12 @@ export interface SchemaFileOptions {
   rows?: number | Record<string, number>;
   outputMode?: 'insert' | 'upsert' | 'truncate+insert' | 'ddl+insert';
   output?: string;
+  /** Optional Faker.js locale for localized data (e.g. 'fr', 'de', 'pt_BR') */
+  locale?: string;
+  /** Override the SQL dialect from the schema file ('postgres'|'mysql'|'sqlite'|'generic') */
+  dialect?: 'postgres' | 'mysql' | 'sqlite' | 'generic';
+  /** Optional integer seed for reproducible output */
+  seed?: number;
 }
 
 /**

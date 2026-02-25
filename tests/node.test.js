@@ -308,6 +308,21 @@ describe('Node.js Module', () => {
       expect(typeof sql).toBe('string');
       expect(sql).toContain('INSERT INTO');
     });
+
+    test('accepts seed option and produces reproducible output', async () => {
+      const sql1 = await generateFromDDL({
+        schemaFile: 'test-schema.sql',
+        rows: 3,
+        seed: 42,
+      });
+      const sql2 = await generateFromDDL({
+        schemaFile: 'test-schema.sql',
+        rows: 3,
+        seed: 42,
+      });
+      expect(typeof sql1).toBe('string');
+      expect(sql1).toBe(sql2);
+    });
   });
 
   describe('seed support', () => {
@@ -726,6 +741,46 @@ describe('Node.js Module', () => {
       const sql = await generateFromSchemaFile({ schemaFile, outputMode: 'insert' });
       expect(sql).toContain('INSERT INTO comp_pk');
       expect(sql).toContain('INSERT INTO comp_child');
+    });
+
+    test('accepts locale option and applies it without throwing', async () => {
+      const schema = {
+        tables: [
+          { name: 'loc_table', rows: 2, columns: [{ name: 'id', type: 'autoIncrement', primaryKey: true }, { name: 'name', type: 'fullName' }] }
+        ]
+      };
+      fs.writeFileSync(schemaFile, JSON.stringify(schema));
+      const sql = await generateFromSchemaFile({ schemaFile, outputMode: 'insert', locale: 'fr' });
+      expect(typeof sql).toBe('string');
+      expect(sql).toContain('INSERT INTO loc_table');
+    });
+
+    test('accepts dialect override that takes precedence over schema.dialect', async () => {
+      const schema = {
+        dialect: 'generic',
+        tables: [
+          { name: 'dialect_table', rows: 2, columns: [{ name: 'id', type: 'autoIncrement', primaryKey: true }] }
+        ]
+      };
+      fs.writeFileSync(schemaFile, JSON.stringify(schema));
+      // Override generic with postgres → SERIAL should appear in DDL
+      const sql = await generateFromSchemaFile({ schemaFile, outputMode: 'ddl+insert', dialect: 'postgres' });
+      expect(sql).toContain('SERIAL');
+    });
+
+    test('accepts seed option and produces identical output on repeated calls', async () => {
+      const schema = {
+        tables: [
+          { name: 'seed_table', rows: 3, columns: [
+            { name: 'id', type: 'autoIncrement', primaryKey: true },
+            { name: 'email', type: 'email' }
+          ]}
+        ]
+      };
+      fs.writeFileSync(schemaFile, JSON.stringify(schema));
+      const sql1 = await generateFromSchemaFile({ schemaFile, outputMode: 'insert', seed: 77 });
+      const sql2 = await generateFromSchemaFile({ schemaFile, outputMode: 'insert', seed: 77 });
+      expect(sql1).toBe(sql2);
     });
   });
 

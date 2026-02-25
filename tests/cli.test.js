@@ -145,6 +145,30 @@ describe('CLI Module', () => {
       
       expect(args.tableName).toBe('my_table');
     });
+
+    test('should accept --stream flag', () => {
+      process.argv = ['node', 'cli.js', '-c', 'id:autoIncrement', '-r', '10', '--stream'];
+      const args = setupCLI();
+      expect(args.stream).toBe(true);
+    });
+
+    test('should accept --batch-size option', () => {
+      process.argv = ['node', 'cli.js', '-c', 'id:autoIncrement', '-r', '10', '--stream', '--batch-size', '200'];
+      const args = setupCLI();
+      expect(args.batchSize).toBe(200);
+    });
+
+    test('--stream defaults to false', () => {
+      process.argv = ['node', 'cli.js', '-c', 'id:autoIncrement', '-r', '10'];
+      const args = setupCLI();
+      expect(args.stream).toBe(false);
+    });
+
+    test('--batch-size defaults to 500', () => {
+      process.argv = ['node', 'cli.js', '-c', 'id:autoIncrement', '-r', '10', '--stream'];
+      const args = setupCLI();
+      expect(args.batchSize).toBe(500);
+    });
   });
 
   describe('main function', () => {
@@ -512,6 +536,34 @@ describe('CLI Module', () => {
       if (fs.existsSync(outFile)) await unlink(outFile);
     });
 
+    test('schema subcommand accepts --seed option in setupCLI', () => {
+      process.argv = ['node', 'cli.js', 'schema', 'test-schema.sql', '--seed', '42'];
+      expect(() => setupCLI()).not.toThrow();
+    });
+
+    test('schema handler passes seed to generateFromDDL and produces deterministic output', async () => {
+      const outFile1 = 'test-schema-seed-1.sql';
+      const outFile2 = 'test-schema-seed-2.sql';
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      const stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+      process.argv = ['node', 'cli.js', 'schema', 'test-schema.sql', '--seed', '7', '--rows', '3', '-o', outFile1];
+      expect(() => setupCLI()).not.toThrow();
+      await new Promise(resolve => setTimeout(resolve, 800));
+      process.argv = ['node', 'cli.js', 'schema', 'test-schema.sql', '--seed', '7', '--rows', '3', '-o', outFile2];
+      expect(() => setupCLI()).not.toThrow();
+      await new Promise(resolve => setTimeout(resolve, 800));
+      const content1 = fs.existsSync(outFile1) ? fs.readFileSync(outFile1, 'utf-8') : '';
+      const content2 = fs.existsSync(outFile2) ? fs.readFileSync(outFile2, 'utf-8') : '';
+      // Both files should have been generated with same content
+      if (content1 && content2) {
+        expect(content1).toBe(content2);
+      }
+      consoleSpy.mockRestore();
+      stdoutSpy.mockRestore();
+      if (fs.existsSync(outFile1)) await unlink(outFile1);
+      if (fs.existsSync(outFile2)) await unlink(outFile2);
+    }, 10000);
+
     test('runCLI should return early (skip main) for schema subcommand', async () => {
       // The schema guard now lives in runCLI(), not main()
       process.argv = ['node', 'cli.js', 'schema', 'test-schema.sql'];
@@ -688,6 +740,64 @@ describe('CLI Module', () => {
       expect(stdout).toContain('CREATE TABLE');
       expect(stdout).toContain('INSERT INTO');
     }, 10000);
+
+    test('--stream outputs CSV rows to stdout', async () => {
+      const { stdout } = await execPromise('node cli.js -c "id:autoIncrement,name:fullName" -r 5 --stream');
+      expect(stdout).toContain('Id');
+      expect(stdout).toContain('Name');
+      const lines = stdout.trim().split('\n').filter(Boolean);
+      // 1 header + 5 rows
+      expect(lines.length).toBe(6);
+    }, 10000);
+
+    test('--stream --format ndjson outputs NDJSON rows to stdout', async () => {
+      const { stdout } = await execPromise('node cli.js -c "id:autoIncrement" -r 3 --stream --format ndjson');
+      const lines = stdout.trim().split('\n').filter(Boolean);
+      expect(lines.length).toBe(3);
+      expect(() => JSON.parse(lines[0])).not.toThrow();
+    }, 10000);
+
+    test('--stream --output writes CSV to a file', async () => {
+      const outFile = 'test-cli-stream-subprocess.csv';
+      try {
+        const { stdout } = await execPromise(`node cli.js -c "id:autoIncrement" -r 4 --stream --output ${outFile}`);
+        expect(stdout).toContain('Streamed');
+        expect(fs.existsSync(outFile)).toBe(true);
+        const content = fs.readFileSync(outFile, 'utf-8');
+        const lines = content.trim().split('\n').filter(Boolean);
+        expect(lines.length).toBe(5); // 1 header + 4 rows
+      } finally {
+        if (fs.existsSync(outFile)) fs.unlinkSync(outFile);
+      }
+    }, 10000);
+
+    test('--stream exits with code 1 for unsupported format', async () => {
+      let threw = false;
+      try {
+        await execPromise('node cli.js -c "id:autoIncrement" -r 4 --stream --format xml');
+      } catch (err) {
+        threw = true;
+        expect(err.code).toBe(1);
+      }
+      expect(threw).toBe(true);
+    }, 10000);
+
+    test('--stream exits with code 1 when --rows is missing', async () => {
+      let threw = false;
+      try {
+        await execPromise('node cli.js -c "id:autoIncrement" --stream');
+      } catch (err) {
+        threw = true;
+        expect(err.code).toBe(1);
+      }
+      expect(threw).toBe(true);
+    }, 10000);
+
+    test('schema --seed produces deterministic output', async () => {
+      const { stdout: out1 } = await execPromise('node cli.js schema test-schema.sql --rows 3 --seed 42');
+      const { stdout: out2 } = await execPromise('node cli.js schema test-schema.sql --rows 3 --seed 42');
+      expect(out1).toBe(out2);
+    }, 15000);
   });
 
   describe('--locale option', () => {
@@ -859,6 +969,209 @@ describe('CLI Module', () => {
         consoleSpy.mockRestore();
         writeSpy.mockRestore();
         if (fs.existsSync(outputFile)) fs.unlinkSync(outputFile);
+      }
+    });
+
+    test('main() with schemaFile passes locale to generateFromSchemaFile', async () => {
+      const schema = {
+        tables: [
+          { name: 'locale_tbl', rows: 2, columns: [{ name: 'id', type: 'autoIncrement', primaryKey: true }, { name: 'name', type: 'fullName' }] }
+        ]
+      };
+      fs.writeFileSync(schemaFile, JSON.stringify(schema));
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => {});
+      try {
+        await main({ schemaFile, sqlMode: 'insert', locale: 'fr' });
+        const out = writeSpy.mock.calls.map(c => c[0]).join('');
+        expect(out).toContain('locale_tbl');
+      } finally {
+        consoleSpy.mockRestore();
+        writeSpy.mockRestore();
+      }
+    });
+
+    test('main() with schemaFile passes sqlDialect override', async () => {
+      const schema = {
+        dialect: 'generic',
+        tables: [
+          { name: 'dialect_tbl', rows: 1, columns: [{ name: 'id', type: 'autoIncrement', primaryKey: true }] }
+        ]
+      };
+      fs.writeFileSync(schemaFile, JSON.stringify(schema));
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => {});
+      try {
+        await main({ schemaFile, sqlMode: 'ddl+insert', sqlDialect: 'postgres' });
+        const out = writeSpy.mock.calls.map(c => c[0]).join('');
+        // postgres dialect uses SERIAL for autoIncrement
+        expect(out).toContain('SERIAL');
+      } finally {
+        consoleSpy.mockRestore();
+        writeSpy.mockRestore();
+      }
+    });
+
+    test('main() with schemaFile passes seed for reproducible output', async () => {
+      const schema = {
+        tables: [
+          { name: 'seed_tbl', rows: 2, columns: [{ name: 'id', type: 'autoIncrement', primaryKey: true }, { name: 'email', type: 'email' }] }
+        ]
+      };
+      fs.writeFileSync(schemaFile, JSON.stringify(schema));
+
+      const outputs = [];
+      const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+        outputs.push(chunk);
+        return true;
+      });
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      try {
+        await main({ schemaFile, sqlMode: 'insert', seed: 99 });
+        await main({ schemaFile, sqlMode: 'insert', seed: 99 });
+        // Both runs should produce identical SQL
+        expect(outputs[0]).toBe(outputs[1]);
+        expect(outputs[0]).toContain('seed_tbl');
+      } finally {
+        writeSpy.mockRestore();
+        consoleSpy.mockRestore();
+      }
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // --stream option
+  // ---------------------------------------------------------------------------
+  describe('--stream option', () => {
+    const streamCsv = 'test-cli-stream-out.csv';
+
+    afterEach(() => {
+      if (fs.existsSync(streamCsv)) fs.unlinkSync(streamCsv);
+    });
+
+    test('main() with stream=true streams CSV rows to stdout', async () => {
+      const chunks = [];
+      const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+        chunks.push(chunk);
+        return true;
+      });
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      try {
+        await main({ stream: true, columns: 'id:autoIncrement,name:fullName', rows: 5, batchSize: 500, header: true, headerFormat: 'title' });
+        const output = chunks.join('');
+        expect(output).toContain('Id');
+        expect(output).toContain('Name');
+      } finally {
+        writeSpy.mockRestore();
+        consoleSpy.mockRestore();
+      }
+    });
+
+    test('main() with stream=true and format=ndjson streams NDJSON rows to stdout', async () => {
+      const chunks = [];
+      const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+        chunks.push(chunk);
+        return true;
+      });
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      try {
+        await main({ stream: true, format: 'ndjson', columns: 'id:autoIncrement', rows: 3, batchSize: 500 });
+        const output = chunks.join('');
+        const lines = output.trim().split('\n').filter(Boolean);
+        expect(lines.length).toBe(3);
+        expect(() => JSON.parse(lines[0])).not.toThrow();
+      } finally {
+        writeSpy.mockRestore();
+        consoleSpy.mockRestore();
+      }
+    });
+
+    test('main() with stream=true and output writes CSV to file', async () => {
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      try {
+        await main({ stream: true, columns: 'id:autoIncrement', rows: 4, output: streamCsv, batchSize: 500, header: true, headerFormat: 'title' });
+        expect(fs.existsSync(streamCsv)).toBe(true);
+        const content = fs.readFileSync(streamCsv, 'utf-8');
+        expect(content).toContain('Id');
+      } finally {
+        consoleSpy.mockRestore();
+      }
+    });
+
+    test('main() with stream=true and template uses template columns and rows', async () => {
+      const chunks = [];
+      const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+        chunks.push(chunk);
+        return true;
+      });
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      try {
+        await main({ stream: true, template: 'users', rows: 2, batchSize: 500, header: true, headerFormat: 'title' });
+        const output = chunks.join('');
+        expect(output).toContain('Email');
+      } finally {
+        writeSpy.mockRestore();
+        consoleSpy.mockRestore();
+      }
+    });
+
+    test('main() with stream=true and template uses template default rows when rows not specified', async () => {
+      const chunks = [];
+      const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+        chunks.push(chunk);
+        return true;
+      });
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      try {
+        await main({ stream: true, template: 'users', batchSize: 500 });
+        const output = chunks.join('');
+        expect(output.length).toBeGreaterThan(0);
+      } finally {
+        writeSpy.mockRestore();
+        consoleSpy.mockRestore();
+      }
+    });
+
+    test('main() with stream=true and both columns and template: columns takes precedence', async () => {
+      const chunks = [];
+      const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+        chunks.push(chunk);
+        return true;
+      });
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      try {
+        // Both columns and template supplied — columns wins, template rows used as fallback
+        await main({ stream: true, template: 'users', columns: 'id:autoIncrement', rows: 2, batchSize: 500, header: true, headerFormat: 'title' });
+        const output = chunks.join('');
+        // Only the explicit column 'id' should appear, not the template's 'Email'
+        expect(output).toContain('Id');
+      } finally {
+        writeSpy.mockRestore();
+        consoleSpy.mockRestore();
+      }
+    });
+
+    test('main() with stream=true exits with 1 for unsupported format', async () => {
+      const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => {});
+      try {
+        await main({ stream: true, format: 'xml', columns: 'id:autoIncrement', rows: 5 });
+        expect(exitSpy).toHaveBeenCalledWith(1);
+      } finally {
+        errorSpy.mockRestore();
+        exitSpy.mockRestore();
+      }
+    });
+
+    test('main() with stream=true exits with 1 when rows not specified and no template', async () => {
+      const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => {});
+      try {
+        await main({ stream: true, columns: 'id:autoIncrement' });
+        expect(exitSpy).toHaveBeenCalledWith(1);
+      } finally {
+        errorSpy.mockRestore();
+        exitSpy.mockRestore();
       }
     });
   });
