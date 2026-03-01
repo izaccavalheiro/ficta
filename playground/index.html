@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Ficta Playground — Live browser editor for generating realistic test data in CSV, JSON, XML, SQL, YAML and more." />
+  <meta name="theme-color" content="#0f1117" />
+
+  <!-- Open Graph / Social -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Ficta Playground" />
+  <meta property="og:description" content="Generate realistic fake test data instantly. CSV, JSON, XML, SQL, YAML and more." />
+
+  <title>Ficta Playground</title>
+
+  <!-- Preload the Ficta browser bundle -->
+  <link rel="preload" href="dist/ficta.browser.min.js" as="script" />
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="styles.css" />
+
+  <!-- Fonts (optional — system fallbacks are defined in CSS) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin />
+  <link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+    media="print"
+    onload="this.media='all'"
+  />
+
+  <style>
+    /* Prevent FOUC — hide until Preact mounts */
+    #app:empty::before {
+      content: '';
+      display: block;
+      height: 100vh;
+      background: #0f1117;
+    }
+  </style>
+</head>
+<body>
+  <!-- App mount point -->
+  <div id="app"></div>
+
+  <!--
+    Ficta browser bundle (IIFE — exposes window.Ficta).
+    Uses the existing dist/ bundle from the main package.
+  -->
+  <script src="dist/ficta.browser.min.js"></script>
+
+  <!-- Playground app (built by esbuild into dist/playground.js) -->
+  <script type="module" src="dist/playground.js"></script>
+
+  <!-- No-script fallback -->
+  <noscript>
+    <div style="font-family:sans-serif; padding:2rem; background:#0f1117; color:#e2e8f0; min-height:100vh;">
+      <h1>Ficta Playground</h1>
+      <p>JavaScript is required to run the Ficta Playground.</p>
+      <p>
+        You can still use Ficta via
+        <a href="https://www.npmjs.com/package/ficta" style="color:#6366f1;">npm</a>
+        or the
+        <a href="https://github.com/izaccavalheiro/ficta" style="color:#6366f1;">CLI</a>.
+      </p>
+    </div>
+  </noscript>
+</body>
+</html>

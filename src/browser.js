@@ -27,6 +27,10 @@ export { openAPIToFictaSchema, fromOpenAPISchema } from './openapi-bridge.js';
 // Re-export GraphQL bridge (pure, uses the `graphql` npm package)
 export { graphQLToFictaSchema, fromGraphQLSDL } from './graphql-bridge.js';
 
+// Re-export factory builder
+export { createFactory } from './factory.js';
+export { sampleUniform, sampleNormal, sampleExponential, sampleZipf, sampleFromDistribution } from './distributions.js';
+
 /**
  * Download file in browser
  * @param {string} content - File content

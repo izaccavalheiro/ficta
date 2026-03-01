@@ -1,5 +1,4 @@
 // Tests for formatters.browser module
-import { describe, expect, test } from '@jest/globals';
 import * as formatters from '../src/formatters.browser.js';
 
 describe('Formatters Browser Module', () => {

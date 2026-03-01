@@ -3,8 +3,8 @@
 import * as sqlSchema from './sql-schema.js';
 
 // Re-export shared pure utilities
-export { formatColumnName, toCSV, toJSON, toTSV, getFileExtension, detectFormat } from './formatters.shared.js';
-import { formatColumnName, toCSV, toJSON, toTSV } from './formatters.shared.js';
+export { formatColumnName, toCSV, toJSON, toTSV, getFileExtension, detectFormat, toSQLLegacy } from './formatters.shared.js';
+import { formatColumnName, toCSV, toJSON, toTSV, toSQLLegacy } from './formatters.shared.js';
 
 /**
  * Convert array of objects to XML string.
@@ -90,42 +90,6 @@ export function toSQL(records, columns, tableNameOrOptions = 'data_table') {
   };
   
   return sqlSchema.generateSchema(schema);
-}
-
-/**
- * Legacy SQL INSERT generation (backward compatible)
- * @private
- */
-function toSQLLegacy(records, columns, tableName) {
-  if (records.length === 0) {
-    return '';
-  }
-  
-  const columnNames = columns.map(col => col.name);
-  const statements = [];
-  
-  records.forEach(record => {
-    const values = columns.map(col => {
-      const value = record[col.name];
-      if (value === null || value === undefined) {
-        return 'NULL';
-      }
-      if (typeof value === 'string') {
-        // Escape single quotes
-        return `'${value.replace(/'/g, "''")}'`;
-      }
-      if (typeof value === 'boolean') {
-        return value ? '1' : '0';
-      }
-      return value;
-    });
-    
-    statements.push(
-      `INSERT INTO ${tableName} (${columnNames.join(', ')}) VALUES (${values.join(', ')});`
-    );
-  });
-  
-  return statements.join('\n');
 }
 
 /**

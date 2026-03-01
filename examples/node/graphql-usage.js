@@ -51,7 +51,7 @@ const basicSDL = `
   }
 `;
 
-const userColumns = fromGraphQLSDL(basicSDL, { typeName: 'User' });
+const userColumns = await fromGraphQLSDL(basicSDL, { typeName: 'User' });
 console.log('User columns:');
 userColumns.forEach(col =>
   console.log(
@@ -82,7 +82,7 @@ const scalarSDL = `
   }
 `;
 
-const eventColumns = fromGraphQLSDL(scalarSDL, { typeName: 'Event' });
+const eventColumns = await fromGraphQLSDL(scalarSDL, { typeName: 'Event' });
 console.log('Event columns:');
 eventColumns.forEach(col =>
   console.log(`  ${col.name.padEnd(14)} → ${col.type}`)
@@ -120,7 +120,7 @@ const enumSDL = `
   }
 `;
 
-const orderColumns = fromGraphQLSDL(enumSDL, { typeName: 'Order' });
+const orderColumns = await fromGraphQLSDL(enumSDL, { typeName: 'Order' });
 console.log('Order columns:');
 orderColumns.forEach(col =>
   console.log(`  ${col.name.padEnd(16)} → ${col.type}`)
@@ -143,7 +143,7 @@ const listSDL = `
   }
 `;
 
-const articleColumns = fromGraphQLSDL(listSDL, { typeName: 'Article' });
+const articleColumns = await fromGraphQLSDL(listSDL, { typeName: 'Article' });
 console.log('Article columns (tags and comments are skipped):');
 articleColumns.forEach(col =>
   console.log(`  ${col.name.padEnd(10)} → ${col.type}`)
@@ -189,7 +189,7 @@ const fullSDL = `
   }
 `;
 
-const fullFictaSchema = graphQLToFictaSchema(fullSDL, { rows: 8, dialect: 'postgres' });
+const fullFictaSchema = await graphQLToFictaSchema(fullSDL, { rows: 8, dialect: 'postgres' });
 
 console.log('ficta.schema.json structure:');
 console.log(JSON.stringify(fullFictaSchema, null, 2));
@@ -279,7 +279,7 @@ const firstTypeSDL = `
   }
 `;
 
-const firstTypeCols = fromGraphQLSDL(firstTypeSDL); // no typeName → uses Vehicle
+const firstTypeCols = await fromGraphQLSDL(firstTypeSDL); // no typeName → uses Vehicle
 console.log('First type (Vehicle) columns:');
 firstTypeCols.forEach(col =>
   console.log(`  ${col.name.padEnd(8)} → ${col.type}`)

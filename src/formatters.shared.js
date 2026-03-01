@@ -158,3 +158,43 @@ export function detectFormat(filename) {
 
   return formatMap[ext] || 'csv';
 }
+
+/**
+ * Legacy SQL INSERT generation (backward compatible)
+ * Shared by formatters.js (Node.js) and formatters.browser.js.
+ * @param {Array} records - Array of row objects
+ * @param {Array} columns - Column definitions
+ * @param {string} tableName - Target table name
+ * @returns {string} SQL INSERT statements
+ */
+export function toSQLLegacy(records, columns, tableName) {
+  if (records.length === 0) {
+    return '';
+  }
+
+  const columnNames = columns.map(col => col.name);
+  const statements = [];
+
+  records.forEach(record => {
+    const values = columns.map(col => {
+      const value = record[col.name];
+      if (value === null || value === undefined) {
+        return 'NULL';
+      }
+      if (typeof value === 'string') {
+        // Escape single quotes
+        return `'${value.replace(/'/g, "''")}'`;
+      }
+      if (typeof value === 'boolean') {
+        return value ? '1' : '0';
+      }
+      return value;
+    });
+
+    statements.push(
+      `INSERT INTO ${tableName} (${columnNames.join(', ')}) VALUES (${values.join(', ')});`
+    );
+  });
+
+  return statements.join('\n');
+}

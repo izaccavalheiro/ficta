@@ -100,8 +100,8 @@ test('descriptive test name', () => {
 });
 ```
 
-### Jest Configuration
-Uses `--experimental-vm-modules` for ES modules support
+### Vitest
+Uses Vitest — `vi.fn()`, `vi.spyOn()`, `vi.useFakeTimers()`. Never use `jest.*`.
 
 ## Important Constraints
 
@@ -121,10 +121,9 @@ Uses `--experimental-vm-modules` for ES modules support
 > Note: `csv-writer` is **not** a dependency. CSV output is handled by the built-in `toCSV()` in `src/formatters.shared.js`.
 
 ### Development  
-- `jest` - Testing
+- `vitest` - Testing (with `@vitest/coverage-v8`)
 - `esbuild` - Browser bundles
 - `csv-parse` - Test helpers
-- `c8` - Coverage
 
 Don't suggest new dependencies without checking if existing ones can be used.
 
@@ -137,10 +136,9 @@ Don't suggest new dependencies without checking if existing ones can be used.
 
 ## Documentation Files
 
-- **AI_CONTEXT.md** - Quick overview (read first!)
-- **AGENTS.md** - Comprehensive AI guide
-- **AI_WORKFLOWS.md** - Step-by-step tasks
+- **AGENTS.md** - Complete API reference, module guide, code examples (start here!)
 - **ARCHITECTURE.md** - Technical deep dive
+- **CONTRIBUTING.md** - Setup, style, testing, PR checklist
 - **README.md** - User documentation
 
 ## Commands Reference

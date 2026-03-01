@@ -5,6 +5,8 @@
  * @module infer
  */
 
+import { lookupNameHint } from './name-hints.js';
+
 // ---------------------------------------------------------------------------
 // Regex patterns for value matching
 // ---------------------------------------------------------------------------
@@ -12,57 +14,6 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?)?$/;
 const EMAIL_REGEX = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const URL_REGEX = /^https?:\/\//i;
-
-// ---------------------------------------------------------------------------
-// Column name → Ficta type hints (same priority order as ddl-parser.js)
-// ---------------------------------------------------------------------------
-const NAME_HINTS = [
-  [/^(id|_id|pk)$/i, 'autoIncrement'],
-  [/uuid|guid/i, 'uuid'],
-  [/\bfirst_?name\b/i, 'firstName'],
-  [/\blast_?name\b/i, 'lastName'],
-  [/\bfull_?name\b|\bname\b/i, 'fullName'],
-  [/\bjob_?title\b/i, 'jobTitle'],
-  [/\bemail\b/i, 'email'],
-  [/\busername\b|\buser_?name\b/i, 'username'],
-  [/\bpassword\b|\bpwd\b/i, 'password'],
-  [/\burl\b|\bwebsite\b|\bhomepage\b/i, 'url'],
-  [/\bip(v4)?\b|\bip_?address\b/i, 'ipv4'],
-  [/\bphone\b|\bmobile\b|\btelephone\b/i, 'phone'],
-  [/\bstreet\b|\baddress\b/i, 'street'],
-  [/\bcity\b|\btown\b/i, 'city'],
-  [/\bstate\b|\bprovince\b|\bregion\b/i, 'state'],
-  [/\bcountry\b/i, 'country'],
-  [/\bzip\b|\bpostal_?code\b|\bpost_?code\b|\bpostal\b/i, 'zipCode'],
-  [/\blat(itude)?\b/i, 'latitude'],
-  [/\blo[ng]+itude?\b|\blng\b|\blon\b/i, 'longitude'],
-  [/\bcompany\b|\borganiz\b|\bfirm\b/i, 'company'],
-  [/\bdep(art)?ment\b/i, 'department'],
-  [/\bprice\b|\bcost\b/i, 'price'],
-  [/\bamount\b|\btotal\b|\bbalance\b/i, 'amount'],
-  [/created_?at|updated_?at|timestamp\b/i, 'timestamp'],
-  [/\bdate\b/i, 'pastDate'],
-  [/\bdesc(ription)?\b|\bnotes?\b|\bcontent\b/i, 'sentence'],
-  [/\bactive\b|\benabled\b|\bis_\w+/i, 'boolean'],
-];
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Look up a column name in the name-hints table.
- * @param {string} name
- * @returns {string|null} Ficta type, or null if no hint matches
- */
-function lookupNameHint(name) {
-  for (const [pattern, type] of NAME_HINTS) {
-    if (pattern.test(name)) {
-      return type;
-    }
-  }
-  return null;
-}
 
 /**
  * Infer the Ficta type for a column from its name and sample values.

@@ -1,364 +1,228 @@
-# CONTRIBUTING.md
-
 # Contributing to Ficta
 
-Thank you for your interest in contributing! This guide will help you get started.
-
-## Table of Contents
-
-- [Code of Conduct](#code-of-conduct)
-- [Getting Started](#getting-started)
-- [Development Setup](#development-setup)
-- [Project Architecture](#project-architecture)
-- [Making Changes](#making-changes)
-- [Testing](#testing)
-- [Code Style](#code-style)
-- [Commit Guidelines](#commit-guidelines)
-- [Pull Request Process](#pull-request-process)
-- [AI-Assisted Development](#ai-assisted-development)
+Thank you for your interest in contributing! Read this guide before opening a PR.
 
 ---
 
-## Code of Conduct
+## Prerequisites
 
-Be respectful, inclusive, and constructive in all interactions.
-
----
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js 18 or higher
-- npm or yarn
+- Node.js 18+
+- npm
 - Git
 
-### Fork and Clone
+## Setup
 
 ```bash
-# Fork the repo on GitHub, then:
 git clone https://github.com/YOUR_USERNAME/ficta.git
 cd ficta
 npm install
+npm test       # verify everything passes (1 163 tests across 21 suites)
 ```
 
 ---
 
-## Development Setup
-
-### Install Dependencies
-
-```bash
-npm install
-```
-
-### Run Tests
-
-```bash
-npm test
-npm run test:coverage  # With coverage report
-```
-
-### Build Browser Bundles
-
-```bash
-npm run build
-```
-
-### Project Structure
+## Project Structure
 
 ```
-ficta/
-├── src/                     # Source code
-│   ├── core.js              # Universal core (no Node/browser deps)
-│   ├── formatters.js        # Node.js formatters (CSV, JSON, XML, Excel, TSV, SQL, YAML, TOML, Parquet)
-│   ├── formatters.shared.js # Shared pure utilities (CSV, TSV, JSON)
-│   ├── formatters.browser.js # Browser formatters
-│   ├── node.js              # Node.js adapter + generateFromDDL/Stream/SchemaFile
-│   ├── browser.js           # Browser adapter
-│   ├── sql-schema.js        # SQL DDL/DML generator (universal)
-│   ├── ddl-parser.js        # SQL DDL → TableDef parser (universal, pure)
-│   ├── schema-generator.js  # Multi-table FK-aware orchestrator (universal)
-│   ├── schema-builder.js    # Fluent table/schema builder API (universal)
-│   ├── infer.js             # Schema inference from sample rows (universal, pure)
-│   ├── openapi-bridge.js    # OpenAPI 3.x/JSON Schema → Ficta columns (universal, pure)
-│   └── graphql-bridge.js    # GraphQL SDL → Ficta columns (universal)
-├── cli.js                   # CLI interface (4 subcommands: schema, infer, from-openapi, from-graphql)
-├── ficta-schema.v1.json     # JSON Schema definition for ficta.schema.json files
-├── tests/                   # Test suite (921 tests across 13 suites, 100% coverage)
-├── examples/                # Usage examples
-└── dist/                    # Built browser bundles
+src/
+  core.js              — Universal: parseColumns, generateData, Plugin API
+  formatters.shared.js — Pure CSV/TSV/JSON utils (no deps)
+  formatters.js        — Node.js formatters (Excel, YAML, TOML, Parquet, …)
+  formatters.browser.js — Browser formatters
+  node.js              — Node.js adapter and public API
+  browser.js           — Browser adapter
+  sql-schema.js        — SQL DDL/DML generation
+  ddl-parser.js        — SQL DDL → TableDef parser
+  schema-generator.js  — Multi-table FK orchestrator
+  schema-builder.js    — Fluent table/schema builder
+  infer.js             — Schema inference from sample data
+  openapi-bridge.js    — OpenAPI → ficta.schema.json
+  graphql-bridge.js    — GraphQL SDL → ficta.schema.json
+  factory.js           — Test data factory (build/buildMany/buildList)
+  wizard.js            — Interactive CLI wizard
+  seeder.js            — Live database seeding
+  distributions.js     — Statistical samplers
+  dependencies.js      — Cross-column geographic dependencies
+  dependency-maps.js   — Geographic lookup tables
+  anonymizer.js        — PII anonymization
+  logger.js            — Centralized no-op logger
+  name-hints.js        — Column-name → type inference rules
+  seeders/             — postgres.js, mysql.js, sqlite.js
+cli.js                 — CLI (yargs)
+tests/                 — 21 test suites (Vitest)
 ```
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full design rationale and
+[AGENTS.md](AGENTS.md) for the complete API reference and code examples.
 
 ---
 
-## Project Architecture
+## Core Constraints
 
-### Core Principles
+These are non-negotiable:
 
-1. **Universal Core**: `src/core.js` has ZERO Node.js or browser-specific code
-2. **Pure Functions**: Core logic is functional and side-effect free
-3. **Environment Adapters**: Platform-specific code in `node.js` and `browser.js`
-4. **ES Modules**: All code uses ES6 import/export
-5. **100% Test Coverage**: All new code must be tested
-6. **SQL Schema Stack**: `ddl-parser.js` → `schema-generator.js` → `sql-schema.js` are universal and dependency-injected
-
-### Read More
-
-- [ARCHITECTURE.md](ARCHITECTURE.md) - Detailed architecture
-- [AI_CONTEXT.md](AI_CONTEXT.md) - Quick overview
-- [AGENTS.md](AGENTS.md) - Development guide
+1. **`src/core.js` must stay universal** — zero Node.js or browser imports. No `fs`, `path`, `process`, `window`, or `console`.
+2. **ES Modules only** — `import`/`export` everywhere; never `require` or `module.exports`.
+3. **No `console.*` in source** — route all output through `src/logger.js`.
+4. **Always call `getFaker()`** — never access `faker` directly.
+5. **Options objects** — every exported function takes a single destructured options object.
 
 ---
 
-## Making Changes
+## Common Contribution Types
 
-### Types of Contributions
+### Add a new Faker data type
 
-We welcome:
-- 🐛 Bug fixes
-- ✨ New features (data types, formats, templates)
-- 📝 Documentation improvements
-- ⚡ Performance optimizations
-- 🧪 Test improvements
-
-### Branch Naming
-
-```
-feature/add-yaml-format
-fix/csv-escaping-newlines
-docs/improve-readme
-perf/optimize-large-datasets
+```js
+// src/core.js → fakerTypes
+ipv6: () => getFaker().internet.ipv6(),
 ```
 
-### Common Tasks
+Then add a test in `tests/core.test.js`.
 
-#### Add New Data Type
+### Add a new template
 
-1. Edit `src/core.js`
-2. Add to `fakerTypes` object:
-   ```javascript
-   myType: () => getFaker().category.method()
-   ```
-3. Add test in `tests/core.test.js`
-4. Run tests: `npm test`
+```js
+// src/core.js → templates
+employees: {
+  columns: 'id:autoIncrement,firstName,lastName,email,jobTitle,department,phone,hireDate:pastDate',
+  rows: 100,
+},
+```
 
-#### Add New Template
+### Add a new output format
 
-1. Edit `src/core.js`
-2. Add to `templates` object:
-   ```javascript
-   myTemplate: "id:autoIncrement,field1:type1,field2:type2"
-   ```
-3. Add test in `tests/core.test.js`
-4. Update README.md
+1. `src/formatters.js` → `export [async] function toMyFormat(records, columns, opts)`
+2. `src/formatters.browser.js` → browser version or stub
+3. `src/node.js` → `case 'myformat':` in `generateAndSave` switch
+4. `src/browser.js` → `case 'myformat':` in browser switch
+5. `cli.js` → add `'myformat'` to the `--format` choices array
+6. Tests in `tests/formatters.test.js` and `tests/node.test.js`
 
-#### Add New Output Format
+### Add a SQL column type mapping
 
-1. Add formatter in `src/formatters.js`
-2. Add browser version in `src/formatters.browser.js`
-3. Update `src/node.js` switch statement
-4. Update `src/browser.js` switch statement
-5. Add format to `cli.js` choices
-6. Add tests in `tests/formatters.test.js`
-7. Update README.md
+```js
+// src/sql-schema.js → sqlTypeMap
+myType: { postgres: 'TEXT', mysql: 'VARCHAR(255)', sqlite: 'TEXT', generic: 'VARCHAR(255)' }
+```
 
-#### Add SQL Column Type Mapping (new dialect or type)
+### Generate data from a SQL DDL schema
 
-1. Edit `src/sql-schema.js`
-2. Add entry to `sqlTypeMap` for each relevant dialect:
-   ```javascript
-   myType: { postgres: 'TEXT', mysql: 'VARCHAR(255)', sqlite: 'TEXT', generic: 'VARCHAR(255)' }
-   ```
-3. Add test in `tests/sql-schema.test.js`
-4. Run tests: `npm test`
-
-#### Generate Data from a SQL DDL Schema
-
-See [AI_WORKFLOWS.md — Workflow 11](AI_WORKFLOWS.md) for the full step-by-step guide.
-
-Short version:
-```javascript
+```js
 import { generateFromDDL } from './src/node.js';
 const sql = await generateFromDDL({
   schemaFile: './schema.sql',
   rows: 20,
   outputMode: 'ddl+insert',
-  dialect: 'postgres'
+  dialect: 'postgres',
 });
 ```
-
-#### Infer Schema from Existing Data
-
-```javascript
-import { inferSchemaFromFile } from './src/node.js';
-const { columns } = await inferSchemaFromFile('./data.csv');  // or .json
-console.log(columns); // e.g. 'id:autoIncrement,email:email,name:fullName'
-```
-
-**CLI:** `ficta infer ./data.csv`
-
-#### Convert OpenAPI Spec to ficta.schema.json
-
-```javascript
-import { fromOpenAPIFile } from './src/node.js';
-const schema = await fromOpenAPIFile('./openapi.yaml', { rows: 100, dialect: 'postgres' });
-// Returns ficta.schema.json-compatible object
-```
-
-**CLI:** `ficta from-openapi ./openapi.yaml -o ficta.schema.json`
-
-#### Convert GraphQL SDL to ficta.schema.json
-
-```javascript
-import { fromGraphQLFile } from './src/node.js';
-const schema = await fromGraphQLFile('./schema.graphql', { typeName: 'User' });
-```
-
-**CLI:** `ficta from-graphql ./schema.graphql -o ficta.schema.json`
-
-#### Watch DDL File and Auto-Regenerate
-
-```javascript
-import { watchAndGenerate } from './src/node.js';
-const watcher = watchAndGenerate({
-  schemaFile: './schema.sql', rows: 10, outputMode: 'ddl+insert', output: './seed.sql',
-  onSuccess: (path, ms) => console.log(`Regenerated ${path} in ${ms}ms`)
-});
-// later: watcher.stop()
-```
-
-**CLI:** `ficta schema ./schema.sql -o seed.sql --watch`
 
 ---
 
 ## Testing
 
-### Test Philosophy
-
-- **100% coverage required** — All new code paths must be tested
-- **Test behavior, not implementation** - Tests should survive refactoring
-- **Fast tests** - Keep tests quick for rapid iteration
-
-### Running Tests
+### Commands
 
 ```bash
-# All tests
-npm test
+npm test                        # run all 1 163 tests
+npm run test:watch              # watch mode
+npm run test:coverage           # coverage report (open coverage/lcov-report/index.html)
 
-# Specific file
-npm test -- core.test.js
-
-# DDL/SQL tests
-npm test -- ddl-parser.test.js
-npm test -- schema-generator.test.js
-npm test -- sql-schema.test.js
-
-# Watch mode
-npm test -- --watch
-
-# Coverage
-npm run test:coverage
+# Run a single suite
+npx vitest run tests/core.test.js
+npx vitest run tests/ddl-parser.test.js
 ```
 
-### Writing Tests
+### Coverage targets
 
-```javascript
-import { functionName } from '../src/module.js';
+| Metric | Target |
+|---|---|
+| Branches | ≥ 85 % |
+| Functions | ≥ 95 % |
+| Lines | ≥ 85 % |
 
-describe('functionName', () => {
-  test('should handle normal case', () => {
-    const result = functionName(input);
-    expect(result).toEqual(expected);
+### Test patterns
+
+```js
+import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
+// Do NOT import from '@jest/globals' — the project uses Vitest, not Jest.
+
+import { generateData } from '../src/core.js';
+import { setLogger, resetLogger } from '../src/node.js';
+
+describe('myModule', () => {
+  afterEach(() => resetLogger());
+
+  test('generates expected output', () => {
+    const { records } = generateData({ columns: 'id:autoIncrement,email', rows: 3 });
+    expect(records).toHaveLength(3);
+    expect(records[0].id).toBe(1);
   });
-  
-  test('should throw error for invalid input', () => {
-    expect(() => functionName(invalid)).toThrow('Expected error message');
+
+  test('logs status via injected logger', () => {
+    const spy = vi.fn();
+    setLogger({ log: spy, info: spy, warn: spy, error: spy });
+    // trigger code that logs …
+    expect(spy).toHaveBeenCalled();
   });
-  
-  test('should handle edge case', () => {
-    const result = functionName(edgeCase);
-    expect(result).toBeDefined();
+
+  test('throws on invalid input', () => {
+    expect(() => generateData({}))
+      .toThrow('Either columns, schema, or template must be provided');
   });
 });
 ```
 
-### Test Coverage
-
-Check coverage report after running `npm run test:coverage`:
-- Open `coverage/lcov-report/index.html` in browser
-- Ensure all lines/branches/functions are covered
+Use `vi.fn()`, `vi.spyOn()`, `vi.useFakeTimers()`, `vi.advanceTimersByTime()`. Never use `jest.*`.
 
 ---
 
 ## Code Style
 
-### General Guidelines
+### Functions
 
-- **ES Modules only** - Use import/export, never require
-- **Pure functions** - Avoid side effects in core logic
-- **Descriptive names** - Clear variable and function names
-- **JSDoc comments** - Document public functions
-- **Options objects** - Use destructured parameters
-
-### Code Examples
-
-#### ✅ Good
-
-```javascript
+```js
+// ✅
 /**
- * Generate data rows
- * @param {Object} options - Generation options
- * @param {Array} options.columns - Column definitions
- * @param {number} [options.rows=100] - Number of rows
- * @returns {Object} Result with records, columns, rowCount
+ * Brief description.
+ * @param {Object} options
+ * @param {string} options.columns - Column definition string.
+ * @param {number} [options.rows=100]
+ * @returns {{ records: Object[], rowCount: number }}
  */
-export function generateData({ columns, rows = 100 }) {
-  const parsed = parseColumns(columns);
-  const records = Array.from({ length: rows }, (_, i) => generateRow(parsed, i + 1));
-  return { records, columns: parsed, rowCount: records.length };
-}
+export function generateData({ columns, rows = 100 }) { … }
+
+// ❌ — positional params, no JSDoc
+function generateData(columns, rows) { … }
 ```
 
-#### ❌ Avoid
+### Error messages
 
-```javascript
-// No JSDoc, positional params, not pure
-function generateData(columns, rows) {
-  globalState.rows = rows; // Side effect!
-  return columns.map(c => c);
-}
+```js
+// ✅
+throw new Error(`Unknown template: "${template}". Available: ${Object.keys(templates).join(', ')}`);
+
+// ❌
+throw new Error('Invalid template');
 ```
 
-### Error Handling
+### CSV escaping
 
-Always provide descriptive error messages:
-
-```javascript
-// ✅ Good
-if (!templates[template]) {
-  throw new Error(
-    `Unknown template: ${template}. Available: ${Object.keys(templates).join(', ')}`
-  );
+```js
+const str = String(value ?? '');
+if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+  return `"${str.replace(/"/g, '""')}"`;
 }
-
-// ❌ Avoid
-if (!templates[template]) {
-  throw new Error('Invalid template');
-}
+return str;
 ```
 
-### CSV Escaping
+### Lazy optional deps
 
-Always properly escape CSV values:
-
-```javascript
-function escapeCSV(value) {
-  if (typeof value === 'string' && 
-      (value.includes(',') || value.includes('"') || value.includes('\n'))) {
-    return `"${value.replace(/"/g, '""')}"`;
-  }
-  return value;
+```js
+async function requireDep(pkg) {
+  try { return await import(pkg); }
+  catch { throw new Error(`"${pkg}" is required. Install it: npm install ${pkg}`); }
 }
 ```
 
@@ -366,146 +230,31 @@ function escapeCSV(value) {
 
 ## Commit Guidelines
 
-### Commit Message Format
-
 ```
-type(scope): subject
-
-body (optional)
-
-footer (optional)
+feat(core): add ipv6 data type
+fix(formatters): escape newlines in TSV output
+docs: update CONTRIBUTING for Vitest migration
+test(factory): add buildList edge cases
 ```
 
-### Types
-
-- **feat**: New feature
-- **fix**: Bug fix
-- **docs**: Documentation changes
-- **style**: Code style changes (formatting)
-- **refactor**: Code refactoring
-- **test**: Test additions or changes
-- **perf**: Performance improvements
-- **chore**: Build process or auxiliary tool changes
-
-### Examples
-
-```
-feat(core): add support for IPv6 data type
-
-Add ipv6 type to fakerTypes for generating IPv6 addresses.
-
-Closes #123
+Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `perf`, `chore`.
 
 ---
 
-fix(formatters): properly escape newlines in CSV
+## Pull Request Checklist
 
-CSV values containing newlines were not being properly escaped,
-causing malformed output.
-
----
-
-docs(readme): add YAML format example
-
----
-
-test(core): add edge case tests for range type
-```
+- [ ] `npm test` passes (no failures, coverage targets met)
+- [ ] New code has corresponding tests
+- [ ] No `console.*` calls in `src/`
+- [ ] Uses `import`/`export` (no `require`)
+- [ ] Destructured options object on all exported functions
+- [ ] JSDoc on public exports
+- [ ] No breaking changes, or migration notes added to `CHANGELOG.md`
 
 ---
 
-## Pull Request Process
+## Questions
 
-### Before Submitting
+Open an issue or consult [AGENTS.md](AGENTS.md) for detailed examples.
 
-1. ✅ All tests pass: `npm test`
-2. ✅ Coverage is 100%: `npm run test:coverage`
-3. ✅ Code follows style guide
-4. ✅ Commits are clean and meaningful
-5. ✅ Documentation updated (if needed)
-6. ✅ No console.log or debug code
-
-### PR Template
-
-```markdown
-## Description
-Brief description of changes
-
-## Type of Change
-- [ ] Bug fix
-- [ ] New feature
-- [ ] Documentation update
-- [ ] Performance improvement
-
-## Testing
-- [ ] All tests pass
-- [ ] New tests added
-- [ ] Coverage remains 100%
-
-## Checklist
-- [ ] Code follows project style
-- [ ] Self-review completed
-- [ ] Documentation updated
-- [ ] No breaking changes (or documented)
-```
-
-### Review Process
-
-1. Submit PR with clear description
-2. Automated tests will run
-3. Maintainer will review code
-4. Address feedback if requested
-5. PR will be merged once approved
-
----
-
-## AI-Assisted Development
-
-This project has comprehensive AI integration support!
-
-### AI Documentation
-
-- **[AI_CONTEXT.md](AI_CONTEXT.md)** - Quick reference (start here!)
-- **[AGENTS.md](AGENTS.md)** - Complete AI development guide
-- **[AI_WORKFLOWS.md](AI_WORKFLOWS.md)** - Step-by-step task workflows
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Technical architecture
-- **[.github/copilot-instructions.md](.github/copilot-instructions.md)** - GitHub Copilot instructions
-
-### Using AI Assistants
-
-When using AI assistants (GitHub Copilot, Cursor, etc.):
-
-1. **Read AI_CONTEXT.md first** - Get quick project overview
-2. **Follow patterns** - AI docs show established patterns
-3. **Test thoroughly** - AI-generated code still needs testing
-4. **Review carefully** - Ensure changes follow project principles
-
-### AI Code Review Checklist
-
-When reviewing AI-generated code:
-- [ ] Uses ES Modules (import/export)
-- [ ] No Node/browser code in `src/core.js`
-- [ ] Pure functions where appropriate
-- [ ] Descriptive error messages
-- [ ] Has corresponding tests
-- [ ] Follows existing patterns
-- [ ] Properly documented (JSDoc)
-
----
-
-## Questions?
-
-- 💬 Open an issue for questions
-- 📚 Check documentation files
-- 💡 Look at existing code for patterns
-- 🤖 Use AI docs for development guidance
-
----
-
-## License
-
-By contributing, you agree that your contributions will be licensed under the ISC License.
-
----
-
-**Thank you for contributing!** 🎉
+By contributing you agree your work will be licensed under the ISC License.

@@ -19,7 +19,7 @@ node basic-usage.js
 ### [basic-usage.js](./basic-usage.js) — Recommended starting point
 
 | Covered feature | Details |
-|----------------|---------|
+|----------------|----------|
 | All built-in Faker types | `firstName`, `email`, `price`, `uuid`, … |
 | Special types | `autoIncrement`, `enum:`, `range:`, `pattern:` (`#` / `{COUNTER}`), `static:` |
 | Predefined templates | `users`, `products`, `transactions`, `addresses`, `contacts` |
@@ -29,13 +29,17 @@ node basic-usage.js
 | `setLocale()` | Localised data (`fr`, `de`, …) |
 | `generateFromDDL()` | Produce seed data from an existing `.sql` schema file |
 | `listTypes()` / `listTemplates()` | Print all available types and templates |
+| `schema: SchemaColumn[]` (**v1.2.0**) | Schema-first input with richer metadata |
+| `columnStringToSchema` / `schemaToColumnString` (**v1.2.0**) | Parse and round-trip column strings |
+| `setLogger` / `resetLogger` (**v1.2.0**) | Centralized logger system |
+| Factory API (**v1.2.0**) | `createFactory`, `build`, `buildMany`, `buildList` |
 
 ---
 
 ### [advanced-usage.js](./advanced-usage.js) — Comprehensive showcase
 
 | Covered feature | Details |
-|----------------|---------|
+|----------------|----------|
 | Large datasets | 1 000-row files in every format |
 | Complex column definitions | All special types combined in one realistic schema |
 | SQL dialects × modes | `postgres`, `mysql`, `sqlite`, `generic` × `insert`, `upsert`, `truncate+insert`, `ddl+insert` |
@@ -44,6 +48,121 @@ node basic-usage.js
 | `parseDDL()` + `orderByDependencies()` | Inspect parsed table metadata |
 | `buildInsertStatements()` | Low-level pure SQL builder for all dialects |
 | Schema Builder | Fluent `table()` / `schema()` API examples |
+| Factory API (**v1.2.0**) | `createFactory`, `build`, `buildMany`, `buildList`, `factory.schema` |
+| Distributions (**v1.2.0**) | `distribution` field, `sampleNormal`, `sampleFromDistribution`, Zipf-weighted enums |
+| Geographic dependencies (**v1.2.0**) | `autoWireGeographicDependencies`, country→city/state |
+| Anonymization (**v1.2.0**) | `anonymizeRecords`, `categorizeColumns`, PII replacement |
+| Logger (**v1.2.0**) | `setLogger`, `resetLogger`, capturing status output |
+| Schema-first API (**v1.2.0**) | `columnStringToSchema`, `schemaToColumnString`, `schema: SchemaColumn[]` |
+
+---
+
+### [factory-usage.js](./factory-usage.js) — Factory API (**v1.2.0**)
+
+| Covered feature | Details |
+|----------------|----------|
+| `createFactory()` | Create a reusable factory from a column string or `SchemaColumn[]` |
+| `factory.build(overrides?)` | Generate a single record with optional field overrides |
+| `factory.buildMany(n, overrides?)` | N records sharing the same overrides |
+| `factory.buildList(n, fn)` | N records with a per-record override function `(record, index) => overrides` |
+| `factory.schema` | Inspect the parsed `SchemaColumn[]` metadata |
+| `seed` option | Deterministic / reproducible test fixtures |
+| `defaults` option | Values applied to every generated record |
+| `SchemaColumn[]` input | Pass a schema array instead of a column string (with enriched metadata) |
+| Custom types in factories | Register a type, then use it in factory definitions |
+| Vitest / Jest integration | Test-fixture pattern with field-validation assertions |
+
+```javascript
+import { createFactory } from '../../src/factory.js';
+
+const factory = createFactory(
+  'id:autoIncrement,firstName,lastName,email,role:enum:admin|editor|viewer',
+  { seed: 42 }
+);
+
+const admin   = factory.build({ role: 'admin' });
+const users   = factory.buildMany(10);
+const indexed = factory.buildList(5, (r, i) => ({ email: `user${i}@example.com` }));
+```
+
+---
+
+### [distributions-usage.js](./distributions-usage.js) — Statistical Distributions (**v1.2.0**)
+
+| Covered feature | Details |
+|----------------|----------|
+| `sampleUniform(min, max)` | Uniform random value in `[min, max)` |
+| `sampleNormal(mean, stddev)` | Box-Muller Gaussian distribution |
+| `sampleExponential(lambda)` | Inverse-CDF exponential distribution |
+| `sampleZipf(n, s)` | Power-law distribution (realistic skewed data) |
+| `sampleFromDistribution({type, …})` | Unified dispatcher for all distribution types |
+| `distribution` on `SchemaColumn` | Integrated with `generateData()` — clamped to column bounds |
+| Zipf-weighted enum columns | Tier popularity, word frequency, realistic usage patterns |
+| Range columns + Normal distribution | Age, score, salary with realistic spread |
+| `autoWireGeographicDependencies()` | Auto-wire `country → state / city` dependencies |
+| Custom `depends` mapping | Explicit region → currency dependency |
+| Consistent geo output | UK cities match UK states, US cities match US states |
+
+```javascript
+import { generateData } from '../../src/core.js';
+
+const { records } = generateData({
+  schema: [
+    { name: 'age',  type: 'range:18-80',              distribution: { type: 'normal', mean: 35, stddev: 10 } },
+    { name: 'plan', type: 'enum:free|pro|enterprise', distribution: { type: 'zipf',   n: 3, s: 1.5 } },
+  ],
+  rows: 1000,
+});
+```
+
+---
+
+### [anonymizer-usage.js](./anonymizer-usage.js) — Data Anonymization (**v1.2.0**)
+
+| Covered feature | Details |
+|----------------|----------|
+| `categorizeColumns()` | Classify columns into PII / identifier / numeric / passthrough |
+| `anonymizeRecords()` | Replace PII values while preserving data shape |
+| `preserveDistributions` | Keep exact numeric statistical distribution (mean, stddev) |
+| `consistentIdentifiers` | Same original value always maps to the same fake value |
+| `keepColumns` | Opt specific columns out of anonymization |
+| `buildIdMap()` | Build / extend a consistent mapping map across batches |
+| `anonymizeFile()` | Read a `.csv` or `.json` file, anonymize it, write output |
+
+```javascript
+import { anonymizeRecords } from '../../src/node.js';
+
+const { records: anonymized } = anonymizeRecords({
+  records:  productionData,
+  columns:  [{ name: 'email', type: 'email' }, { name: 'country', type: 'country' }],
+  options:  { preserveDistributions: true },
+});
+```
+
+---
+
+### [seeder-usage.js](./seeder-usage.js) — Live Database Seeding (**v1.2.0**)
+
+| Covered feature | Details |
+|----------------|----------|
+| `detectDialect()` | Auto-detect dialect from connection URL or file extension |
+| `seedDatabase()` | Insert pre-generated records into a live Postgres / MySQL / SQLite database |
+| Pre-generated tables | Generate records with `generateData()`, then pass to `seedDatabase()` |
+| FK-aware ordering | Insert parents before children |
+| `truncate` option | Wipe tables before seeding |
+| Lazy driver loading | Actionable error when `pg` / `mysql2` / `better-sqlite3` is not installed |
+| `setLogger` integration | Capture seeder log output |
+
+```javascript
+import { seedDatabase } from '../../src/seeder.js';
+import { generateData } from '../../src/core.js';
+
+const { records, columns } = generateData({ columns: 'id:autoIncrement,name:fullName,email', rows: 100 });
+await seedDatabase({
+  connectionString: 'postgres://user:pass@localhost:5432/mydb',
+  tables: [{ tableName: 'users', records, columns }],
+});
+```
 
 ---
 
@@ -313,33 +432,43 @@ Minimal, copy-paste-ready snippets using the high-level `generateAndSave()` API.
 
 ## Feature Coverage Matrix
 
-| Feature | basic | advanced | stream | plugin | builder | schema-file | ddl | infer | openapi | graphql | watch |
-|---------|:-----:|:--------:|:------:|:------:|:-------:|:-----------:|:---:|:-----:|:-------:|:-------:|:-----:|
-| Faker types | ✓ | ✓ | | | ✓ | | | | | | |
-| Special types | ✓ | ✓ | | | ✓ | | | | | | |
-| Templates | ✓ | | ✓ | ✓ | | | | | | | |
-| All formats | ✓ | ✓ | | | ✓ | | | | | | |
-| Parquet format | ✓ | ✓ | | | | | | | | | |
-| `seedFaker` | ✓ | | ✓ | | | | | | | | |
-| `setLocale` | ✓ | | ✓ | | | | | | | | |
-| `generateStream` | | | ✓ | | | | | | | | |
-| `registerType` | | | | ✓ | | | | | | | |
-| `registerTemplate` | | | | ✓ | | | | | | | |
-| `table()` builder | | ✓ | | | ✓ | | | | | | |
-| `schema()` builder | | ✓ | | | ✓ | | | | | | |
-| `generateFromSchemaFile` | | | | | | ✓ | | | ✓ | ✓ | |
-| `generateFromDDL` | ✓ | ✓ | | | | | ✓ | | | | |
-| `generateFromSchema` | | ✓ | | | | | ✓ | | | | |
-| `parseDDL` | | ✓ | | | | | ✓ | | | | |
-| `buildInsertStatements` | | ✓ | | | | | ✓ | | | | |
-| SQL dialects × modes | | ✓ | | | ✓ | ✓ | ✓ | | | | |
-| `inferSchema` | | | | | | | | ✓ | | | |
-| `inferSchemaFromFile` | | | | | | | | ✓ | | | |
-| `fromOpenAPIFile` | | | | | | | | | ✓ | | |
-| `openAPIToFictaSchema` | | | | | | | | | ✓ | | |
-| `fromGraphQLFile` | | | | | | | | | | ✓ | |
-| `graphQLToFictaSchema` | | | | | | | | | | ✓ | |
-| `watchAndGenerate` | | | | | | | | | | | ✓ |
+| Feature | basic | advanced | factory | distributions | anonymizer | seeder | stream | plugin | builder | schema-file | ddl | infer | openapi | graphql | watch |
+|---------|:-----:|:--------:|:-------:|:-------------:|:----------:|:------:|:------:|:------:|:-------:|:-----------:|:---:|:-----:|:-------:|:-------:|:-----:|
+| Faker types | ✓ | ✓ | | | | | | | ✓ | | | | | | |
+| Special types | ✓ | ✓ | ✓ | | | | | | ✓ | | | | | | |
+| Templates | ✓ | | | | | | ✓ | ✓ | | | | | | | |
+| All formats | ✓ | ✓ | | | | | | | ✓ | | | | | | |
+| Parquet format | ✓ | ✓ | | | | | | | | | | | | | |
+| `seedFaker` | ✓ | | ✓ | | | | ✓ | | | | | | | | |
+| `setLocale` | ✓ | | | | | | ✓ | | | | | | | | |
+| `generateStream` | | | | | | | ✓ | | | | | | | | |
+| `registerType` | | | | | | | | ✓ | | | | | | | |
+| `registerTemplate` | | | | | | | | ✓ | | | | | | | |
+| `table()` builder | | ✓ | | | | | | | ✓ | | | | | | |
+| `schema()` builder | | ✓ | | | | | | | ✓ | | | | | | |
+| `generateFromSchemaFile` | | | | | | | | | | ✓ | | | ✓ | ✓ | |
+| `generateFromDDL` | ✓ | ✓ | | | | | | | | | ✓ | | | | |
+| `generateFromSchema` | | ✓ | | | | | | | | | ✓ | | | | |
+| `parseDDL` | | ✓ | | | | | | | | | ✓ | | | | |
+| `buildInsertStatements` | | ✓ | | | | | | | | | ✓ | | | | |
+| SQL dialects × modes | | ✓ | | | | | | | ✓ | ✓ | ✓ | | | | |
+| `inferSchema` | | | | | | | | | | | | ✓ | | | |
+| `inferSchemaFromFile` | | | | | | | | | | | | ✓ | | | |
+| `fromOpenAPIFile` | | | | | | | | | | | | | ✓ | | |
+| `openAPIToFictaSchema` | | | | | | | | | | | | | ✓ | | |
+| `fromGraphQLFile` | | | | | | | | | | | | | | ✓ | |
+| `graphQLToFictaSchema` | | | | | | | | | | | | | | ✓ | |
+| `watchAndGenerate` | | | | | | | | | | | | | | | ✓ |
+| `createFactory` (**v1.2.0**) | ✓ | ✓ | ✓ | | | | | | | | | | | | |
+| Distributions (**v1.2.0**) | | ✓ | | ✓ | | | | | | | | | | | |
+| Geo dependencies (**v1.2.0**) | | ✓ | | ✓ | | | | | | | | | | | |
+| `anonymizeRecords` (**v1.2.0**) | | ✓ | | | ✓ | | | | | | | | | | |
+| `anonymizeFile` (**v1.2.0**) | | | | | ✓ | | | | | | | | | | |
+| `seedDatabase` (**v1.2.0**) | | | | | | ✓ | | | | | | | | | |
+| `detectDialect` (**v1.2.0**) | | | | | | ✓ | | | | | | | | | |
+| `setLogger` / `resetLogger` (**v1.2.0**) | ✓ | ✓ | | | | ✓ | | | | | | | | | |
+| `schema: SchemaColumn[]` (**v1.2.0**) | ✓ | ✓ | ✓ | ✓ | | | | | | | | | | | |
+| `columnStringToSchema` (**v1.2.0**) | ✓ | ✓ | ✓ | ✓ | | | | | | | | | | | |
 
 ## Learn More
 

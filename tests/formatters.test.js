@@ -1,5 +1,4 @@
 // Tests for formatters module
-import { describe, expect, test } from '@jest/globals';
 import { faker } from '@faker-js/faker';
 import { setFaker } from '../src/core.js';
 import { parseDDL } from '../src/ddl-parser.js';
@@ -567,48 +566,67 @@ describe('Formatters Module', () => {
   });
 
   describe('toYAML', () => {
-    test('generates valid YAML', () => {
-      const yaml = formatters.toYAML(sampleRecords);
+    test('returns a Promise (async lazy-load)', async () => {
+      const promise = formatters.toYAML(sampleRecords);
+      expect(promise instanceof Promise).toBe(true);
+      await promise; // consume to avoid unhandled rejection
+    });
+
+    test('generates valid YAML', async () => {
+      const yaml = await formatters.toYAML(sampleRecords);
       
       expect(yaml).toContain('id: 1');
       expect(yaml).toContain('name: John Doe');
       expect(yaml).toContain('email: john@example.com');
     });
 
-    test('handles special characters', () => {
+    test('handles special characters', async () => {
       const records = [{ id: 1, name: 'Test: Value', note: 'Line1\nLine2' }];
-      const yaml = formatters.toYAML(records);
+      const yaml = await formatters.toYAML(records);
       
       expect(yaml).toBeDefined();
       expect(typeof yaml).toBe('string');
     });
 
-    test('handles empty records', () => {
-      const yaml = formatters.toYAML([]);
+    test('handles empty records', async () => {
+      const yaml = await formatters.toYAML([]);
       expect(yaml).toBeDefined();
     });
   });
 
   describe('toTOML', () => {
-    test('generates valid TOML', () => {
-      const toml = formatters.toTOML(sampleRecords);
+    test('returns a Promise (async lazy-load)', async () => {
+      const promise = formatters.toTOML(sampleRecords);
+      expect(promise instanceof Promise).toBe(true);
+      await promise; // consume to avoid unhandled rejection
+    });
+
+    test('generates valid TOML', async () => {
+      const toml = await formatters.toTOML(sampleRecords);
       
       expect(toml).toContain('[[records]]');
       expect(toml).toContain('id = 1');
       expect(toml).toContain('name = "John Doe"');
     });
 
-    test('handles special characters', () => {
+    test('handles special characters', async () => {
       const records = [{ id: 1, name: 'Test "quoted"' }];
-      const toml = formatters.toTOML(records);
+      const toml = await formatters.toTOML(records);
       
       expect(toml).toBeDefined();
       expect(typeof toml).toBe('string');
     });
 
-    test('handles empty records', () => {
-      const toml = formatters.toTOML([]);
+    test('handles empty records', async () => {
+      const toml = await formatters.toTOML([]);
       expect(toml).toBeDefined();
+    });
+  });
+
+  describe('requireDep', () => {
+    test('rejects with helpful message for missing package', async () => {
+      await expect(formatters.requireDep('nonexistent-pkg-ficta-test-xyz'))
+        .rejects.toThrow('"nonexistent-pkg-ficta-test-xyz" is required for this operation. Install it: npm install nonexistent-pkg-ficta-test-xyz');
     });
   });
 

@@ -14,17 +14,35 @@
  *   - parseDDL + orderByDependencies — inspect parsed table metadata
  *   - buildInsertStatements — low-level pure SQL builder
  *   - Schema Builder (fluent table()/schema() API)
+ *   - [v1.2.0] Factory API — createFactory, build, buildMany, buildList
+ *   - [v1.2.0] Distributions — normal, exponential, Zipf + geographic deps
+ *   - [v1.2.0] Anonymizer — PII replacement + distribution preservation
+ *   - [v1.2.0] Logger system — setLogger, resetLogger
+ *   - [v1.2.0] Schema-first input — schema: SchemaColumn[], columnStringToSchema
  *
  * For additional feature showcase see:
- *   stream-usage.js        — generateStream (CSV + NDJSON)
- *   plugin-api.js          — registerType / registerTemplate
- *   schema-builder-usage.js — fluent builder deep-dive
- *   schema-file-usage.js   — generateFromSchemaFile (ficta.schema.json)
+ *   factory-usage.js          — Factory API deep dive
+ *   distributions-usage.js    — distributions + cross-column deps deep dive
+ *   anonymizer-usage.js       — data anonymization deep dive
+ *   seeder-usage.js           — live database seeding
+ *   stream-usage.js           — generateStream (CSV + NDJSON)
+ *   plugin-api.js             — registerType / registerTemplate
+ *   schema-builder-usage.js   — fluent builder deep-dive
+ *   schema-file-usage.js      — generateFromSchemaFile (ficta.schema.json)
  */
 
 import { faker } from '@faker-js/faker';
 import { setFaker } from '../../src/core.js';
-import { generateData, generateAndSave, generateFromDDL } from '../../src/node.js';
+import {
+  generateData, generateAndSave, generateFromDDL,
+  // v1.2.0 additions
+  columnStringToSchema, schemaToColumnString,
+  setLogger, resetLogger,
+  createFactory,
+  sampleNormal, sampleFromDistribution,
+  autoWireGeographicDependencies,
+  anonymizeRecords, categorizeColumns,
+} from '../../src/node.js';
 import { parseDDL, orderByDependencies } from '../../src/ddl-parser.js';
 import { generateFromSchema, buildInsertStatements } from '../../src/schema-generator.js';
 import { table, schema } from '../../src/schema-builder.js';
@@ -320,6 +338,204 @@ async function schemaBuilderDemo() {
 }
 
 // ============================================================================
+// Section 9 — [v1.2.0] Factory API
+// ============================================================================
+async function factoryApiDemo() {
+  console.log('=== 9. [v1.2.0] Factory API ===\n');
+
+  // Create a reusable factory (seed=42 → deterministic for CI / tests)
+  const userFactory = createFactory(
+    'id:autoIncrement,firstName,lastName,email,role:enum:admin|editor|viewer,score:range:0-100',
+    { seed: 42 }
+  );
+
+  // build() — single record, optional field overrides
+  const admin = userFactory.build({ role: 'admin' });
+  console.log('build({ role: "admin" }):', JSON.stringify(admin));
+
+  // buildMany() — N records, same overrides
+  const editors = userFactory.buildMany(3, { role: 'editor' });
+  console.log('buildMany(3, { role: "editor" }) names:', editors.map(u => u.firstName));
+
+  // buildList() — N records, per-record override function
+  const users = userFactory.buildList(5, (rec, i) => ({
+    email: `member${i + 1}@company.com`,
+  }));
+  console.log('buildList(5, fn) emails:', users.map(u => u.email));
+
+  // factory.schema — inspect the parsed SchemaColumn[]
+  console.log('factory.schema column names:', userFactory.schema.map(c => c.name));
+
+  // Persist factory output to file
+  const fixtures = userFactory.buildMany(20);
+  writeFileSync('output/test-fixtures.json', JSON.stringify(fixtures, null, 2));
+  console.log('Written output/test-fixtures.json (20 deterministic fixtures)\n');
+}
+
+// ============================================================================
+// Section 10 — [v1.2.0] Statistical Distributions + Geographic Dependencies
+// ============================================================================
+async function distributionsAndDepsDemo() {
+  console.log('=== 10. [v1.2.0] Distributions + Geographic Dependencies ===\n');
+
+  // --- Distributions: distribution field on SchemaColumn ---
+  const { records: distRows } = generateData({
+    schema: [
+      { name: 'userId',   type: 'autoIncrement' },
+      { name: 'age',      type: 'range:18-80',
+        distribution: { type: 'normal',      mean: 35, stddev: 10 } },
+      { name: 'sessions', type: 'range:1-500',
+        distribution: { type: 'exponential', lambda: 0.1 } },
+      { name: 'plan',     type: 'enum:free|starter|pro|enterprise',
+        distribution: { type: 'zipf', n: 4, s: 1.8 } },
+    ],
+    rows: 10,
+  });
+
+  const planCounts = {};
+  distRows.forEach(r => { planCounts[r.plan] = (planCounts[r.plan] || 0) + 1; });
+  console.log('Plan distribution (Zipf-weighted — free dominates):', planCounts);
+
+  // --- Raw sampler usage ---
+  const normalSamples = Array.from({ length: 5 }, () =>
+    Math.round(sampleNormal(70, 10))
+  );
+  console.log('sampleNormal(70, 10) × 5:', normalSamples);
+
+  // --- Unified dispatcher ---
+  const zipfSample = sampleFromDistribution({ type: 'zipf', n: 5, s: 1.5 });
+  console.log('sampleFromDistribution({ type: "zipf", n: 5, s: 1.5 }):', zipfSample);
+
+  // --- Geographic dependencies: country → state / city ---
+  const geoSchema = columnStringToSchema(
+    'id:autoIncrement,firstName,lastName,email,country,state,city'
+  );
+  autoWireGeographicDependencies(geoSchema); // adds depends: { column: 'country' } to state & city
+
+  const { records: geoRows } = generateData({ schema: geoSchema, rows: 5 });
+  console.log('\nGeographic consistency (country→state→city):');
+  geoRows.forEach(r =>
+    console.log(`  ${(r.country || '').padEnd(20)} → ${(r.state || '').padEnd(15)} → ${r.city}`)
+  );
+
+  // Save distributed analytics dataset
+  await generateAndSave({
+    schema: [
+      { name: 'userId',       type: 'autoIncrement' },
+      { name: 'email',        type: 'email' },
+      { name: 'plan',         type: 'enum:free|starter|pro|enterprise',
+        distribution: { type: 'zipf', n: 4, s: 1.8 } },
+      { name: 'age',          type: 'range:18-80',
+        distribution: { type: 'normal', mean: 35, stddev: 10 } },
+      { name: 'country',      type: 'country' },
+      { name: 'city',         type: 'city' },      // auto-wired to country inside generateData
+    ],
+    rows: 200,
+    output: 'output/analytics-distributed.csv',
+  });
+  console.log('\nWritten output/analytics-distributed.csv (200 rows, realistic distributions)\n');
+}
+
+// ============================================================================
+// Section 11 — [v1.2.0] Data Anonymization
+// ============================================================================
+async function anonymizationDemo() {
+  console.log('=== 11. [v1.2.0] Data Anonymization ===\n');
+
+  const columns = [
+    { name: 'id',        type: 'autoIncrement' },
+    { name: 'firstName', type: 'firstName' },
+    { name: 'lastName',  type: 'lastName' },
+    { name: 'email',     type: 'email' },
+    { name: 'phone',     type: 'phone' },
+    { name: 'salary',    type: 'number' },
+    { name: 'country',   type: 'country' },
+  ];
+
+  // Inspect column categories before anonymizing
+  const cats = categorizeColumns(columns);
+  console.log('PII columns:', cats.pii);
+  console.log('Numeric columns:', cats.numeric);
+  console.log('Passthrough columns:', cats.passthrough);
+
+  // Generate "production" source data
+  const { records: source } = generateData({
+    columns: columns.map(c => `${c.name}:${c.type}`).join(','),
+    rows: 5,
+    seed: 99,
+  });
+
+  // Anonymize — PII replaced, numeric distribution preserved, IDs re-mapped
+  const { records: anonymized } = anonymizeRecords({
+    records: source,
+    columns,
+    options: { preserveDistributions: true },
+  });
+
+  console.log('\nOriginal vs anonymized (first 2 rows):');
+  for (let i = 0; i < 2; i++) {
+    const s = source[i], a = anonymized[i];
+    console.log(`  [${s.id}] ${s.firstName} ${s.lastName} <${s.email}>`);
+    console.log(`  [${a.id}] ${a.firstName} ${a.lastName} <${a.email}> (anonymized)\n`);
+  }
+  console.log('Non-PII field "country" preserved:', source[0].country === anonymized[0].country);
+  console.log();
+}
+
+// ============================================================================
+// Section 12 — [v1.2.0] Logger System
+// ============================================================================
+async function loggerDemo() {
+  console.log('=== 12. [v1.2.0] Centralized Logger ===\n');
+
+  const captured = [];
+  setLogger({
+    log:   (...a) => captured.push(`[log]  ${a.join(' ')}`),
+    info:  (...a) => captured.push(`[info] ${a.join(' ')}`),
+    warn:  (...a) => captured.push(`[warn] ${a.join(' ')}`),
+    error: (...a) => captured.push(`[err]  ${a.join(' ')}`),
+  });
+
+  await generateAndSave({
+    columns: 'id:autoIncrement,name:fullName,email',
+    rows: 10,
+    output: 'output/logger-demo.csv',
+  });
+
+  resetLogger(); // restore the default no-op logger
+
+  console.log('Status messages captured during generateAndSave():');
+  captured.forEach(m => console.log(' ', m));
+  console.log();
+}
+
+// ============================================================================
+// Section 13 — [v1.2.0] Schema-First API
+// ============================================================================
+async function schemaFirstDemo() {
+  console.log('=== 13. [v1.2.0] Schema-First Input API ===\n');
+
+  // columnStringToSchema → enrich → generateData with schema:
+  const schema_ = columnStringToSchema(
+    'id:autoIncrement,email,score:range:0-100,plan:enum:free|pro|enterprise'
+  );
+  // Enrich with metadata not expressible in string syntax
+  schema_[0].primaryKey = true;
+  schema_[1].nullable   = false;
+  schema_[2].distribution = { type: 'normal', mean: 72, stddev: 15 };
+
+  const { records } = generateData({ schema: schema_, rows: 5 });
+  console.log('Generated with enriched SchemaColumn[]:');
+  console.log(JSON.stringify(records, null, 2));
+
+  // Round-trip: SchemaColumn[] → string → SchemaColumn[]
+  const roundTrip = schemaToColumnString(schema_);
+  console.log('\nschemaToColumnString (metadata stripped):');
+  console.log(' ', roundTrip);
+  console.log();
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 async function main() {
@@ -332,6 +548,12 @@ async function main() {
     await inspectParsed();
     await pureInsertHelper();
     await schemaBuilderDemo();
+    // v1.2.0 sections
+    await factoryApiDemo();
+    await distributionsAndDepsDemo();
+    await anonymizationDemo();
+    await loggerDemo();
+    await schemaFirstDemo();
     console.log('=== All advanced examples completed ===');
   } catch (err) {
     console.error('Error:', err.message);

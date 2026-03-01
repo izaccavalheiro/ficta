@@ -14,9 +14,20 @@
  *   - Localised data with setLocale()
  *   - generateFromDDL — generate seed data from an existing .sql schema file
  *   - listTypes() / listTemplates()
+ *   - [v1.2.0] Schema-first input — schema: SchemaColumn[] option
+ *   - [v1.2.0] columnStringToSchema / schemaToColumnString round-trip
+ *   - [v1.2.0] Centralized logger — setLogger / getLogger / resetLogger
+ *   - [v1.2.0] Factory API — createFactory, build, buildMany, buildList
  */
 
-import { generateData, generateAndSave, generateFromDDL, seedFaker, setLocale, listTypes, listTemplates } from '../../src/node.js';
+import {
+  generateData, generateAndSave, generateFromDDL,
+  seedFaker, setLocale, listTypes, listTemplates,
+  // v1.2.0 additions
+  columnStringToSchema, schemaToColumnString,
+  setLogger, getLogger, resetLogger,
+  createFactory,
+} from '../../src/node.js';
 import { writeFileSync, mkdirSync } from 'fs';
 
 mkdirSync('output', { recursive: true });
@@ -204,6 +215,94 @@ async function main() {
   listTypes();
   console.log();
   listTemplates();
+
+  // -------------------------------------------------------------------------
+  // 10. [v1.2.0] Schema-first input: schema: SchemaColumn[]
+  //     Lets you pass richer column metadata that isn't expressible in the
+  //     column-definition string syntax (primaryKey, nullable, distribution…).
+  // -------------------------------------------------------------------------
+  console.log('10. [v1.2.0] Schema-first input — schema: SchemaColumn[]\n');
+
+  const { records: schemaRecords } = generateData({
+    schema: [
+      { name: 'id',       type: 'autoIncrement', primaryKey: true },
+      { name: 'email',    type: 'email',          nullable: false  },
+      { name: 'score',    type: 'range:0-100' },
+      { name: 'role',     type: 'enum:admin|editor|viewer' },
+    ],
+    rows: 3,
+  });
+  console.log('Generated with schema: SchemaColumn[]');
+  console.log(JSON.stringify(schemaRecords, null, 2));
+  console.log();
+
+  // -------------------------------------------------------------------------
+  // 11. [v1.2.0] columnStringToSchema / schemaToColumnString round-trip
+  //     Convert between string syntax and the richer SchemaColumn[] form.
+  // -------------------------------------------------------------------------
+  console.log('11. [v1.2.0] columnStringToSchema / schemaToColumnString\n');
+
+  const colStr   = 'id:autoIncrement,firstName,lastName,email,score:range:0-100';
+  const colArray = columnStringToSchema(colStr);
+  const roundTrip = schemaToColumnString(colArray);
+
+  console.log('Original string:', colStr);
+  console.log('After round-trip:', roundTrip);
+  console.log('Parsed schema:');
+  colArray.forEach(c => console.log(`  { name: '${c.name}', type: '${c.type}' }`));
+  console.log();
+
+  // -------------------------------------------------------------------------
+  // 12. [v1.2.0] Centralized logger — setLogger / resetLogger
+  //     Ficta is silent by default. Configure a logger to see status output.
+  // -------------------------------------------------------------------------
+  console.log('12. [v1.2.0] Centralized logger\n');
+
+  const logMessages = [];
+  setLogger({
+    log:   (...a) => logMessages.push(['log',  a.join(' ')]),
+    info:  (...a) => logMessages.push(['info', a.join(' ')]),
+    warn:  (...a) => logMessages.push(['warn', a.join(' ')]),
+    error: (...a) => logMessages.push(['err',  a.join(' ')]),
+  });
+
+  await generateAndSave({
+    columns: 'id:autoIncrement,name:fullName,email',
+    rows: 5,
+    output: 'output/logger-test.csv',
+  });
+
+  resetLogger(); // restore the default no-op logger
+
+  console.log('Log messages captured during generateAndSave():');
+  logMessages.forEach(([level, msg]) => console.log(`  [${level}] ${msg}`));
+  console.log();
+
+  // -------------------------------------------------------------------------
+  // 13. [v1.2.0] Factory API — createFactory, build, buildMany, buildList
+  //     A higher-level pattern for generating consistent test fixtures.
+  //     See factory-usage.js for the full deep-dive.
+  // -------------------------------------------------------------------------
+  console.log('13. [v1.2.0] Factory API — createFactory\n');
+
+  const userFactory = createFactory(
+    'id:autoIncrement,firstName,lastName,email,role:enum:admin|editor|viewer',
+    { seed: 42 }
+  );
+
+  const singleUser    = userFactory.build({ role: 'admin' });   // one record, override role
+  const manyUsers     = userFactory.buildMany(3);               // 3 records, no overrides
+  const indexedUsers  = userFactory.buildList(3, (r, i) => ({  // per-record override fn
+    email: `user${i + 1}@example.com`,
+  }));
+
+  console.log('build({ role: "admin" }):', singleUser);
+  console.log('buildMany(3) names:', manyUsers.map(u => u.firstName));
+  console.log('buildList(3, fn) emails:', indexedUsers.map(u => u.email));
+  console.log();
+  console.log('→ See factory-usage.js for the full Factory API showcase.');
+  console.log('→ See distributions-usage.js for statistical distributions + geo dependencies.');
+  console.log('→ See anonymizer-usage.js for data anonymization.');
 
   console.log('\n=== Done ===');
 }

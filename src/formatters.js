@@ -1,14 +1,23 @@
 // Formatters for different file formats
-import ExcelJS from 'exceljs';
-import xml2js from 'xml2js';
-import yaml from 'js-yaml';
-import TOML from '@iarna/toml';
 import * as sqlSchema from './sql-schema.js';
 import { generateFromSchema } from './schema-generator.js';
 
 // Re-export shared pure utilities
-export { formatColumnName, toCSV, toJSON, toTSV, getFileExtension, detectFormat } from './formatters.shared.js';
-import { formatColumnName, toCSV, toJSON, toTSV } from './formatters.shared.js';
+export { formatColumnName, toCSV, toJSON, toTSV, getFileExtension, detectFormat, toSQLLegacy } from './formatters.shared.js';
+import { formatColumnName, toCSV, toJSON, toTSV, toSQLLegacy } from './formatters.shared.js';
+
+/**
+ * Lazily require a dependency, providing a helpful error message if it is not installed.
+ * @param {string} name - NPM package name
+ * @returns {Promise<*>} The imported module
+ */
+export async function requireDep(name) {
+  try {
+    return await import(name);
+  } catch {
+    throw new Error(`"${name}" is required for this operation. Install it: npm install ${name}`);
+  }
+}
 
 /**
  * Convert array of objects to XML string
@@ -18,6 +27,7 @@ import { formatColumnName, toCSV, toJSON, toTSV } from './formatters.shared.js';
  * @returns {Promise<string>} XML string
  */
 export async function toXML(records, rootElement = 'data', recordElement = 'record') {
+  const { default: xml2js } = await requireDep('xml2js');
   const builder = new xml2js.Builder({
     rootName: rootElement,
     xmldec: { version: '1.0', encoding: 'UTF-8', standalone: true }
@@ -38,6 +48,7 @@ export async function toXML(records, rootElement = 'data', recordElement = 'reco
  * @returns {Promise<Buffer>} Excel workbook buffer
  */
 export async function toExcel(records, columns, sheetName = 'Sheet1') {
+  const { default: ExcelJS } = await requireDep('exceljs');
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet(sheetName);
   
@@ -138,47 +149,12 @@ export function toSQL(records, columns, tableNameOrOptions = 'data_table') {
 }
 
 /**
- * Legacy SQL INSERT generation (backward compatible)
- * @private
- */
-function toSQLLegacy(records, columns, tableName) {
-  if (records.length === 0) {
-    return '';
-  }
-  
-  const columnNames = columns.map(col => col.name);
-  const statements = [];
-  
-  records.forEach(record => {
-    const values = columns.map(col => {
-      const value = record[col.name];
-      if (value === null || value === undefined) {
-        return 'NULL';
-      }
-      if (typeof value === 'string') {
-        // Escape single quotes
-        return `'${value.replace(/'/g, "''")}'`;
-      }
-      if (typeof value === 'boolean') {
-        return value ? '1' : '0';
-      }
-      return value;
-    });
-    
-    statements.push(
-      `INSERT INTO ${tableName} (${columnNames.join(', ')}) VALUES (${values.join(', ')});`
-    );
-  });
-  
-  return statements.join('\n');
-}
-
-/**
  * Convert array of objects to YAML string
  * @param {Array} records - Array of row objects
  * @returns {string} YAML string
  */
-export function toYAML(records) {
+export async function toYAML(records) {
+  const { default: yaml } = await requireDep('js-yaml');
   return yaml.dump(records, {
     indent: 2,
     lineWidth: 120,
@@ -191,7 +167,8 @@ export function toYAML(records) {
  * @param {Array} records - Array of row objects
  * @returns {string} TOML string
  */
-export function toTOML(records) {
+export async function toTOML(records) {
+  const { default: TOML } = await requireDep('@iarna/toml');
   // TOML works best with a root object containing arrays
   // Format as [[records]] array of tables
   return TOML.stringify({ records });

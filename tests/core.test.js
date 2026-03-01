@@ -1,4 +1,4 @@
-import { jest } from '@jest/globals';
+import { vi } from 'vitest';
 import {
   fakerTypes,
   templates,
@@ -13,7 +13,9 @@ import {
   registerType,
   unregisterType,
   registerTemplate,
-  unregisterTemplate
+  unregisterTemplate,
+  columnStringToSchema,
+  schemaToColumnString,
 } from '../src/core.js';
 import { toCSV as toCSVString } from '../src/formatters.js';
 import { faker } from '@faker-js/faker';
@@ -35,7 +37,7 @@ describe('Core Module', () => {
         
         // Clear module cache to force re-evaluation
         const modulePath = '../src/core.js';
-        const cacheKey = Object.keys(jest.requireActual.cache || {}).find(key => key.includes('core.js'));
+        const cacheKey = Object.keys(vi.importActual.cache || {}).find(key => key.includes('core.js'));
         
         // Dynamic import to trigger the browser detection code
         const coreModule = await import(`${modulePath}?t=${Date.now()}`);
@@ -878,7 +880,7 @@ describe('Core Module', () => {
     });
 
     test('uses fakerInstance.setLocale() when the method exists (Faker v9+ path)', () => {
-      const setLocaleMock = jest.fn();
+      const setLocaleMock = vi.fn();
       const mockFaker = { ...faker, setLocale: setLocaleMock };
       setFaker(mockFaker);
       setLocale('fr');
@@ -1116,3 +1118,186 @@ describe('generateRow — input validation (H4)', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Schema-first input (Prompt #1)
+// ---------------------------------------------------------------------------
+describe('schema-first input', () => {
+  describe('columnStringToSchema', () => {
+    test('converts a simple column string without types', () => {
+      const result = columnStringToSchema('id,name,email');
+      expect(result).toEqual([
+        { name: 'id', type: 'word' },
+        { name: 'name', type: 'word' },
+        { name: 'email', type: 'word' },
+      ]);
+    });
+
+    test('converts a column string with explicit types', () => {
+      const result = columnStringToSchema('id:autoIncrement,name:fullName,email:email');
+      expect(result).toEqual([
+        { name: 'id', type: 'autoIncrement' },
+        { name: 'name', type: 'fullName' },
+        { name: 'email', type: 'email' },
+      ]);
+    });
+
+    test('preserves special type prefixes: enum', () => {
+      const result = columnStringToSchema('status:enum:active|inactive|pending');
+      expect(result).toHaveLength(1);
+      expect(result[0].name).toBe('status');
+      expect(result[0].type).toBe('enum:active|inactive|pending');
+    });
+
+    test('preserves special type prefixes: range', () => {
+      const result = columnStringToSchema('score:range:1-100');
+      expect(result).toHaveLength(1);
+      expect(result[0].type).toBe('range:1-100');
+    });
+
+    test('preserves special type prefixes: pattern', () => {
+      const result = columnStringToSchema('code:pattern:X{COUNTER}');
+      expect(result[0].type).toBe('pattern:X{COUNTER}');
+    });
+
+    test('each returned object has exactly name and type keys (no extras)', () => {
+      const result = columnStringToSchema('id:autoIncrement');
+      expect(Object.keys(result[0]).sort()).toEqual(['name', 'type']);
+    });
+  });
+
+  describe('schemaToColumnString', () => {
+    test('converts schema columns back to a column string', () => {
+      const schema = [
+        { name: 'id', type: 'autoIncrement' },
+        { name: 'email', type: 'email' },
+      ];
+      expect(schemaToColumnString(schema)).toBe('id:autoIncrement,email:email');
+    });
+
+    test('round-trips with columnStringToSchema', () => {
+      const original = 'id:autoIncrement,name:fullName,status:enum:a|b|c';
+      const roundTripped = schemaToColumnString(columnStringToSchema(original));
+      expect(roundTripped).toBe(original);
+    });
+
+    test('ignores extended metadata fields (primaryKey, nullable, etc.)', () => {
+      const schema = [
+        { name: 'id', type: 'autoIncrement', primaryKey: true, nullable: false },
+        { name: 'email', type: 'email', unique: true },
+      ];
+      expect(schemaToColumnString(schema)).toBe('id:autoIncrement,email:email');
+    });
+  });
+
+  describe('generateData with options.schema', () => {
+    test('generates records from a schema array', () => {
+      const result = generateData({
+        schema: [
+          { name: 'id', type: 'autoIncrement' },
+          { name: 'email', type: 'email' },
+        ],
+        rows: 5,
+      });
+      expect(result.records).toHaveLength(5);
+      result.records.forEach((r, i) => {
+        expect(r.id).toBe(i + 1);
+        expect(typeof r.email).toBe('string');
+        expect(r.email).toContain('@');
+      });
+    });
+
+    test('result.columns contains equivalent SchemaColumn objects', () => {
+      const schema = [
+        { name: 'id', type: 'autoIncrement' },
+        { name: 'name', type: 'fullName' },
+      ];
+      const result = generateData({ schema, rows: 1 });
+      expect(result.columns).toEqual(schema);
+    });
+
+    test('result.columns has SchemaColumn objects with name and type', () => {
+      const result = generateData({ schema: [{ name: 'x', type: 'number' }], rows: 1 });
+      expect(result.columns[0]).toMatchObject({ name: 'x', type: 'number' });
+    });
+
+    test('schema with extended metadata fields is still generated correctly', () => {
+      const result = generateData({
+        schema: [
+          { name: 'id', type: 'autoIncrement', primaryKey: true, nullable: false },
+          { name: 'email', type: 'email', unique: true },
+        ],
+        rows: 3,
+      });
+      expect(result.records).toHaveLength(3);
+      expect(result.records[0].id).toBe(1);
+    });
+
+    test('schema with enum type works correctly', () => {
+      const result = generateData({
+        schema: [{ name: 'status', type: 'enum:active|inactive' }],
+        rows: 20,
+      });
+      result.records.forEach(r => {
+        expect(['active', 'inactive']).toContain(r.status);
+      });
+    });
+
+    test('schema with range type works correctly', () => {
+      const result = generateData({
+        schema: [{ name: 'score', type: 'range:0-10' }],
+        rows: 20,
+      });
+      result.records.forEach(r => {
+        expect(r.score).toBeGreaterThanOrEqual(0);
+        expect(r.score).toBeLessThanOrEqual(10);
+      });
+    });
+
+    test('rowCount and columnCount are correct', () => {
+      const result = generateData({
+        schema: [{ name: 'a', type: 'word' }, { name: 'b', type: 'number' }],
+        rows: 7,
+      });
+      expect(result.rowCount).toBe(7);
+      expect(result.columnCount).toBe(2);
+    });
+  });
+
+  describe('generateData backward compatibility', () => {
+    test('columns string still works identically', () => {
+      const result = generateData({ columns: 'id:autoIncrement,name:fullName', rows: 3 });
+      expect(result.records).toHaveLength(3);
+      expect(result.records[0].id).toBe(1);
+    });
+
+    test('template still works identically', () => {
+      const result = generateData({ template: 'users', rows: 2 });
+      expect(result.records).toHaveLength(2);
+      expect(result.records[0]).toHaveProperty('email');
+    });
+
+    test('error thrown when neither columns, template, nor schema is provided', () => {
+      expect(() => generateData({ rows: 5 })).toThrow(
+        'Either columns, schema, or template must be provided'
+      );
+    });
+
+    test('distribution on non-numeric faker type is ignored (type not in numericTypes set)', () => {
+      // When col.distribution is set but col.type is NOT in numericTypes (e.g., 'boolean'),
+      // the distribution is silently skipped and the normal fakerType generator is used
+      // This covers the false branch of `if (numericTypes.has(col.type))`
+      const schema = [
+        { name: 'active', type: 'boolean', distribution: { type: 'uniform', min: 0, max: 1 } },
+        { name: 'label', type: 'email', distribution: { type: 'normal', mean: 50, stddev: 10 } },
+      ];
+      const { records } = generateData({ schema, rows: 5 });
+      expect(records).toHaveLength(5);
+      // 'boolean' type should still produce boolean values despite distribution being set
+      for (const r of records) {
+        expect(typeof r.active).toBe('boolean');
+        expect(typeof r.label).toBe('string');
+        expect(r.label).toMatch(/.+@.+/);
+      }
+    });
+  });
+});

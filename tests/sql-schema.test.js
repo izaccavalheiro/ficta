@@ -1,6 +1,7 @@
 // Tests for SQL schema generator
-import { describe, expect, test, jest } from '@jest/globals';
+import { vi } from 'vitest';
 import * as sqlSchema from '../src/sql-schema.js';
+import { setLogger, resetLogger } from '../src/logger.js';
 
 describe('SQL Schema Generator', () => {
   
@@ -786,173 +787,161 @@ describe('SQL Schema Generator', () => {
     });
   });
   
-  describe('resolveTableDependencies', () => {
-    test('resolves simple dependency chain', () => {
-      const tables = [
-        {
-          table: 'orders',
-          columns: [
-            { name: 'id', type: 'autoIncrement', primaryKey: true },
-            { name: 'user_id', type: 'number', references: { table: 'users', column: 'id' } }
-          ]
-        },
-        {
-          table: 'users',
-          columns: [
-            { name: 'id', type: 'autoIncrement', primaryKey: true }
-          ]
-        }
-      ];
-      
-      const order = sqlSchema.resolveTableDependencies(tables);
-      
-      expect(order.indexOf('users')).toBeLessThan(order.indexOf('orders'));
-    });
-    
-    test('resolves complex dependency graph', () => {
-      const tables = [
-        {
-          table: 'order_items',
-          columns: [
-            { name: 'id', type: 'autoIncrement', primaryKey: true },
-            { name: 'order_id', type: 'number', references: { table: 'orders' } },
-            { name: 'product_id', type: 'number', references: { table: 'products' } }
-          ]
-        },
-        {
-          table: 'orders',
-          columns: [
-            { name: 'id', type: 'autoIncrement', primaryKey: true },
-            { name: 'customer_id', type: 'number', references: { table: 'customers' } }
-          ]
-        },
-        {
-          table: 'customers',
-          columns: [{ name: 'id', type: 'autoIncrement', primaryKey: true }]
-        },
-        {
-          table: 'products',
-          columns: [{ name: 'id', type: 'autoIncrement', primaryKey: true }]
-        }
-      ];
-      
-      const order = sqlSchema.resolveTableDependencies(tables);
-      
-      expect(order.indexOf('customers')).toBeLessThan(order.indexOf('orders'));
-      expect(order.indexOf('orders')).toBeLessThan(order.indexOf('order_items'));
-      expect(order.indexOf('products')).toBeLessThan(order.indexOf('order_items'));
-    });
-    
-    test('handles tables with no dependencies', () => {
-      const tables = [
-        { table: 'users', columns: [{ name: 'id', type: 'autoIncrement', primaryKey: true }] },
-        { table: 'products', columns: [{ name: 'id', type: 'autoIncrement', primaryKey: true }] }
-      ];
-      
-      const order = sqlSchema.resolveTableDependencies(tables);
-      
-      expect(order).toHaveLength(2);
-      expect(order).toContain('users');
-      expect(order).toContain('products');
-    });
-    
-    test('throws error for circular dependencies', () => {
-      const tables = [
-        {
-          table: 'a',
-          columns: [
-            { name: 'id', type: 'autoIncrement', primaryKey: true },
-            { name: 'b_id', type: 'number', references: { table: 'b' } }
-          ]
-        },
-        {
-          table: 'b',
-          columns: [
-            { name: 'id', type: 'autoIncrement', primaryKey: true },
-            { name: 'a_id', type: 'number', references: { table: 'a' } }
-          ]
-        }
-      ];
-      
-      expect(() => {
-        sqlSchema.resolveTableDependencies(tables);
-      }).toThrow('Circular foreign key dependencies detected');
-    });
-    
-    test('ignores self-references', () => {
-      const tables = [
-        {
-          table: 'categories',
-          columns: [
-            { name: 'id', type: 'autoIncrement', primaryKey: true },
-            { name: 'parent_id', type: 'number', references: { table: 'categories' } }
-          ]
-        }
-      ];
-      
-      const order = sqlSchema.resolveTableDependencies(tables);
-      
-      expect(order).toEqual(['categories']);
+  describe('generateSchema with dependency ordering', () => {
+    test('INSERT mode: orders tables so parent INSERT precedes child INSERT', () => {
+      const schema = {
+        tables: [
+          {
+            table: 'orders',
+            columns: [
+              { name: 'id', type: 'autoIncrement', primaryKey: true },
+              { name: 'user_id', type: 'number', references: { table: 'users', column: 'id' } }
+            ],
+            records: [{ id: 1, user_id: 1 }]
+          },
+          {
+            table: 'users',
+            columns: [{ name: 'id', type: 'autoIncrement', primaryKey: true }],
+            records: [{ id: 1 }]
+          }
+        ],
+        mode: 'insert',
+        dialect: 'generic'
+      };
+      const sql = sqlSchema.generateSchema(schema);
+      const usersPos = sql.indexOf('INSERT INTO users');
+      const ordersPos = sql.indexOf('INSERT INTO orders');
+      expect(usersPos).toBeGreaterThanOrEqual(0);
+      expect(ordersPos).toBeGreaterThanOrEqual(0);
+      expect(usersPos).toBeLessThan(ordersPos);
     });
 
-    test('resolveTableDependencies with self-referencing foreign key', () => {
-      const tables = [
-        {
-          table: 'categories',
-          columns: [
-            { name: 'id', type: 'autoIncrement', primaryKey: true },
-            { name: 'parent_id', type: 'number', references: { table: 'categories' } }
-          ]
-        }
-      ];
-      
-      const result = sqlSchema.resolveTableDependencies(tables);
-      
-      expect(result).toContain('categories');
+    test('INSERT mode: multi-level dependency graph respected', () => {
+      const schema = {
+        tables: [
+          {
+            table: 'order_items',
+            columns: [
+              { name: 'id', type: 'autoIncrement', primaryKey: true },
+              { name: 'order_id', type: 'number', references: { table: 'orders', column: 'id' } }
+            ],
+            records: [{ id: 1, order_id: 1 }]
+          },
+          {
+            table: 'orders',
+            columns: [
+              { name: 'id', type: 'autoIncrement', primaryKey: true },
+              { name: 'customer_id', type: 'number', references: { table: 'customers', column: 'id' } }
+            ],
+            records: [{ id: 1, customer_id: 1 }]
+          },
+          { table: 'customers', columns: [{ name: 'id', type: 'autoIncrement', primaryKey: true }], records: [{ id: 1 }] }
+        ],
+        mode: 'insert',
+        dialect: 'generic'
+      };
+      const sql = sqlSchema.generateSchema(schema);
+      const pos = t => sql.indexOf(`INSERT INTO ${t}`);
+      expect(pos('customers')).toBeLessThan(pos('orders'));
+      expect(pos('orders')).toBeLessThan(pos('order_items'));
     });
 
-    test('resolveTableDependencies detects circular dependency correctly', () => {
-      const tables = [
-        {
-          table: 'a',
-          columns: [
-            { name: 'id', type: 'autoIncrement', primaryKey: true },
-            { name: 'b_id', type: 'number', references: { table: 'b' } }
-          ]
-        },
-        {
-          table: 'b',
-          columns: [
-            { name: 'id', type: 'autoIncrement', primaryKey: true },
-            { name: 'c_id', type: 'number', references: { table: 'c' } }
-          ]
-        },
-        {
-          table: 'c',
-          columns: [
-            { name: 'id', type: 'autoIncrement', primaryKey: true },
-            { name: 'a_id', type: 'number', references: { table: 'a' } }
-          ]
-        }
-      ];
-      
-      expect(() => sqlSchema.resolveTableDependencies(tables)).toThrow();
+    test('INSERT mode: handles tables with records but no FK', () => {
+      const schema = {
+        tables: [
+          { table: 'users', columns: [{ name: 'id', type: 'autoIncrement', primaryKey: true }], records: [{ id: 1 }] },
+          { table: 'products', columns: [{ name: 'id', type: 'autoIncrement', primaryKey: true }], records: [{ id: 1 }] }
+        ],
+        mode: 'insert',
+        dialect: 'generic'
+      };
+      const sql = sqlSchema.generateSchema(schema);
+      expect(sql).toContain('INSERT INTO users');
+      expect(sql).toContain('INSERT INTO products');
     });
 
-    test('ignores foreign key references to tables not present in the schema', () => {
-      // Covers the else arm of if (graph.has(refTable)) - when FK points to external table
-      const tables = [
-        {
-          table: 'orders',
-          columns: [
-            { name: 'id', type: 'autoIncrement', primaryKey: true },
-            { name: 'external_id', type: 'number', references: { table: 'external_table' } }
-          ]
-        }
-      ];
-      const order = sqlSchema.resolveTableDependencies(tables);
-      expect(order).toContain('orders');
-      expect(order).toHaveLength(1);
+    test('INSERT mode: manual order overrides FK sort', () => {
+      const schema = {
+        tables: [
+          {
+            table: 'child',
+            columns: [
+              { name: 'id', type: 'autoIncrement', primaryKey: true },
+              { name: 'parent_id', type: 'number', references: { table: 'parent', column: 'id' } }
+            ],
+            records: [{ id: 1, parent_id: 1 }]
+          },
+          {
+            table: 'parent',
+            columns: [{ name: 'id', type: 'autoIncrement', primaryKey: true }],
+            records: [{ id: 1 }]
+          }
+        ],
+        mode: 'insert',
+        dialect: 'generic',
+        insertOrder: 'manual'
+      };
+      const sql = sqlSchema.generateSchema(schema);
+      // In manual mode the given (child-first) order is preserved
+      expect(sql.indexOf('INSERT INTO child')).toBeLessThan(sql.indexOf('INSERT INTO parent'));
+    });
+
+    test('INSERT mode: FK referencing external table still outputs row', () => {
+      const schema = {
+        tables: [
+          {
+            table: 'orders',
+            columns: [
+              { name: 'id', type: 'autoIncrement', primaryKey: true },
+              { name: 'ext_id', type: 'number', references: { table: 'external_table', column: 'id' } }
+            ],
+            records: [{ id: 1, ext_id: 99 }]
+          }
+        ],
+        mode: 'insert',
+        dialect: 'generic'
+      };
+      const sql = sqlSchema.generateSchema(schema);
+      expect(sql).toContain('INSERT INTO orders');
+    });
+
+    test('DDL mode: warns and falls back when circular FK detected', () => {
+      const warnMessages = [];
+      setLogger({ warn: (...args) => warnMessages.push(args.join(' ')), log() {}, info() {}, error() {} });
+      try {
+        const schema = {
+          tables: [
+            { table: 'a', columns: [{ name: 'id', type: 'autoIncrement', primaryKey: true }, { name: 'b_id', type: 'number', references: { table: 'b', column: 'id' } }] },
+            { table: 'b', columns: [{ name: 'id', type: 'autoIncrement', primaryKey: true }, { name: 'a_id', type: 'number', references: { table: 'a', column: 'id' } }] }
+          ],
+          mode: 'ddl',
+          dialect: 'generic'
+        };
+        const sql = sqlSchema.generateSchema(schema);
+        // Should still produce DDL by falling back to original order
+        expect(sql).toContain('CREATE TABLE a');
+        expect(sql).toContain('CREATE TABLE b');
+        expect(warnMessages.some(m => m.includes('Could not resolve'))).toBe(true);
+      } finally {
+        resetLogger();
+      }
+    });
+
+    test('table with no columns property uses (t.columns || []) fallback (covers branch on line 426)', () => {
+      // When a table entry omits the `columns` array, the expression
+      // `(t.columns || [])` falls back to `[]` — covering the falsy branch.
+      // Use mode: 'insert' with tables that have no records so generateDDL is not
+      // called (which requires columns), but the dependency-ordering code still runs.
+      const schema = {
+        tables: [
+          { table: 'no_cols_table' },  // no `columns` property → t.columns is undefined
+          { table: 'has_cols', columns: [{ name: 'id', type: 'autoIncrement', primaryKey: true }] }
+        ],
+        mode: 'insert',
+        dialect: 'generic'
+      };
+      // Should not throw; no_cols_table has no FK dependencies so ordering succeeds
+      expect(() => sqlSchema.generateSchema(schema)).not.toThrow();
     });
   });
   
@@ -1116,39 +1105,40 @@ describe('SQL Schema Generator', () => {
     });
 
     test('handles circular dependencies gracefully', () => {
-      const originalWarn = console.warn;
-      const warnMock = jest.fn();
-      console.warn = warnMock;
+      const warnMock = vi.fn();
+      setLogger({ log() {}, info() {}, warn: warnMock, error() {} });
 
-      const schema = {
-        dialect: 'postgres',
-        mode: 'ddl',
-        insertOrder: 'auto',
-        tables: [
-          {
-            table: 'table_a',
-            columns: [
-              { name: 'id', type: 'autoIncrement', primaryKey: true },
-              { name: 'b_id', type: 'number', references: { table: 'table_b' } }
-            ]
-          },
-          {
-            table: 'table_b',
-            columns: [
-              { name: 'id', type: 'autoIncrement', primaryKey: true },
-              { name: 'a_id', type: 'number', references: { table: 'table_a' } }
-            ]
-          }
-        ]
-      };
-      
-      const sql = sqlSchema.generateSchema(schema);
-      
-      expect(warnMock).toHaveBeenCalled();
-      expect(sql).toContain('CREATE TABLE table_a');
-      expect(sql).toContain('CREATE TABLE table_b');
+      try {
+        const schema = {
+          dialect: 'postgres',
+          mode: 'ddl',
+          insertOrder: 'auto',
+          tables: [
+            {
+              table: 'table_a',
+              columns: [
+                { name: 'id', type: 'autoIncrement', primaryKey: true },
+                { name: 'b_id', type: 'number', references: { table: 'table_b' } }
+              ]
+            },
+            {
+              table: 'table_b',
+              columns: [
+                { name: 'id', type: 'autoIncrement', primaryKey: true },
+                { name: 'a_id', type: 'number', references: { table: 'table_a' } }
+              ]
+            }
+          ]
+        };
 
-      console.warn = originalWarn;
+        const sql = sqlSchema.generateSchema(schema);
+
+        expect(warnMock).toHaveBeenCalled();
+        expect(sql).toContain('CREATE TABLE table_a');
+        expect(sql).toContain('CREATE TABLE table_b');
+      } finally {
+        resetLogger();
+      }
     });
 
     test('generates batch inserts in schema mode', () => {
@@ -1613,9 +1603,8 @@ describe('SQL Schema Generator', () => {
     });
 
     test('(c) circular FK dependency falls back to original order without throwing', () => {
-      const originalWarn = console.warn;
-      const warnMock = jest.fn();
-      console.warn = warnMock;
+      const warnMock = vi.fn();
+      setLogger({ log() {}, info() {}, warn: warnMock, error() {} });
 
       try {
         const schema = {
@@ -1646,7 +1635,7 @@ describe('SQL Schema Generator', () => {
         expect(sql).toContain('CREATE TABLE beta');
         expect(warnMock).toHaveBeenCalled();
       } finally {
-        console.warn = originalWarn;
+        resetLogger();
       }
     });
   });

@@ -1,14 +1,26 @@
 // Ficta Core - Works in any JavaScript environment
 // No Node.js or browser-specific dependencies
 
-// Faker.js instance - can be set externally or will be auto-detected
-let fakerInstance = null;
+import { resolveDependencyOrder, resolveDependentValue, autoWireGeographicDependencies } from './dependencies.js';
+import { sampleFromDistribution } from './distributions.js';
 
-// Try to auto-detect faker in different environments
-if (typeof window !== 'undefined' && window.faker) {
-  // Browser environment with global faker
-  fakerInstance = window.faker;
-}
+/**
+ * @typedef {Object} SchemaColumn
+ * @property {string} name - Column name
+ * @property {string} type - Ficta type (e.g. 'autoIncrement', 'email', 'range:1-100')
+ * @property {boolean} [primaryKey] - Whether this column is a primary key
+ * @property {boolean} [nullable] - Whether this column allows NULL
+ * @property {boolean} [unique] - Whether this column has a UNIQUE constraint
+ * @property {string|number|boolean} [default] - Default value
+ * @property {{table:string, column:string}} [references] - FK reference
+ * @property {string} [sqlType] - SQL type override for DDL
+ * @property {{column:string, mapping?:Record<string,string[]>}|false} [depends] - Cross-column dependency config, or false to opt out of auto-wiring
+ * @property {{type:'uniform'|'normal'|'exponential'|'zipf', min?:number, max?:number, mean?:number, stddev?:number, lambda?:number, n?:number, s?:number}} [distribution] - Statistical distribution applied during value generation
+ * @property {string} [constraint] - Extra constraint expression (reserved)
+ */
+
+// Faker.js instance - set externally via setFaker()
+let fakerInstance = null;
 
 // Get faker instance (lazy initialization)
 export function getFaker() {
@@ -191,6 +203,25 @@ export function parseColumns(columnString) {
 }
 
 /**
+ * Convert a legacy column definition string to an array of SchemaColumn objects.
+ * @param {string} columnString - Column definitions (name:type,name:type,...)
+ * @returns {SchemaColumn[]} Array of SchemaColumn objects
+ */
+export function columnStringToSchema(columnString) {
+  return parseColumns(columnString).map(({ name, type }) => ({ name, type }));
+}
+
+/**
+ * Convert an array of SchemaColumn objects back to a column definition string.
+ * Only `name` and `type` are used; extended metadata fields are dropped.
+ * @param {SchemaColumn[]} schemaColumns
+ * @returns {string} Column definition string
+ */
+export function schemaToColumnString(schemaColumns) {
+  return schemaColumns.map(col => `${col.name}:${col.type}`).join(',');
+}
+
+/**
  * Generate data for a single row
  * @param {Array} columns - Column definitions
  * @param {number} index - Row index
@@ -198,52 +229,96 @@ export function parseColumns(columnString) {
  */
 export function generateRow(columns, index) {
   const row = {};
-  
-  for (const col of columns) {
-    if (col.type === 'autoIncrement') {
-      row[col.name] = index + 1;
-    } else if (col.type.startsWith('static:')) {
-      // Static value: static:SomeValue
-      row[col.name] = col.type.replace('static:', '');
-    } else if (col.type.startsWith('enum:')) {
-      // Enum: enum:value1|value2|value3
-      const values = col.type.replace('enum:', '').split('|');
-      if (values.length === 0 || values.every(v => v === '')) {
-        throw new Error(`enum type requires at least one value. Got: "${col.type}"`);
-      }
-      row[col.name] = getFaker().helpers.arrayElement(values);
-    } else if (col.type.startsWith('range:')) {
-      // Number range: range:1-100
-      const [min, max] = col.type.replace('range:', '').split('-').map(Number);
-      if (min > max) {
-        throw new Error(`range min (${min}) must be less than or equal to max (${max}). Got: "${col.type}"`);
-      }
-      row[col.name] = getFaker().number.int({ min, max });
-    } else if (col.type.startsWith('pattern:')) {
-      // Pattern: pattern:PRD-###### or pattern:user+{COUNTER}@example.com
-      const pattern = col.type.replace('pattern:', '');
-      let value = pattern;
-      // Replace {COUNTER} with incrementing number
-      value = value.replace(/\{COUNTER\}/g, index + 1);
-      // Replace # with random digits
-      value = value.replace(/#/g, () => getFaker().number.int({ min: 0, max: 9 }));
-      row[col.name] = value;
-    } else if (fakerTypes[col.type]) {
-      row[col.name] = fakerTypes[col.type]();
-    } else {
-      row[col.name] = getFaker().word.words(2);
-    }
+
+  // Resolve dependency ordering once per row call.
+  const { independent, dependent } = resolveDependencyOrder(columns);
+
+  // ---- Pass 1: independent columns ----------------------------------------
+  for (const col of independent) {
+    const rng = () => getFaker().number.float({ min: 0, max: 1 });
+    row[col.name] = _generateValue(col, index, rng);
   }
-  
+
+  // ---- Pass 2: dependent columns (in dependency-resolved order) -----------
+  for (const col of dependent) {
+    const rng = () => getFaker().number.float({ min: 0, max: 1 });
+    const resolved = resolveDependentValue(col, row, rng);
+    row[col.name] = resolved !== null ? resolved : _generateValue(col, index, rng);
+  }
+
   return row;
+}
+
+/**
+ * Generate a single column value (ignores `depends`).
+ * @private
+ * @param {Object} col - SchemaColumn
+ * @param {number} index - 0-based row index
+ * @param {() => number} [rng] - Uniform [0,1) RNG (defaults to Math.random)
+ */
+function _generateValue(col, index, rng = Math.random) {
+  if (col.type === 'autoIncrement') {
+    return index + 1;
+  } else if (col.type.startsWith('static:')) {
+    // Static value: static:SomeValue
+    return col.type.replace('static:', '');
+  } else if (col.type.startsWith('enum:')) {
+    // Enum: enum:value1|value2|value3
+    const values = col.type.replace('enum:', '').split('|');
+    if (values.length === 0 || values.every(v => v === '')) {
+      throw new Error(`enum type requires at least one value. Got: "${col.type}"`);
+    }
+    // If distribution is set (only zipf makes semantic sense for enums),
+    // use the Zipf-sampled index to pick a value; rank 1 = values[0].
+    if (col.distribution && col.distribution.type === 'zipf') {
+      const { s = 1 } = col.distribution;
+      const rank = sampleFromDistribution({ type: 'zipf', n: values.length, s, rng });
+      return values[rank - 1]; // rank is 1-indexed
+    }
+    return getFaker().helpers.arrayElement(values);
+  } else if (col.type.startsWith('range:')) {
+    // Number range: range:1-100
+    const [min, max] = col.type.replace('range:', '').split('-').map(Number);
+    if (min > max) {
+      throw new Error(`range min (${min}) must be less than or equal to max (${max}). Got: "${col.type}"`);
+    }
+    if (col.distribution) {
+      // Apply the requested distribution; clamp result to [min, max].
+      const raw = sampleFromDistribution({ ...col.distribution, min, max, rng });
+      return Math.min(max, Math.max(min, Math.round(raw)));
+    }
+    return getFaker().number.int({ min, max });
+  } else if (col.type.startsWith('pattern:')) {
+    // Pattern: pattern:PRD-###### or pattern:user+{COUNTER}@example.com
+    const pattern = col.type.replace('pattern:', '');
+    let value = pattern;
+    // Replace {COUNTER} with incrementing number
+    value = value.replace(/\{COUNTER\}/g, index + 1);
+    // Replace # with random digits
+    value = value.replace(/#/g, () => getFaker().number.int({ min: 0, max: 9 }));
+    return value;
+  } else if (fakerTypes[col.type]) {
+    // Numeric types that support distributions
+    if (col.distribution) {
+      const numericTypes = new Set(['number', 'float', 'price', 'amount', 'age', 'percentage', 'rating', 'score', 'temperature', 'weight', 'height']);
+      if (numericTypes.has(col.type)) {
+        const raw = sampleFromDistribution({ ...col.distribution, rng });
+        return Number(raw.toFixed(2));
+      }
+    }
+    return fakerTypes[col.type]();
+  } else {
+    return getFaker().word.words(2);
+  }
 }
 
 /**
  * Generate data as array of objects
  * @param {Object} options - Generation options
- * @param {string} options.columns - Column definitions
- * @param {string} options.template - Template name (optional)
- * @param {number} options.rows - Number of rows to generate
+ * @param {string} [options.columns] - Column definitions string
+ * @param {SchemaColumn[]} [options.schema] - Structured schema columns (alternative to columns string)
+ * @param {string} [options.template] - Template name (optional)
+ * @param {number} [options.rows] - Number of rows to generate
  * @returns {Object} Object with records and metadata
  */
 export function generateData(options) {
@@ -256,8 +331,8 @@ export function generateData(options) {
     if (!template) {
       throw new Error(`Unknown template: ${options.template}. Available templates: ${Object.keys(templates).join(', ')}`);
     }
-    // Use template columns if columns not explicitly provided
-    if (!columnString) {
+    // Use template columns if columns not explicitly provided and no schema object either
+    if (!columnString && !options.schema) {
       columnString = template.columns;
     }
     // Use template rows as default if rows not specified
@@ -265,13 +340,24 @@ export function generateData(options) {
       rowCount = template.rows;
     }
   }
-  
-  // Ensure we have columns
-  if (!columnString) {
-    throw new Error('Either columns or template must be provided');
+
+  // Determine the canonical SchemaColumn[] to use
+  let columns;
+  if (options.schema && Array.isArray(options.schema) && options.schema.length > 0) {
+    // Use schema object directly as canonical columns — shallow-clone to allow
+    // auto-wiring without mutating the caller's array.
+    columns = options.schema.map(c => ({ ...c }));
+  } else if (columnString) {
+    // Convert legacy column string to SchemaColumn[]
+    columns = columnStringToSchema(columnString);
+  } else {
+    throw new Error('Either columns, schema, or template must be provided');
   }
-  
-  const columns = parseColumns(columnString);
+
+  // Auto-wire implicit geographic dependencies (country→state, country→city)
+  // on columns that don't already have an explicit `depends` field.
+  autoWireGeographicDependencies(columns);
+
   const rows = rowCount || 100;
   const records = [];
   
