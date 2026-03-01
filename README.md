@@ -6,7 +6,7 @@
 
 **Built for real-world complexity**: Ficta doesn't just generate random values—it understands your data structures. Import existing SQL schemas and automatically generate referentially-intact test data that respects foreign key constraints. Convert OpenAPI specifications or GraphQL schemas into test datasets. Infer column types from existing data files. Stream millions of rows without exhausting memory.
 
-**Trusted by teams who demand quality**: With 100% test coverage across 948 test cases, Ficta ensures your test data generation is as reliable as your production code. Battle-tested in production environments, it handles edge cases like CSV escaping, SQL injection prevention, multi-dialect compatibility (PostgreSQL, MySQL, SQLite), and deterministic seeding for reproducible test scenarios.
+**Trusted by teams who demand quality**: With 1 163 tests across 21 suites, Ficta ensures your test data generation is as reliable as your production code. Battle-tested in production environments, it handles edge cases like CSV escaping, SQL injection prevention, multi-dialect compatibility (PostgreSQL, MySQL, SQLite), and deterministic seeding for reproducible test scenarios.
 
 ## Key Capabilities
 
@@ -57,7 +57,7 @@ Generate data in **9 industry-standard formats** with intelligent auto-detection
 - **Predefined Templates**: Battle-tested schemas for users, products, transactions, addresses, contacts
 - **Smart Detection**: Format automatically inferred from file extensions
 - **Zero Config Browser**: Single `<script>` tag or ES module import
-- **100% Test Coverage**: 921 tests across 13 suites ensure production reliability
+- **Comprehensive Test Coverage**: 1 163 tests across 21 suites ensure production reliability
 
 ## Who Should Use Ficta?
 
@@ -484,7 +484,7 @@ For modern web apps with module support.
 Generate test data in 9 popular file formats:
 
 | Format | Extension | Description | Node.js | Browser |
-|--------|-----------|-------------|---------|---------||
+|--------|-----------|-------------|---------|---------|
 | **CSV** | `.csv` | Comma-separated values with proper escaping | ✅ | ✅ |
 | **JSON** | `.json` | JavaScript Object Notation (pretty or compact) | ✅ | ✅ |
 | **XML** | `.xml` | Extensible Markup Language with configurable elements | ✅ | ✅ |
@@ -1470,17 +1470,16 @@ npm run test:coverage
 
 ### Test Coverage
 
-| Metric     | Coverage |
-|------------|----------|
-| Statements | 100%     |
-| Branches   | 100%     |
-| Functions  | 100%     |
-| Lines      | 100%     |
+| Metric     | Target |
+|------------|--------|
+| Branches   | ≥ 85%  |
+| Functions  | ≥ 95%  |
+| Lines      | ≥ 85%  |
 
 ### Test Statistics
 
-- **Total Tests**: 948
-- **Test Suites**: 13
+- **Total Tests**: 1 163
+- **Test Suites**: 21
 
 ### Test Categories
 
@@ -1562,7 +1561,7 @@ open coverage/lcov-report/index.html
 
 ### Development
 
-- [jest](https://jestjs.io/) - Testing framework
+- [vitest](https://vitest.dev/) - Testing framework
 - [esbuild](https://esbuild.github.io/) - Browser bundle builder
 - [csv-parse](https://csv.js.org/) - CSV parsing for tests
 - [c8](https://www.npmjs.com/package/c8) - Code coverage
@@ -1571,15 +1570,12 @@ open coverage/lcov-report/index.html
 
 ## AI Integration & Development
 
-This project includes comprehensive AI/Agent support documentation:
+This project includes comprehensive documentation for AI assistants and contributors:
 
-- **[AI_CONTEXT.md](AI_CONTEXT.md)** - Quick reference for AI assistants (start here!)
-- **[AGENTS.md](AGENTS.md)** - Complete AI integration guide with patterns and workflows
-- **[AI_WORKFLOWS.md](AI_WORKFLOWS.md)** - Step-by-step workflows for common tasks
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Deep technical architecture documentation
-- **[.github/copilot-instructions.md](.github/copilot-instructions.md)** - GitHub Copilot specific instructions
-
-These documents empower AI assistants to understand, modify, and extend the codebase effectively.
+- **[AGENTS.md](AGENTS.md)** — Complete API reference, module guide, code examples, and common tasks
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** — Design rationale, module dependency graph, data flow diagrams
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** — Setup, code style, test patterns, PR checklist
+- **[.github/copilot-instructions.md](.github/copilot-instructions.md)** — GitHub Copilot instructions
 
 ---
 
@@ -1593,10 +1589,7 @@ ISC
 
 Contributions welcome! Please open an issue or PR.
 
-For AI-assisted development, please review our AI integration documentation:
-- [AI_CONTEXT.md](AI_CONTEXT.md) - Quick project overview
-- [AGENTS.md](AGENTS.md) - Comprehensive AI development guide
-- [AI_WORKFLOWS.md](AI_WORKFLOWS.md) - Common task workflows
+For AI-assisted development, start with [AGENTS.md](AGENTS.md).
 
 ---
 

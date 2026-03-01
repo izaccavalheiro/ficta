@@ -1,7 +1,6 @@
 /**
  * Tests for src/infer.js — Schema Inference
  */
-import { describe, expect, test } from '@jest/globals';
 import { inferSchema } from '../src/infer.js';
 import { parseColumns } from '../src/core.js';
 import { faker } from '@faker-js/faker';
@@ -131,20 +130,20 @@ describe('inferSchema', () => {
   // ---------------------------------------------------------------------------
   test('infers uuid from UUID-shaped values', () => {
     const rows = [
-      { token: '123e4567-e89b-12d3-a456-426614174000' },
-      { token: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' },
+      { row_uid: '123e4567-e89b-12d3-a456-426614174000' },
+      { row_uid: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' },
     ];
     const { columnList } = inferSchema(rows);
-    expect(columnList.find(c => c.name === 'token').type).toBe('uuid');
+    expect(columnList.find(c => c.name === 'row_uid').type).toBe('uuid');
   });
 
   test('infers date from ISO date strings', () => {
     const rows = [
-      { registered: '2024-01-15' },
-      { registered: '2023-12-31' },
+      { inserted: '2024-01-15' },
+      { inserted: '2023-12-31' },
     ];
     const { columnList } = inferSchema(rows);
-    expect(columnList.find(c => c.name === 'registered').type).toBe('date');
+    expect(columnList.find(c => c.name === 'inserted').type).toBe('date');
   });
 
   test('infers date from ISO datetime strings', () => {
@@ -244,10 +243,10 @@ describe('inferSchema', () => {
 
   test('falls back to word for mixed non-matching values', () => {
     const rows = Array.from({ length: 20 }, (_, i) => ({
-      bio: `Unique long biography text number ${i} that doesn't fit any pattern`
+      misc_text: `Unique long biography text number ${i} that doesn't fit any pattern`
     }));
     const { columnList } = inferSchema(rows);
-    expect(columnList.find(c => c.name === 'bio').type).toBe('word');
+    expect(columnList.find(c => c.name === 'misc_text').type).toBe('word');
   });
 
   test('falls back to word when all values are null/empty', () => {

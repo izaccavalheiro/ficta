@@ -12,9 +12,30 @@ export interface ColumnDefinition {
   type: string;
 }
 
+/**
+ * Canonical structured column definition used throughout Ficta's generation pipeline.
+ * `columnStringToSchema()` converts legacy column strings to this format.
+ */
+export interface SchemaColumn {
+  name: string;
+  type: string;
+  primaryKey?: boolean;
+  nullable?: boolean;
+  unique?: boolean;
+  default?: string | number | boolean;
+  references?: { table: string; column: string };
+  sqlType?: string;
+  /** Cross-column dependency definition (reserved for future use). */
+  depends?: Record<string, unknown>;
+  /** Statistical distribution configuration (reserved for future use). */
+  distribution?: Record<string, unknown>;
+  /** Additional constraint expression (reserved for future use). */
+  constraint?: string;
+}
+
 export interface GenerateResult {
   records: Record<string, unknown>[];
-  columns: ColumnDefinition[];
+  columns: SchemaColumn[];
   rowCount: number;
   columnCount: number;
 }
@@ -36,6 +57,7 @@ export interface FormatOptions {
 
 export interface GenerateAndSaveOptions {
   columns?: string | ColumnDefinition[];
+  schema?: SchemaColumn[];
   rows?: number;
   output?: string;
   format?: 'csv' | 'json' | 'xml' | 'xlsx' | 'tsv' | 'sql' | 'yaml' | 'yml' | 'toml' | 'parquet';
@@ -73,6 +95,30 @@ export function seedFaker(seed: number): void;
 /** Set the Faker.js locale (e.g. 'fr', 'de', 'pt_BR'). */
 export function setLocale(locale: string): void;
 
+// ---------------------------------------------------------------------------
+// Logger interface
+// ---------------------------------------------------------------------------
+
+export interface Logger {
+  log?(...args: unknown[]): void;
+  info?(...args: unknown[]): void;
+  warn?(...args: unknown[]): void;
+  error?(...args: unknown[]): void;
+}
+
+/**
+ * Set the active logger for Ficta library functions.
+ * Pass `null` or `undefined` to suppress all output (no-op default).
+ * @example setLogger(console) // restore console output (used by CLI)
+ */
+export function setLogger(logger: Logger | null | undefined): void;
+
+/** Get the currently active logger. */
+export function getLogger(): Required<Logger>;
+
+/** Reset the logger back to the no-op default. */
+export function resetLogger(): void;
+
 /**
  * Parse a column definition string into structured column objects.
  * @example parseColumns('id:autoIncrement,name:fullName,email')
@@ -80,8 +126,22 @@ export function setLocale(locale: string): void;
 export function parseColumns(columnString: string): ColumnDefinition[];
 
 /**
+ * Convert a legacy column definition string to an array of SchemaColumn objects.
+ * @example columnStringToSchema('id:autoIncrement,name:fullName,email')
+ */
+export function columnStringToSchema(columnString: string): SchemaColumn[];
+
+/**
+ * Convert an array of SchemaColumn objects back to a column definition string.
+ * Only `name` and `type` fields are used.
+ * @example schemaToColumnString([{ name: 'id', type: 'autoIncrement' }]) // 'id:autoIncrement'
+ */
+export function schemaToColumnString(schemaColumns: SchemaColumn[]): string;
+
+/**
  * Generate records and return a result object without writing to disk.
  * This is the universal (Node.js + browser) generation entry point.
+ * Accepts either `columns` (string), `schema` (SchemaColumn[]), or `template`.
  */
 export function generateData(
   options: Omit<GenerateAndSaveOptions, 'output' | 'format' | 'formatOptions'>
@@ -222,11 +282,11 @@ export function toTSV(
   options?: Pick<FormatOptions, 'header' | 'headerFormat'>
 ): string;
 
-/** Convert records to a YAML string. */
-export function toYAML(records: Record<string, unknown>[]): string;
+/** Convert records to a YAML string. (async — lazily loads js-yaml) */
+export function toYAML(records: Record<string, unknown>[]): Promise<string>;
 
-/** Convert records to a TOML string. */
-export function toTOML(records: Record<string, unknown>[]): string;
+/** Convert records to a TOML string. (async — lazily loads @iarna/toml) */
+export function toTOML(records: Record<string, unknown>[]): Promise<string>;
 
 /** Convert records to a Parquet binary buffer. */
 export function toParquet(
@@ -242,6 +302,102 @@ export function detectFormat(filename: string): string;
 
 /** Return the canonical file extension (without dot) for a given format name. */
 export function getFileExtension(format: string): string;
+
+/** Options for the schema-based toSQL() overload. */
+export interface SQLSchemaOptions {
+  tableName?: string;
+  dialect?: 'postgres' | 'mysql' | 'sqlite' | 'generic';
+  mode?: 'insert' | 'ddl' | 'ddl+insert' | 'upsert' | 'truncate+insert';
+  batch?: boolean;
+  conflictColumns?: string[];
+}
+
+/**
+ * Convert records to SQL INSERT statements (legacy mode).
+ * @param records - Array of generated row objects
+ * @param columns - Column definitions
+ * @param tableName - Target table name (default: 'data_table')
+ */
+export function toSQL(
+  records: Record<string, unknown>[],
+  columns: ColumnDefinition[],
+  tableName: string
+): string;
+
+/**
+ * Convert records to SQL using schema options (schema mode).
+ * @param records - Array of generated row objects
+ * @param columns - Column definitions
+ * @param options - SQL generation options (dialect, mode, etc.)
+ */
+export function toSQL(
+  records: Record<string, unknown>[],
+  columns: ColumnDefinition[],
+  options: SQLSchemaOptions
+): string;
+
+/**
+ * Legacy INSERT-only SQL generator. Equivalent to toSQL() with a table name string.
+ */
+export function toSQLLegacy(
+  records: Record<string, unknown>[],
+  columns: ColumnDefinition[],
+  tableName?: string
+): string;
+
+// ---------------------------------------------------------------------------
+// DDL Parser & Schema Generator API
+// ---------------------------------------------------------------------------
+
+export interface TableDefForeignKey {
+  column: string;
+  refTable: string;
+  refColumn: string;
+}
+
+export interface TableDef {
+  tableName: string;
+  columns: Array<{
+    name: string;
+    sqlType: string;
+    fictaType: string;
+    nullable?: boolean;
+    autoIncrement?: boolean;
+    defaultValue?: string | null;
+    enumValues?: string[];
+  }>;
+  primaryKey?: string[];
+  foreignKeys: TableDefForeignKey[];
+}
+
+/** Parse one or more CREATE TABLE statements into structured TableDef objects. */
+export function parseDDL(ddlString: string): TableDef[];
+
+/** Topological sort of tables based on FK dependencies. Throws on circular deps. */
+export function orderByDependencies(tables: TableDef[]): TableDef[];
+
+export interface GenerateFromSchemaOptions {
+  ddl?: string;
+  tables?: TableDef[];
+  rows?: number;
+  outputMode?: 'insert' | 'upsert' | 'truncate+insert' | 'ddl+insert';
+  dialect?: 'postgres' | 'mysql' | 'sqlite' | 'generic';
+}
+
+/** Generate SQL for multiple tables from a DDL string or TableDef array. */
+export function generateFromSchema(options: GenerateFromSchemaOptions): string;
+
+export interface BuildInsertOptions {
+  tableName: string;
+  records: Record<string, unknown>[];
+  columns: ColumnDefinition[];
+  dialect?: 'postgres' | 'mysql' | 'sqlite' | 'generic';
+  outputMode?: 'insert' | 'upsert' | 'truncate+insert';
+  conflictColumns?: string[];
+}
+
+/** Build INSERT / UPSERT statements for a single table. */
+export function buildInsertStatements(options: BuildInsertOptions): string;
 
 // ---------------------------------------------------------------------------
 // Streaming API (Node.js only — import from 'ficta' or 'ficta/node')
@@ -396,7 +552,7 @@ export function fromGraphQLFile(filePath: string, options?: GraphQLBridgeOptions
 export function fromGraphQLSDL(
   sdlString: string,
   options?: { typeName?: string }
-): Array<{ name: string; type: string; nullable: boolean }>;
+): Promise<Array<{ name: string; type: string; nullable: boolean }>>;
 
 /**
  * Convert all object types in a GraphQL SDL document to a
@@ -406,7 +562,7 @@ export function fromGraphQLSDL(
 export function graphQLToFictaSchema(
   sdlString: string,
   options?: GraphQLBridgeOptions
-): Record<string, unknown>;
+): Promise<Record<string, unknown>>;
 
 // ---------------------------------------------------------------------------
 // Watch mode (Node.js only)

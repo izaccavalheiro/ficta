@@ -16,12 +16,23 @@ import {
   registerTemplate,
   unregisterTemplate,
   templates as builtinTemplates,
+  // Schema-first API (v1.2.0)
+  columnStringToSchema,
+  schemaToColumnString,
+  // Factory API (v1.2.0)
+  createFactory,
+  // Statistical distributions (v1.2.0)
+  sampleUniform,
+  sampleNormal,
+  sampleExponential,
+  sampleZipf,
+  sampleFromDistribution,
   // Schema inference (pure, browser-safe)
   inferSchema,
   // OpenAPI bridge (pure, browser-safe)
   openAPIToFictaSchema,
   fromOpenAPISchema,
-  // GraphQL bridge (pure, browser-safe)
+  // GraphQL bridge (pure, browser-safe) — async since v1.2.0
   graphQLToFictaSchema,
   fromGraphQLSDL,
   // DDL parser + multi-table generator (pure, browser-safe)
@@ -704,10 +715,11 @@ function GraphQLBridgeTab() {
   const [dialect, setDialect] = useState('postgres');
   const [genOutput, setGenOutput] = useState(null);
 
-  const convert = () => {
+  const convert = async () => {
     try {
-      const columns = fromGraphQLSDL(sdlInput, typeName ? { typeName } : {});
-      const schema = graphQLToFictaSchema(sdlInput, { rows: Number(rows), dialect });
+      // fromGraphQLSDL and graphQLToFictaSchema are async since v1.2.0
+      const columns = await fromGraphQLSDL(sdlInput, typeName ? { typeName } : {});
+      const schema = await graphQLToFictaSchema(sdlInput, { rows: Number(rows), dialect });
       setConverted({ columns, schema });
       setGenOutput(null);
     } catch (err) {
@@ -1022,17 +1034,353 @@ function TypesBrowserTab() {
 }
 
 // ---------------------------------------------------------------------------
-// Root App - tab navigation
+// Tab 9 - Factory API (v1.2.0)
+// Covers: createFactory, build(), buildMany(), buildList(), factory.schema
 // ---------------------------------------------------------------------------
+function FactoryApiTab() {
+  const DEFAULT_COLUMNS = 'id:autoIncrement,firstName,lastName,email,role:enum:admin|editor|viewer,score:range:0-100';
+  const [columns, setColumns] = useState(DEFAULT_COLUMNS);
+  const [seed, setSeed] = useState('42');
+  const [overrideField, setOverrideField] = useState('role');
+  const [overrideValue, setOverrideValue] = useState('admin');
+  const [buildCount, setBuildCount] = useState(5);
+  const [output, setOutput] = useState(null);
+  const [schemaInfo, setSchemaInfo] = useState(null);
+
+  const runFactory = () => {
+    try {
+      const seedNum = seed !== '' ? Number(seed) : undefined;
+      const factory = createFactory(columns, seedNum !== undefined ? { seed: seedNum } : {});
+
+      // Expose factory.schema metadata
+      setSchemaInfo(factory.schema);
+
+      // build() — single record with optional override
+      const override = overrideField && overrideValue
+        ? { [overrideField]: overrideValue }
+        : {};
+      const single = factory.build(override);
+
+      // buildMany() — N identical-override records
+      const many = factory.buildMany(Number(buildCount));
+
+      // buildList() — per-record override function
+      const listed = factory.buildList(3, (rec, i) => ({
+        email: `override${i + 1}@example.com`,
+      }));
+
+      setOutput({ single, many, listed });
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
+  };
+
+  return (
+    <div className="tab-layout">
+      <div className="config-panel">
+        <h3>Factory API <span className="badge-new">v1.2.0</span></h3>
+        <p className="tab-desc">
+          <code>createFactory()</code> creates a reusable test-data factory.
+          Use <code>build()</code> for a single record, <code>buildMany(n)</code> for
+          N records with shared overrides, and <code>buildList(n, fn)</code> for
+          per-record override functions. The <code>seed</code> option makes output
+          fully reproducible across runs.
+        </p>
+
+        <FormRow label="Column Definitions">
+          <textarea value={columns} rows={3} onChange={(e) => setColumns(e.target.value)} />
+        </FormRow>
+
+        <FormRow label="Seed" hint="Integer → deterministic; blank for random">
+          <input type="number" value={seed} placeholder="e.g. 42"
+            onChange={(e) => setSeed(e.target.value)} />
+        </FormRow>
+
+        <FormRow label="build() override field">
+          <input type="text" value={overrideField} placeholder="e.g. role"
+            onChange={(e) => setOverrideField(e.target.value)} />
+        </FormRow>
+
+        <FormRow label="build() override value">
+          <input type="text" value={overrideValue} placeholder="e.g. admin"
+            onChange={(e) => setOverrideValue(e.target.value)} />
+        </FormRow>
+
+        <FormRow label="buildMany count">
+          <input type="number" value={buildCount} min={1} max={50}
+            onChange={(e) => setBuildCount(e.target.value)} />
+        </FormRow>
+
+        <ActionButton onClick={runFactory}>Create Factory &amp; Run</ActionButton>
+
+        {schemaInfo && (
+          <div className="inferred-results">
+            <h4>factory.schema — parsed column metadata</h4>
+            <table className="type-table">
+              <thead><tr><th>name</th><th>type</th></tr></thead>
+              <tbody>
+                {schemaInfo.map(col => (
+                  <tr key={col.name}>
+                    <td><code>{col.name}</code></td>
+                    <td><code>{col.type}</code></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="preview-panel">
+        {output ? (
+          <div className="preview-box">
+            <div className="preview-header">
+              <span className="preview-label">Factory output</span>
+            </div>
+            <pre className="data-preview">
+              {'=== build() — 1 record (with override) ===\n'}
+              {JSON.stringify(output.single, null, 2)}
+              {'\n\n=== buildMany(' + buildCount + ') ===\n'}
+              {JSON.stringify(output.many, null, 2)}
+              {'\n\n=== buildList(3, fn) — sequential email override ===\n'}
+              {JSON.stringify(output.listed, null, 2)}
+            </pre>
+          </div>
+        ) : (
+          <div className="empty-state">
+            <p>Configure a column string and click “Create Factory &amp; Run”.</p>
+            <p>The factory uses <code>seed</code> for reproducible output — the same seed always produces identical data.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tab 10 - Statistical Distributions (v1.2.0)
+// Covers: sampleNormal, sampleZipf, sampleExponential, sampleFromDistribution,
+//         distribution field on SchemaColumn, Zipf-weighted enums
+// ---------------------------------------------------------------------------
+const DIST_SCHEMA_DEFAULT = JSON.stringify([
+  { name: 'userId',   type: 'autoIncrement' },
+  { name: 'age',      type: 'range:18-80',  distribution: { type: 'normal',      mean: 35, stddev: 10 } },
+  { name: 'sessions', type: 'range:1-500',  distribution: { type: 'exponential', lambda: 0.1 } },
+  { name: 'plan',     type: 'enum:free|starter|pro|enterprise', distribution: { type: 'zipf', n: 4, s: 1.8 } },
+  { name: 'score',    type: 'range:0-100',  distribution: { type: 'normal',      mean: 72, stddev: 12 } },
+], null, 2);
+
+function DistributionsTab() {
+  const [schemaInput, setSchemaInput] = useState(DIST_SCHEMA_DEFAULT);
+  const [rows, setRows] = useState(20);
+  const [output, setOutput]   = useState(null);
+  const [samplerOutput, setSamplerOutput] = useState(null);
+
+  const generate = () => {
+    try {
+      const schema = JSON.parse(schemaInput);
+      if (!Array.isArray(schema)) throw new Error('Must be a JSON array of SchemaColumn objects.');
+      const result = generateData({ schema, rows: Number(rows) });
+      setOutput(result.records);
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
+  };
+
+  const runSamplers = () => {
+    try {
+      const results = [
+        { fn: 'sampleUniform(18, 65)',         values: Array.from({ length: 6 }, () => sampleUniform(18, 65).toFixed(1)) },
+        { fn: 'sampleNormal(70, 10)',           values: Array.from({ length: 6 }, () => Math.round(sampleNormal(70, 10))) },
+        { fn: 'sampleExponential(0.5)',         values: Array.from({ length: 6 }, () => sampleExponential(0.5).toFixed(2)) },
+        { fn: 'sampleZipf(4, 1.5)',             values: Array.from({ length: 10 }, () => sampleZipf(4, 1.5)) },
+        { fn: 'sampleFromDistribution normal',  values: Array.from({ length: 6 }, () => sampleFromDistribution({ type: 'normal', mean: 100, stddev: 15 }).toFixed(1)) },
+      ];
+      setSamplerOutput(results);
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
+  };
+
+  return (
+    <div className="tab-layout">
+      <div className="config-panel">
+        <h3>Distributions <span className="badge-new">v1.2.0</span></h3>
+        <p className="tab-desc">
+          Add a <code>distribution</code> field to any <code>SchemaColumn</code> to
+          control the statistical shape of generated values.
+          Numeric and range columns are clamped to their declared bounds;
+          enum columns use Zipf rank to select from the value list (making some
+          values far more likely than others).
+        </p>
+
+        <FormRow label="Schema (SchemaColumn[] JSON)" hint='Array of objects with optional "distribution" field'>
+          <textarea value={schemaInput} rows={12} onChange={(e) => setSchemaInput(e.target.value)} />
+        </FormRow>
+
+        <FormRow label="Rows">
+          <input type="number" value={rows} min={5} max={1000}
+            onChange={(e) => setRows(e.target.value)} />
+        </FormRow>
+
+        <div className="button-group">
+          <ActionButton onClick={generate}>Generate with Distributions</ActionButton>
+          <ActionButton onClick={runSamplers} variant="secondary">Run Raw Samplers</ActionButton>
+        </div>
+
+        {samplerOutput && (
+          <div className="inferred-results">
+            <h4>Raw sampler results</h4>
+            <table className="type-table">
+              <thead><tr><th>Function</th><th>Samples</th></tr></thead>
+              <tbody>
+                {samplerOutput.map(r => (
+                  <tr key={r.fn}>
+                    <td><code>{r.fn}</code></td>
+                    <td>{r.values.join(', ')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="preview-panel">
+        {output ? (
+          <PreviewBox data={output} label={`${output.length} rows with statistical distributions`} />
+        ) : (
+          <div className="empty-state">
+            <p>The schema above uses <code>distribution</code> on every column.</p>
+            <p><strong>plan</strong> uses Zipf weighting: <em>free</em> will appear most often,
+              <em>enterprise</em> least.</p>
+            <p><strong>age</strong> uses a Normal distribution centred at 35.</p>
+            <p>Click “Generate with Distributions” to see it in action.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tab 11 - Schema API (v1.2.0)
+// Covers: columnStringToSchema, schemaToColumnString, generateData with schema:
+// ---------------------------------------------------------------------------
+function SchemaApiTab() {
+  const DEFAULT_STR = 'id:autoIncrement,firstName,lastName,email,score:range:0-100,role:enum:admin|editor|viewer';
+  const [columnString, setColumnString] = useState(DEFAULT_STR);
+  const [schemaInput, setSchemaInput] = useState('');
+  const [parsed, setParsed] = useState(null);
+  const [roundTrip, setRoundTrip] = useState(null);
+  const [rows, setRows] = useState(5);
+  const [genOutput, setGenOutput] = useState(null);
+
+  const parseToSchema = () => {
+    try {
+      const schema = columnStringToSchema(columnString);
+      setParsed(schema);
+      setSchemaInput(JSON.stringify(schema, null, 2));
+      setRoundTrip(schemaToColumnString(schema));
+      setGenOutput(null);
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
+  };
+
+  const generateFromSchema = () => {
+    try {
+      const schema = JSON.parse(schemaInput);
+      // Add extra metadata (not expressible in string form) to demonstrate the power
+      // of the schema-first API — e.g. mark id as primaryKey, email as nullable: false
+      if (schema[0]?.name === 'id') schema[0].primaryKey = true;
+      const emailCol = schema.find(c => c.type === 'email');
+      if (emailCol) emailCol.nullable = false;
+
+      const result = generateData({ schema, rows: Number(rows) });
+      setGenOutput(result.records);
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
+  };
+
+  return (
+    <div className="tab-layout">
+      <div className="config-panel">
+        <h3>Schema API <span className="badge-new">v1.2.0</span></h3>
+        <p className="tab-desc">
+          <code>columnStringToSchema()</code> converts a column-definition string
+          into a <code>SchemaColumn[]</code> array, unlocking richer metadata such
+          as <code>primaryKey</code>, <code>nullable</code>, and <code>distribution</code>.
+          <code>schemaToColumnString()</code> converts back (metadata is stripped).
+          Pass <code>schema: SchemaColumn[]</code> directly to <code>generateData()</code>.
+        </p>
+
+        <FormRow label="Column definition string" hint="name:type,name:type,…">
+          <input type="text" value={columnString}
+            onChange={(e) => setColumnString(e.target.value)} />
+        </FormRow>
+
+        <ActionButton onClick={parseToSchema}>Parse to SchemaColumn[]</ActionButton>
+
+        {parsed && (
+          <>
+            <div className="inferred-results">
+              <h4>Round-trip: schemaToColumnString()</h4>
+              <code className="columns-string">{roundTrip}</code>
+            </div>
+
+            <FormRow label="Editable SchemaColumn[] (add primaryKey, nullable, distribution…)" hint="Edit JSON, then click Generate">
+              <textarea value={schemaInput} rows={10}
+                onChange={(e) => setSchemaInput(e.target.value)} />
+            </FormRow>
+
+            <FormRow label="Rows">
+              <input type="number" value={rows} min={1} max={500}
+                onChange={(e) => setRows(e.target.value)} />
+            </FormRow>
+
+            <ActionButton onClick={generateFromSchema} variant="secondary">
+              Generate with schema:
+            </ActionButton>
+          </>
+        )}
+      </div>
+
+      <div className="preview-panel">
+        {genOutput ? (
+          <PreviewBox data={genOutput} label={`${genOutput.length} rows generated from SchemaColumn[]`} />
+        ) : parsed ? (
+          <div className="preview-box">
+            <div className="preview-header">
+              <span className="preview-label">Parsed SchemaColumn[] — {parsed.length} columns</span>
+            </div>
+            <pre className="data-preview">{JSON.stringify(parsed, null, 2)}</pre>
+          </div>
+        ) : (
+          <div className="empty-state">
+            <p>Enter a column string and click “Parse to SchemaColumn[]”.</p>
+            <p>You can then enrich the JSON (add <code>primaryKey: true</code>,
+              <code>nullable: false</code>, <code>distribution: &#123;…&#125;</code>) and
+              generate data using the richer schema-first API.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 const TABS = [
-  { id: 'basic',   label: '⚡ Basic Generator',    component: BasicGeneratorTab },
-  { id: 'special', label: '🔧 Special Types',       component: SpecialTypesTab },
-  { id: 'plugin',  label: '🔌 Plugin API',          component: PluginApiTab },
-  { id: 'infer',   label: '🔍 Schema Inference',    component: SchemaInferenceTab },
-  { id: 'openapi', label: '📄 OpenAPI Bridge',      component: OpenApiBridgeTab },
-  { id: 'graphql', label: '◈ GraphQL Bridge',       component: GraphQLBridgeTab },
-  { id: 'ddl',     label: '🗄️ DDL Multi-Table',     component: DdlMultiTableTab },
-  { id: 'types',   label: '📚 Types & Templates',   component: TypesBrowserTab },
+  { id: 'basic',         label: '⚡ Basic Generator',        component: BasicGeneratorTab },
+  { id: 'special',       label: '🔧 Special Types',           component: SpecialTypesTab },
+  { id: 'plugin',        label: '🔌 Plugin API',             component: PluginApiTab },
+  { id: 'factory',       label: '🏭 Factory API',           component: FactoryApiTab },
+  { id: 'distributions', label: '📈 Distributions',          component: DistributionsTab },
+  { id: 'schema-api',    label: '🧩 Schema API',             component: SchemaApiTab },
+  { id: 'infer',         label: '🔍 Schema Inference',       component: SchemaInferenceTab },
+  { id: 'openapi',       label: '📄 OpenAPI Bridge',         component: OpenApiBridgeTab },
+  { id: 'graphql',       label: '◈ GraphQL Bridge',           component: GraphQLBridgeTab },
+  { id: 'ddl',           label: '🗄️ DDL Multi-Table',       component: DdlMultiTableTab },
+  { id: 'types',         label: '📚 Types & Templates',       component: TypesBrowserTab },
 ];
 
 function App() {
@@ -1043,7 +1391,7 @@ function App() {
     <div className="app">
       <header className="app-header">
         <h1>🎲 Ficta — Test Data Generator</h1>
-        <p>Universal browser-side fake data in 7 formats · All features demonstrated</p>
+        <p>Universal browser-side fake data in 7 formats · Factory API · Distributions · Schema API · All features demonstrated</p>
       </header>
 
       <nav className="tab-nav">

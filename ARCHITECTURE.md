@@ -1,1145 +1,446 @@
-# Architecture Documentation
+# Architecture
 
-> **Deep technical guide to Ficta architecture, design decisions, and implementation details**
+> Technical design guide for Ficta's internals.
+
+---
 
 ## Table of Contents
 
-- [Overview](#overview)
-- [Design Principles](#design-principles)
-- [Module Architecture](#module-architecture)
-- [Data Flow](#data-flow)
-- [Core Components](#core-components)
-- [Environment Abstraction](#environment-abstraction)
-- [Format System](#format-system)
-- [Type System](#type-system)
-- [Extension Mechanisms](#extension-mechanisms)
-- [Performance Considerations](#performance-considerations)
-- [Security Considerations](#security-considerations)
-- [Future Roadmap](#future-roadmap)
+1. [Design Principles](#1-design-principles)
+2. [Module Map](#2-module-map)
+3. [Data Flow Diagrams](#3-data-flow-diagrams)
+4. [Core Components In Depth](#4-core-components-in-depth)
+5. [Environment Abstraction](#5-environment-abstraction)
+6. [Format System](#6-format-system)
+7. [Type System](#7-type-system)
+8. [SQL Stack](#8-sql-stack)
+9. [Extension Mechanisms](#9-extension-mechanisms)
+10. [Known Architectural Smells](#10-known-architectural-smells)
 
 ---
 
-## Overview
+## 1. Design Principles
 
-### Project Goals
-
-1. **Universal Compatibility** - Single codebase for Node.js, browsers, and CLI
-2. **Zero Configuration** - Works out of the box with sensible defaults
-3. **Format Flexibility** - Support multiple output formats with automatic detection
-4. **Type Safety** - Predictable data generation with consistent types
-5. **Developer Experience** - Intuitive API for both programmatic and CLI usage
-
-### Architecture Style
-
-- **Functional Core, Imperative Shell** - Pure functions for logic, side effects at boundaries
-- **Adapter Pattern** - Environment-specific wrappers around universal core
-- **Strategy Pattern** - Pluggable formatters for different output types
-- **Factory Pattern** - Dynamic value generation based on type definitions
+| # | Principle | Rationale |
+|---|---|---|
+| 1 | **Universal core** | `src/core.js` imports nothing at all. Pure JS, runs in Node.js, browsers, and edge runtimes without modification. |
+| 2 | **Faker dependency injection** | `setFaker(faker)` / `getFaker()` — initialization is explicit, lazy, and testable. Never access Faker directly. |
+| 3 | **Pure functions first** | Core logic has no side effects. I/O and state only at the adapter boundary (`node.js`, `browser.js`, `cli.js`). |
+| 4 | **Lazy optional dependencies** | `js-yaml`, `@iarna/toml`, `graphql`, `@inquirer/prompts`, database drivers are dynamically imported on first use. Absent packages produce actionable install messages, not cryptic import errors. |
+| 5 | **Silent by default** | No `console.*` anywhere in source. All output is routed through `src/logger.js`. The default logger is a no-op; callers opt in. |
+| 6 | **Options objects** | Every exported function accepts a single destructured options object. This keeps the public API stable as new options are added. |
+| 7 | **ES Modules only** | `import`/`export` everywhere. No `require`, no `module.exports`, no CommonJS interop shims. |
 
 ---
 
-## Design Principles
+## 2. Module Map
 
-### 1. Universal Core
+### Full dependency graph (acyclic)
 
-**Principle:** Core logic has zero runtime dependencies on Node.js or browser APIs.
+```
+Tier 0 — zero imports (pure)
+  core.js
+  ddl-parser.js
+  sql-schema.js
+  infer.js
+  openapi-bridge.js
+  distributions.js
+  dependency-maps.js
+  formatters.shared.js
+  name-hints.js
+  logger.js
 
-**Implementation:**
-```javascript
-// ✅ GOOD: Universal
-function generateRows(columns, count) {
-  const rows = [];
-  for (let i = 0; i < count; i++) {
-    rows.push(generateRow(columns, i + 1));
-  }
-  return rows;
-}
+Tier 1 — depends only on Tier 0
+  graphql-bridge.js    ← graphql (lazy npm)
+  factory.js           ← core
+  wizard.js            ← core, @inquirer/prompts (lazy)
+  dependencies.js      ← dependency-maps
+  anonymizer.js        ← core, distributions
 
-// ❌ BAD: Node.js specific
-function generateRows(columns, count) {
-  const fs = require('fs'); // Node-specific!
-  // ...
-}
+Tier 2 — depends on Tier 0 + 1
+  formatters.js        ← sql-schema, schema-generator, formatters.shared  [Node]
+  formatters.browser.js← sql-schema, formatters.shared                    [Browser]
+  schema-generator.js  ← ddl-parser, core, sql-schema
+  schema-builder.js    ← core, sql-schema, schema-generator
+  seeder.js            ← logger, seeders/* (lazy drivers)
+
+Tier 3 — environment adapters
+  node.js              ← all of the above
+  browser.js           ← core, formatters.browser, ddl-parser, schema-generator,
+                         infer, openapi-bridge, graphql-bridge
+
+Tier 4 — executables
+  cli.js               ← node.js, wizard (yargs)
 ```
 
-**Benefits:**
-- Code reuse across environments
-- Easier testing (no mocking environment APIs)
-- Better separation of concerns
+### Source file responsibility summary
 
-### 2. Lazy Initialization
-
-**Principle:** Defer loading of heavy dependencies until needed.
-
-**Implementation:**
-```javascript
-let fakerInstance = null;
-
-function getFaker() {
-  if (!fakerInstance) {
-    throw new Error('Faker.js not initialized');
-  }
-  return fakerInstance;
-}
-
-export function setFaker(faker) {
-  fakerInstance = faker;
-}
-```
-
-**Benefits:**
-- Faster initial load times
-- Support for custom Faker configurations
-- Better testability
-
-### 3. Format Detection
-
-**Principle:** Minimize user configuration through intelligent defaults.
-
-**Implementation:**
-```javascript
-function detectFormat(filename) {
-  const ext = filename.split('.').pop().toLowerCase();
-  const formatMap = {
-    csv: 'csv',
-    json: 'json',
-    xml: 'xml',
-    xlsx: 'xlsx',
-    xls: 'xlsx',
-    tsv: 'tsv',
-    sql: 'sql'
-  };
-  return formatMap[ext] || 'csv';
-}
-```
-
-**Benefits:**
-- Reduced cognitive load
-- Fewer errors from misconfiguration
-- Cleaner API
-
-### 4. Pure Functions
-
-**Principle:** Prefer pure functions without side effects.
-
-**Characteristics:**
-- Same input → same output (given same Faker seed)
-- No mutations of input parameters
-- No external state modification
-
-**Example:**
-```javascript
-// Pure function
-function parseColumns(columnString) {
-  return columnString.split(',').map(col => {
-    const [name, ...typeParts] = col.trim().split(':');
-    return { name, type: typeParts.join(':') || name };
-  });
-}
-
-// Returns new array, doesn't modify input
-```
-
-### 5. Options Objects
-
-**Principle:** Use configuration objects instead of positional parameters.
-
-**Rationale:**
-- Easier to add new options without breaking API
-- Self-documenting code (named parameters)
-- Natural defaults through destructuring
-
-**Pattern:**
-```javascript
-function generateData({
-  columns,
-  rows = 100,           // Default values
-  format = 'csv',
-  template,
-  ...formatOptions      // Extensible
-}) {
-  // Implementation
-}
-```
+| File | Responsibility | Env |
+|---|---|---|
+| `core.js` | Column parsing, data generation, type/template registry, plugin API | Universal |
+| `formatters.shared.js` | Pure CSV / TSV / JSON utilities, `detectFormat`, `escapeCSV` | Universal |
+| `formatters.js` | Excel, XML, YAML, TOML, Parquet, SQL formatting | Node.js |
+| `formatters.browser.js` | CSV, JSON, XML, SQL formatting (no heavy deps) | Browser |
+| `node.js` | File I/O, streaming, watch mode, DB seeding, OpenAPI/GraphQL file loading, re-exports all of `core.js` | Node.js |
+| `browser.js` | Browser adapter; calls `setFaker` at import; exposes `generateData`, `generateAndDownload` | Browser |
+| `cli.js` | yargs CLI: parses argv, routes to `node.js` functions, stdin piping, stdout/stderr split | Node.js |
+| `ddl-parser.js` | `parseDDL` → `TableDef[]`; `orderByDependencies` topological sort | Universal |
+| `sql-schema.js` | `generateDDL`, `generateInserts`, `generateUpserts`, `generateSchema`, `sqlTypeMap` | Universal |
+| `schema-generator.js` | Multi-table FK orchestration, `pkStore` for FK sampling, topological ordering | Universal |
+| `schema-builder.js` | Fluent `table()` / `schema()` builder returning `toSQL()` | Universal |
+| `infer.js` | Infer Ficta column types from sample rows | Universal |
+| `openapi-bridge.js` | Convert OpenAPI 3.x object → `ficta.schema.json` | Universal |
+| `graphql-bridge.js` | Convert GraphQL SDL → `ficta.schema.json` (async, lazy `graphql`) | Universal |
+| `factory.js` | `createFactory` → `build` / `buildMany` / `buildList` test fixtures | Universal |
+| `wizard.js` | Interactive guided schema creation (async, lazy `@inquirer/prompts`) | Universal |
+| `seeder.js` | `seedDatabase` — delegates to `src/seeders/` with lazy driver loading | Node.js |
+| `seeders/postgres.js` | Insert rows via `pg` | Node.js |
+| `seeders/mysql.js` | Insert rows via `mysql2` | Node.js |
+| `seeders/sqlite.js` | Insert rows via `better-sqlite3` | Node.js |
+| `distributions.js` | `sampleUniform`, `sampleNormal`, `sampleExponential`, `sampleZipf`, `sampleFromDistribution` | Universal |
+| `dependencies.js` | `resolveDependencyOrder`, `resolveDependentValue`, `autoWireGeographicDependencies` | Universal |
+| `dependency-maps.js` | `COUNTRY_STATE_MAP`, `COUNTRY_CITY_MAP`, `BUILT_IN_DEPENDENCY_MAPS` | Universal |
+| `anonymizer.js` | `anonymize`, `detectPIIColumns` — PII replacement preserving shape | Universal |
+| `logger.js` | `setLogger`, `getLogger`, `resetLogger` — no-op by default | Universal |
+| `name-hints.js` | `NAME_HINTS` array, `lookupNameHint(name)` — column-name → type inference | Universal |
 
 ---
 
-## Module Architecture
+## 3. Data Flow Diagrams
 
-### Directory Structure
-
-```
-ficta/
-├── src/
-│   ├── core.js              # Universal core logic
-│   ├── formatters.js        # Node.js formatters
-│   ├── formatters.browser.js # Browser formatters
-│   ├── formatters.shared.js  # Shared pure utilities (CSV, TSV, JSON)
-│   ├── node.js              # Node.js adapter + generateFromDDL/Stream/SchemaFile
-│   ├── browser.js           # Browser adapter
-│   ├── sql-schema.js        # SQL DDL/DML generator (universal)
-│   ├── ddl-parser.js        # SQL DDL → TableDef parser (universal, pure)
-│   ├── schema-generator.js  # Multi-table FK-aware orchestrator (universal)
-│   ├── schema-builder.js    # Fluent table/schema builder API (universal)
-│   ├── infer.js             # Schema inference from sample rows (universal)
-│   ├── openapi-bridge.js    # OpenAPI/JSON Schema → Ficta columns (universal)
-│   └── graphql-bridge.js    # GraphQL SDL → Ficta columns (universal)
-├── cli.js                   # CLI interface
-├── build.js                 # Build script for bundles
-├── ficta-schema.v1.json     # JSON Schema for ficta.schema.json files
-├── tests/                   # Test suite (921 tests across 13 suites, 100% coverage)
-│   ├── core.test.js
-│   ├── formatters.test.js
-│   ├── formatters.browser.test.js
-│   ├── node.test.js
-│   ├── browser.test.js
-│   ├── cli.test.js
-│   ├── sql-schema.test.js
-│   ├── ddl-parser.test.js
-│   ├── schema-generator.test.js
-│   ├── schema-builder.test.js
-│   ├── infer.test.js
-│   ├── openapi-bridge.test.js
-│   └── graphql-bridge.test.js
-└── dist/                    # Built browser bundles
-    ├── ficta.browser.js     # IIFE bundle (self-contained)
-    ├── ficta.browser.min.js # Minified IIFE bundle (self-contained)
-    └── ficta.esm.js         # ES Module bundle
-```
-
-### Module Dependency Graph
+### Standard generation
 
 ```
-                    ┌─────────────┐
-                    │   Faker.js  │
-                    └──────┬──────┘
-                           │
-                    ┌──────▼──────┐          ┌─────────┤  core.js    ├─────────┐
-          │         └─────────────┘         │
-          │                                 │
-     ┌────┴────┐                       ┌────┴────┐
-     │ node.js │                       │browser.js│
-     └────┬────┘                       └────┬────┘
-          │                                 │
-  ┌───────┴───────┐              ┌─────────┴──────────┐
-  │ formatters.js  │              │formatters.browser.js│
-  └───────┬───────┘              └─────────┬──────────┘
-          │                                 │
-    ┌─────┴─────┐                    ┌──────┴─────┐
-    │  cli.js   │                    │ Web Browser │
-    └───────────┘                    └─────────────┘
-
-  SQL layer (universal — used by both node.js and schema-generator.js):
-
-  ┌────────────────────┐   ┌────────────────────┐
-  │  ddl-parser.js     │→│ schema-generator.js │→ node.js
-  └────────────────────┘   └─────────┬──────────┘
-                                           │
-                             ┌──────────┴────────┐
-                             │  sql-schema.js     │
-                             └──────────────────┘
-```          ┌─────────┤  core.js    ├─────────┐
-          │         └─────────────┘         │
-          │                                 │
-     ┌────▼────┐                       ┌────▼────┐
-     │ node.js │                       │browser.js│
-     └────┬────┘                       └────┬────┘
-          │                                 │
-  ┌───────▼────────┐              ┌─────────▼──────────┐
-  │ formatters.js  │              │formatters.browser.js│
-  └───────┬────────┘              └─────────┬──────────┘
-          │                                 │
-    ┌─────▼─────┐                    ┌──────▼──────┐
-    │  cli.js   │                    │ Web Browser │
-    └───────────┘                    └─────────────┘
+Input
+  │
+  ├─ columns string  ──► columnStringToSchema()
+  ├─ SchemaColumn[]  ──► (used directly)
+  └─ template name   ──► resolve template → columnStringToSchema()
+                                │
+                                ▼
+                         autoWireGeographicDependencies()   [dependencies.js]
+                         resolveDependencyOrder()            [dependencies.js]
+                                │
+                                ▼
+                         generateData()  [core.js]
+                           for each row:
+                             for each independent column: generateValue()
+                             for each dependent column:  resolveDependentValue()
+                             apply distribution sampling  [distributions.js]
+                                │
+                                ▼
+                         { records, columns, rowCount, columnCount }
+                                │
+                                ▼
+                         formatter  [formatters.js / formatters.browser.js]
+                                │
+                                ▼
+                         File / stdout / Blob download
 ```
 
-### Module Responsibilities
-
-#### `core.js` - Universal Core
-**Responsibilities:**
-- Column parsing
-- Data generation logic
-- Type system (fakerTypes)
-- Template system
-- Special type handlers
-
-**Exports:**
-- `setFaker(faker)` - Inject Faker instance
-- `seedFaker(seed)` - Set deterministic seed
-- `setLocale(locale)` - Set Faker locale (e.g. `'fr'`, `'de'`)
-- `parseColumns(columnString)` - Parse column definitions
-- `generateData(options)` - Generate records (returns `{ records, columns, rowCount }`)
-- `registerType(name, fn)` / `unregisterType(name)` - Plugin API
-- `registerTemplate(name, config)` / `unregisterTemplate(name)` - Plugin API
-- `fakerTypes` object
-- `templates` object
-- `listTypes()`, `listTemplates()`
-
-**Dependencies:** None (Faker injected via `setFaker`)
-
-#### `formatters.js` - Node.js Formatters
-**Responsibilities:**
-- Convert data to CSV, JSON, XML, Excel, TSV, SQL, YAML, TOML
-- Use full-featured libraries (ExcelJS, xml2js, js-yaml, @iarna/toml)
-- Handle file-specific options
-
-**Exports:**
-- `toCSV(records, columns)`
-- `toJSON(records, pretty)`
-- `toXML(records, rootElement, recordElement)`
-- `toExcel(records, columns, sheetName)`
-- `toTSV(records, columns)`
-- `toSQL(records, columns, tableName)`
-- `toYAML(records)`
-- `toTOML(records)`
-- `formatColumnName(name)`
-
-**Dependencies:** ExcelJS, xml2js, js-yaml, @iarna/toml, formatters.shared.js
-
-#### `formatters.shared.js` - Shared Pure Utilities
-**Responsibilities:**
-- Pure CSV, JSON, TSV formatting (no external dependencies)
-- Format detection from file extension
-- `formatColumnName` conversion (camelCase → Title Case)
-- Shared by both `formatters.js` and `formatters.browser.js`
-
-**Exports:**
-- `toCSV(records, columns, options?)` - with `header`, `headerFormat` options
-- `toJSON(records, pretty?)`
-- `toTSV(records, columns, options?)`
-- `detectFormat(filename)`
-- `getFileExtension(filename)`
-- `formatColumnName(name)`
-
-**Dependencies:** None (pure JS, universal)
-
-#### `formatters.browser.js` - Browser Formatters
-**Responsibilities:**
-- Lightweight format conversion for browsers
-- CSV, JSON, XML, TSV, YAML, TOML (Excel via Blob)
-- Minimal dependencies
-
-**Exports:** Same interface as formatters.js
-
-**Dependencies:** None (pure JavaScript)
-
-#### `node.js` - Node.js Adapter
-**Responsibilities:**
-- Node.js API entry point
-- File system operations
-- Format detection from filename
-- Integrate core + formatters
-- DDL file import (`generateFromDDL`)
-- JSON schema file import (`generateFromSchemaFile`)
-- Streaming data generation (`generateStream`)
-
-**Exports:**
-- `generateAndSave(options)` - Generate + save to file (supports `seed`, `locale`, `formatOptions.header`/`headerFormat`)
-- `generateFromDDL(options)` - Reads a DDL `.sql` file and writes a seed SQL file
-- `generateFromSchemaFile(options)` - Reads a `ficta.schema.json` file and generates SQL
-- `generateStream(options)` - Returns a Node.js `Readable` stream (CSV or NDJSON)
-- `inferSchemaFromFile(filePath)` - Infer column types from a `.csv` or `.json` file
-- `fromOpenAPIFile(filePath, options?)` - Convert OpenAPI YAML/JSON spec to ficta.schema.json object
-- `fromGraphQLFile(filePath, options?)` - Convert GraphQL SDL file to ficta.schema.json object
-- `watchAndGenerate(options)` - Watch a DDL file and regenerate output on changes
-- Re-exports from core (`templates`, `listTypes`, `listTemplates`, etc.)
-
-**Dependencies:** core.js, formatters.js, schema-generator.js, ddl-parser.js, infer.js, openapi-bridge.js, graphql-bridge.js, fs (Node.js built-in)
-
-#### `sql-schema.js` - SQL DDL/DML Generator
-**Responsibilities:**
-- Generate `CREATE TABLE` DDL statements with column types and constraints
-- Generate `INSERT` (individual and batch) and `UPSERT` DML statements
-- Map 40+ Faker types to SQL column types across 4 dialects
-- Provide legacy `generateSchema()` for object-based schema definitions
-
-**Exports:**
-- `sqlTypeMap` - Faker type → SQL type mapping per dialect
-- `getSQLType(column, dialect)` - Resolve SQL type for a column
-- `generateDDL(tableName, columns, options)` - CREATE TABLE statement
-- `generateInserts(tableName, records, columns, options)` - INSERT statements
-- `generateUpserts(tableName, records, columns, options)` - UPSERT statements
-- `resolveTableDependencies(tables)` - Topological sort (legacy)
-- `generateSchema(schema)` - Complete schema generation (multi-table)
-
-**Dependencies:** None (pure JS, universal)
-
-#### `ddl-parser.js` - SQL DDL Parser
-**Responsibilities:**
-- Parse raw SQL `CREATE TABLE` strings into structured `TableDef` objects
-- Two-layer type resolution: column name hints first, SQL type fallback second
-- Support inline and table-level `FOREIGN KEY … REFERENCES` syntax
-- Handle SQL comments, quoted identifiers, `ENUM`, `AUTO_INCREMENT`, `SERIAL`
-
-**Exports:**
-- `parseDDL(ddlString)` - Parse DDL into `Array<TableDef>`
-- `orderByDependencies(tables)` - Topological sort (Kahn's algorithm)
-
-**Dependencies:** None (pure JS, universal)
-
-#### `schema-generator.js` - Multi-Table Orchestrator
-**Responsibilities:**
-- Coordinate multi-table FK-aware data generation from DDL or pre-parsed tables
-- Maintain a `pkStore` so child-table FK columns reference real parent PKs
-- Assemble the final SQL script (DDL, TRUNCATE, DML in correct order)
-
-**Exports:**
-- `generateFromSchema(options)` - Primary entry point returning a SQL string
-- `buildInsertStatements(options)` - Pure helper for single-table INSERT/UPSERT
-
-**Dependencies:** core.js, ddl-parser.js, sql-schema.js
-
-#### `schema-builder.js` - Fluent Schema Builder
-**Responsibilities:**
-- Provide a fluent, code-first API for defining tables and schemas
-- Single-table (`table()`) and multi-table (`schema()`) builder patterns
-- Generate FK-aware test data via `generateFromSchema` under the hood
-- Produce the same SQL output modes as the DDL flow
-
-**Exports:**
-- `table(tableName)` → `TableBuilder` (`column()`, `rows()`, `dialect()`, `toSQL()`, `build()`)
-- `schema(schemaName)` → `SchemaBuilder` (`table()`, `rows()`, `dialect()`, `toSQL()`, `build()`)
-
-**Import path:** `ficta/schema-builder`
-
-**Dependencies:** core.js, schema-generator.js
-
-#### `infer.js` - Schema Inference
-**Responsibilities:**
-- Infer Ficta column types from an array of sample data rows
-- Apply name-hint lookup cascade, regex detection (UUID, ISO date, email, URL), enum detection, numeric type detection
-- Zero Node.js built-ins; works in browser and Node.js
-
-**Exports:**
-- `inferSchema(rows)` - Returns `{ columns: string, columnList: Array<{name, type}> }`
-
-**Dependencies:** None (pure JS, universal)
-
-#### `openapi-bridge.js` - OpenAPI Bridge
-**Responsibilities:**
-- Convert parsed OpenAPI 3.x or JSON Schema objects to ficta.schema.json-compatible format
-- Resolve `$ref` references one level deep within component schemas
-- Map JSON Schema types/formats to Ficta types
-
-**Exports:**
-- `openAPIToFictaSchema(doc, options?)` - Primary conversion function
-- `fromOpenAPISchema(doc, options?)` - Alias
-
-**Dependencies:** None (pure JS, universal)
-
-#### `graphql-bridge.js` - GraphQL Bridge
-**Responsibilities:**
-- Parse GraphQL SDL strings using the `graphql` package
-- Map GraphQL object types and scalars to Ficta column definitions
-- Handle enum types from SDL
-
-**Exports:**
-- `graphQLToFictaSchema(sdl, options?)` - Primary conversion function
-- `fromGraphQLSDL(sdl, options?)` - Alias
-
-**Dependencies:** `graphql` npm package (universal)
-- Browser API entry point (self-contained: Faker bundled in)
-- File downloads via Blob API
-- Global `window.Ficta` exposure
-- Integrate core + browser formatters
-- Mount self-contained interactive UI via `createUI()`
-
-**Exports:**
-- `generateData(options)` - Returns formatted string
-- `downloadFile(data, filename, format)` - Trigger download
-- `generateAndDownload(options)` - Generate + download in one call
-- `createUI(containerSelector)` - Mount interactive HTML UI
-- Re-exports from core
-
-**Dependencies:** core.js, formatters.browser.js
-
-#### `cli.js` - Command Line Interface
-**Responsibilities:**
-- Argument parsing with yargs
-- User-friendly CLI interface with subcommands: `schema`, `infer`, `from-openapi`, `from-graphql`
-- Watch mode (`schema --watch`) via `watchAndGenerate()`
-- Preview mode support
-- Help documentation
-
-**Exports:** None (executable)
-
-**Dependencies:** node.js, yargs
-
----
-
-## Data Flow
-
-### High-Level Flow
+### DDL-driven generation
 
 ```
-User Input
-    ↓
-┌───────────────────┐
-│  Parse Options    │ ← detectFormat(), resolveTemplate()
-└─────────┬─────────┘
-          ↓
-┌───────────────────┐
-│  Parse Columns    │ ← parseColumns()
-└─────────┬─────────┘
-          ↓
-┌───────────────────┐
-│ Generate Records  │ ← generateData() (core.js)
-└─────────┬─────────┘
-          ↓
-┌───────────────────┐
-│  Format Data      │ ← toCSV(), toJSON(), etc.
-└─────────┬─────────┘
-          ↓
-┌───────────────────┐
-│  Output/Save      │ ← fs.writeFile() or Blob download
-└───────────────────┘
-```
-
-### DDL-Driven Generation Flow
-
-```
-DDL String / .sql File
-    ↓
-parseDDL(ddlString)
-    ↓
-Array<TableDef>: [{ tableName, columns, primaryKey, foreignKeys }]
-    ↓
-orderByDependencies(tables)
-    ↓
-Tables sorted in dependency order (Kahn's topological sort)
-    ↓
-for each table (in FK-safe order):
-    ├─ generateTableData({ tableDef, rows, pkStore })
-    │   ├─ FK columns: look up parent PKs from pkStore
-    │   ├─ autoIncrement columns: use sequential counter
-    │   └─ Other columns: delegate to core.generateRow()
-    ├─ storePKValues(tableDef, records, pkStore)
-    └─ Push { tableDef, records, ddlCols, insertCols } to results
-    ↓
-Assemble output (TRUNCATE → DDL → DML) based on outputMode
-    ↓
-Complete SQL script string
-```
-
-**pkStore** is a live map `{ tableName: { colName: value[] } }` that accumulates
-primary key values as each parent table is generated, ensuring FK integrity.
-
-### Detailed Flow: generateData() / generateRow()
-
-```javascript
-generateData({ columns, rows, ... })
-    ↓
-  parseColumns(columns)
-    ↓
-  Loop 1 to rows
-    ↓
-  For each row: generateRow(parsedColumns, counter)
-    ├─ Initialize empty record {}
-    ├─ Loop through columns
-    │   ├─ Get column type
-    │   ├─ Check if special type (autoIncrement, enum, range, pattern)
-    │   │   ├─ Yes → Call special handler
-    │   │   └─ No → Check fakerTypes mapping
-    │   │       ├─ Found → Call faker function
-    │   │       └─ Not found → Use type as literal
-    │   └─ Assign value to record[column.name]
-    └─ Push record to results array
-    ↓
-  Return results array
-```
-
-### Column Parsing Flow
-
-```
-"id:autoIncrement,name:fullName,status:enum:active|inactive"
-    ↓
-  Split by ','
-    ↓
-["id:autoIncrement", "name:fullName", "status:enum:active|inactive"]
-    ↓
-  Map each to object
-    ↓
-[
-  { name: "id", type: "autoIncrement" },
-  { name: "name", type: "fullName" },
-  { name: "status", type: "enum:active|inactive" }
-]
-```
-
-### Value Generation Flow
-
-```
-Column: { name: "age", type: "range:18-65" }
-Counter: 5
-    ↓
-  Check type
-    ↓
-  Is special type? → "range:*"
-    ↓
-  YES: Call handleRange()
-    ↓
-  Parse "18-65" → min=18, max=65
-    ↓
-  Generate random number between 18 and 65
-    ↓
-  Return: 42
+.sql file or DDL string
+       │
+       ▼
+  parseDDL()               [ddl-parser.js]
+    → TableDef[]
+       │
+       ▼
+  orderByDependencies()    [ddl-parser.js]
+    → TableDef[] (topological order)
+       │
+       ▼
+  generateFromSchema()     [schema-generator.js]
+    for each table (parent-first):
+      generateData() with pkStore injection for FK columns
+      store PK values → pkStore
+       │
+       ▼
+  generateDDL() / generateInserts() / generateUpserts()  [sql-schema.js]
+       │
+       ▼
+  SQL string output
 ```
 
 ---
 
-## Core Components
+## 4. Core Components In Depth
 
-### Type System
+### `core.js` — generation pipeline
 
-The type system maps type names to value generators.
+```
+generateData(options)
+  │
+  ├─ normalize input → SchemaColumn[]
+  │    columnStringToSchema  OR  SchemaColumn[] direct  OR  template lookup
+  │
+  ├─ apply geographic auto-wiring  [dependencies.js]
+  ├─ topological sort by 'depends'  [dependencies.js]
+  │
+  └─ for i in [0..rows):
+       generateRow(columns, i+1)
+         │
+         ├─ independent columns: generateValue(col, i+1, records[i])
+         │    1. static:value
+         │    2. autoIncrement
+         │    3. enum:a|b|c
+         │    4. range:min-max
+         │    5. pattern:{COUNTER}
+         │    6. fakerTypes[type]()
+         │    7. literal fallback
+         │
+         └─ dependent columns: resolveDependentValue(col, row)
+              applies distribution sampling if col.distribution is set
+```
 
-#### Standard Types (via Faker)
+### `ddl-parser.js` — two-layer type resolution
 
-```javascript
+DDL column type inference runs in order:
+1. **Name hint** — `lookupNameHint(columnName)` via `name-hints.js`
+2. **SQL type fallback** — map common SQL types (`VARCHAR`, `INT`, `TIMESTAMP`, …) to Ficta equivalents
+3. **Enum inference** — if `CHECK (col IN (…))` found, synthesize `enum:val1|val2`
+4. **Final fallback** — `word`
+
+### `schema-generator.js` — FK-aware orchestration
+
+```js
+pkStore = {}   // { 'tableName.columnName': [generated PK values] }
+
+for each table in topological order:
+  for each row:
+    for each FK column:
+      value = random.pick(pkStore[refTable.refColumn])
+    for each PK column:
+      pkStore[table.column].push(generatedValue)
+```
+
+This guarantees every FK value references an existing PK from the parent table.
+
+---
+
+## 5. Environment Abstraction
+
+### What belongs where
+
+| Code | Location |
+|---|---|
+| Data generation logic | `src/core.js` (universal) |
+| File reads/writes | `src/node.js` only |
+| `process.stdout` / `process.stderr` | `cli.js` only |
+| DOM / `window` | `src/browser.js` only |
+| `fs`, `path`, `stream` | `src/node.js` only |
+| `Blob`, `URL.createObjectURL` | `src/browser.js` only |
+
+### Faker initialization
+
+Both adapters initialize Faker immediately at import:
+
+```js
+// src/node.js (line ~1)
+import { faker } from '@faker-js/faker';
+import { setFaker } from './core.js';
+setFaker(faker);
+
+// src/browser.js (line ~1)
+import { faker } from '@faker-js/faker';
+import { setFaker } from './core.js';
+setFaker(faker);
+```
+
+Tests that import `core.js` directly must call `setFaker(faker)` themselves before generating data.
+
+### Browser bundles
+
+`build.js` uses esbuild to produce:
+
+| Bundle | Format | Description |
+|---|---|---|
+| `dist/ficta.browser.js` | IIFE | Exposes `window.Ficta` global, full feature set |
+| `dist/ficta.browser.min.js` | IIFE | Minified production bundle |
+| `dist/ficta.esm.js` | ESM | Tree-shakeable ES module bundle |
+| `playground/dist/playground.js` | IIFE | Playground-specific bundle |
+
+---
+
+## 6. Format System
+
+### Three-layer formatter architecture
+
+```
+formatters.shared.js   ← pure, zero deps, used by both
+       ├── formatters.js          (Node.js: adds Excel, YAML, TOML, Parquet)
+       └── formatters.browser.js  (Browser: lightweight versions)
+```
+
+### Formatter responsibility split
+
+| Formatter | Shared | Node | Browser |
+|---|---|---|---|
+| CSV | ✅ `toCSV` | re-exports | re-exports |
+| TSV | ✅ `toTSV` | re-exports | re-exports |
+| JSON | ✅ `toJSON` | re-exports | re-exports |
+| XML | | `toXML` (xml2js) | `toXML` (manual) |
+| SQL | | `toSQL` | `toSQL` |
+| Excel | | `toExcel` (ExcelJS) | — |
+| YAML | | `toYAML` (async, js-yaml) | — |
+| TOML | | `toTOML` (async, @iarna/toml) | — |
+| Parquet | | `toParquet` (async, parquetjs-lite) | — |
+
+### Adding a new format
+
+1. `src/formatters.js` → `export [async] function toMyFormat(records, columns, opts) { … }`
+2. `src/formatters.browser.js` → browser version or feature-stub
+3. `src/node.js` → `case 'myformat':` in `generateAndSave` switch
+4. `src/browser.js` → `case 'myformat':` in browser switch
+5. `cli.js` → add `'myformat'` to `choices` array
+6. `tests/formatters.test.js` + `tests/node.test.js` → tests
+
+---
+
+## 7. Type System
+
+### Built-in type registry (`fakerTypes`)
+
+`fakerTypes` in `src/core.js` is a plain object mapping string names to zero-argument generator functions:
+
+```js
 export const fakerTypes = {
-  // Direct mapping to Faker functions
-  email: () => getFaker().internet.email(),
-  fullName: () => getFaker().person.fullName(),
-  // ... ~40 more types
+  email:      () => getFaker().internet.email(),
+  fullName:   () => getFaker().person.fullName(),
+  uuid:       () => getFaker().string.uuid(),
+  price:      () => getFaker().commerce.price(),
+  // … 40+ total
 };
 ```
 
-#### Special Types
+### Special type parsing (evaluated before `fakerTypes`)
 
-Special types have custom logic beyond simple Faker calls:
+| Prefix | Example | How it works |
+|---|---|---|
+| `static:` | `static:N/A` | Returns literal remainder as string |
+| `autoIncrement` | `autoIncrement` | Returns 1-based row index |
+| `enum:` | `enum:red\|blue\|green` | `faker.helpers.arrayElement(values)` |
+| `range:` | `range:1-100` | Random float in `[min, max]`; optionally distribution-sampled |
+| `pattern:` | `pattern:ID-{COUNTER}` | Substitutes `{COUNTER}` with row index |
 
-**1. Auto Increment**
-```javascript
-// Type: "autoIncrement"
-function handleAutoIncrement(counter) {
-  return counter; // Simple counter
-}
+### Distribution integration
+
+When a column has a `distribution` property, the raw faker/range value is replaced by a distribution sample:
+
+- `enum` columns: distribution rank selects from enum values
+- Numeric / range columns: sampled value is clamped to `[min, max]`
+
+```js
+{ name: 'score', type: 'range:0-100', distribution: { type: 'normal', mean: 70, stddev: 15 } }
 ```
 
-**2. Enum**
-```javascript
-// Type: "enum:value1|value2|value3"
-function handleEnum(options) {
-  const values = options.split('|');
-  const index = Math.floor(Math.random() * values.length);
-  return values[index];
-}
-```
+### Plugin API guards
 
-**3. Range**
-```javascript
-// Type: "range:0-100"
-function handleRange(options) {
-  const [min, max] = options.split('-').map(Number);
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-```
-
-**4. Pattern**
-```javascript
-// Type: "pattern:USER-{COUNTER}"
-function handlePattern(options, counter) {
-  return options.replace(/{COUNTER}/g, counter);
-}
-```
-
-### Template System
-
-Templates are named column definition strings:
-
-```javascript
-export const templates = {
-  users: { columns: "id:autoIncrement,firstName,lastName,email,phone,company,jobTitle,registeredDate:pastDate", rows: 100 },
-  products: { columns: "sku:autoIncrement,name:product,category:department,price,stock:number,description:productDescription", rows: 100 },
-  // ...
-};
-```
-
-**Usage:**
-```javascript
-// Instead of:
-generateData({ 
-  columns: "id:autoIncrement,firstName,lastName,email,phone,street,city,state,zipCode",
-  rows: 100 
-});
-
-// Use:
-generateData({ 
-  template: 'users',
-  rows: 100 
-});
-```
-
-### Format System
-
-Each format has a dedicated formatter function:
-
-```javascript
-// CSV Formatter
-function toCSV(records, columns) {
-  const headers = columns.map(col => formatColumnName(col.name));
-  const rows = records.map(record => 
-    columns.map(col => escapeCSV(record[col.name])).join(',')
-  );
-  return [headers.join(','), ...rows].join('\n');
-}
-
-// Excel Formatter (Node.js only)
-async function toExcel(records, columns, sheetName) {
-  const workbook = new ExcelJS.Workbook();
-  const worksheet = workbook.addWorksheet(sheetName);
-  worksheet.addRow(columns.map(col => formatColumnName(col.name)));
-  records.forEach(record => {
-    worksheet.addRow(columns.map(col => record[col.name]));
-  });
-  return await workbook.xlsx.writeBuffer();
-}
-```
+`BUILT_IN_TYPES` and `BUILT_IN_TEMPLATES` are frozen `Set`s. `unregisterType` / `unregisterTemplate` throw on built-in names, preventing accidental breakage of core functionality.
 
 ---
 
-## Environment Abstraction
+## 8. SQL Stack
 
-### Strategy
+### Three separate responsibilities
 
-Use conditional exports and environment detection:
+```
+ddl-parser.js       → parse text DDL into structured objects
+schema-generator.js → orchestrate multi-table FK-aware data generation
+sql-schema.js       → emit SQL strings (DDL, INSERT, UPSERT)
+```
 
-**package.json:**
-```json
+### `TableDef` object shape
+
+```js
 {
-  "exports": {
-    ".": {
-      "node": "./src/node.js",
-      "browser": "./dist/ficta.esm.js",
-      "default": "./src/node.js"
-    },
-    "./browser": "./src/browser.js",
-    "./core": "./src/core.js",
-    "./node": "./src/node.js",
-    "./schema-builder": "./src/schema-builder.js"
-  }
+  tableName: 'posts',
+  primaryKey: 'id',
+  columns: [
+    { name: 'id', sqlType: 'SERIAL', fictaType: 'autoIncrement', nullable: false, autoIncrement: true },
+    { name: 'user_id', sqlType: 'INT', fictaType: 'number', nullable: false },
+    { name: 'body', sqlType: 'TEXT', fictaType: 'paragraph', nullable: true },
+  ],
+  foreignKeys: [
+    { column: 'user_id', refTable: 'users', refColumn: 'id' }
+  ]
 }
 ```
 
-### Node.js Adapter Pattern
+### Output modes
 
-```javascript
-// src/node.js
-import { faker } from '@faker-js/faker';
-import { setFaker, generateData } from './core.js';
-import { toCSV, toJSON, toXML, toExcel } from './formatters.js';
-import fs from 'fs';
+| Mode | Output |
+|---|---|
+| `insert` | `INSERT INTO …` statements only |
+| `upsert` | Dialect-specific upsert (`ON CONFLICT DO UPDATE` / `ON DUPLICATE KEY UPDATE`) |
+| `truncate+insert` | `TRUNCATE TABLE …; INSERT INTO …` |
+| `ddl+insert` | Full `CREATE TABLE …` DDL + `INSERT INTO …` data |
 
-// Initialize Faker for Node.js
-setFaker(faker);
+### Dialect-specific SQL
 
-export async function generateAndSave(options) {
-  const data = await generateData(options);
-  await fs.promises.writeFile(options.output, data);
-}
-```
+`sql-schema.js` dispatches on `dialect` (`'postgres'`, `'mysql'`, `'sqlite'`, `'generic'`) for:
+- `SERIAL` vs `AUTO_INCREMENT` vs `INTEGER PRIMARY KEY AUTOINCREMENT`
+- `ON CONFLICT DO UPDATE` vs `ON DUPLICATE KEY UPDATE`
+- Quote character differences
+- Type overrides from `sqlTypeMap`
 
-### Browser Adapter Pattern
+---
 
-```javascript
-// src/browser.js
-import { setFaker, generateData, templates } from './core.js';
-import { toCSV, toJSON, toXML } from './formatters.browser.js';
+## 9. Extension Mechanisms
 
-// Faker bundled in — no need to load separately
-import { faker } from '@faker-js/faker';
-setFaker(faker);
+### Runtime plugin API
 
-export function downloadFile(data, filename, format) {
-  const blob = new Blob([data], { type: getMimeType(format) });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-```
+```js
+import { registerType, registerTemplate } from 'ficta';
 
-### Build System
+// Custom type (zero-arg generator function)
+registerType('bitcoinAddress', () => getFaker().finance.bitcoinAddress());
 
-Browser bundles created with esbuild:
-
-```javascript
-// build.js
-import * as esbuild from 'esbuild';
-
-// IIFE (self-contained + Faker bundled)
-await esbuild.build({
-  entryPoints: ['src/browser.js'],
-  bundle: true,
-  format: 'iife',
-  globalName: 'Ficta',
-  platform: 'browser',
-  target: ['es2020'],
-  outfile: 'dist/ficta.browser.js',
-});
-
-// Minified IIFE
-await esbuild.build({
-  entryPoints: ['src/browser.js'],
-  bundle: true,
-  format: 'iife',
-  globalName: 'Ficta',
-  platform: 'browser',
-  minify: true,
-  outfile: 'dist/ficta.browser.min.js',
-});
-
-// ES Module for modern browsers
-await esbuild.build({
-  entryPoints: ['src/browser.js'],
-  bundle: true,
-  format: 'esm',
-  platform: 'browser',
-  outfile: 'dist/ficta.esm.js',
+// Custom template
+registerTemplate('iot', {
+  columns: 'deviceId:uuid,temperature:range:-20-80,humidity:range:0-100,ts:timestamp',
+  rows: 500,
 });
 ```
 
----
+Limitations of the current plugin API:
+- Types must be zero-argument generator functions. Parameterized types (like `range:min-max`) require modifying `generateValue()` in `core.js`.
+- No lifecycle hooks (pre/post row generation, custom formatters).
+- Custom templates are not surfaced in CLI `--template` autocomplete (built-ins only).
 
-## Format System
+### Custom special types
 
-### Format Detection
+Add prefix handlers in `core.js` → `generateValue()` before the `fakerTypes` lookup:
 
-Auto-detect format from file extension:
-
-```javascript
-function detectFormat(filename) {
-  if (!filename) return 'csv';
-  const ext = filename.split('.').pop().toLowerCase();
-  const formatMap = {
-    csv: 'csv',
-    json: 'json',
-    xml: 'xml',
-    xlsx: 'xlsx',
-    xls: 'xlsx',
-    tsv: 'tsv',
-    sql: 'sql',
-    yaml: 'yaml',
-    yml: 'yml',
-    toml: 'toml'
-  };
-  return formatMap[ext] || 'csv';
-}
-```
-
-### Format Strategy Pattern
-
-```javascript
-async function generateData(options) {
-  // ... parse options and generate records
-  
-  switch (format) {
-    case 'csv':
-      return toCSV(records, columns);
-    case 'json':
-      return toJSON(records);
-    case 'xml':
-      return await toXML(records, options.rootElement, options.recordElement);
-    case 'xlsx':
-      return await toExcel(records, columns, options.sheetName);
-    case 'tsv':
-      return toTSV(records, columns);
-    case 'sql':
-      return toSQL(records, columns, options.tableName);
-    case 'yaml':
-    case 'yml':
-      return toYAML(records);
-    case 'toml':
-      return toTOML(records);
-    default:
-      return toCSV(records, columns);
-  }
-}
-```
-
-### CSV Escaping
-
-Proper CSV escaping handling:
-
-```javascript
-function escapeCSVValue(value) {
-  if (value == null) return '';
-  const stringValue = String(value);
-  
-  // Check if escaping needed
-  if (stringValue.includes(',') || 
-      stringValue.includes('"') || 
-      stringValue.includes('\n') ||
-      stringValue.includes('\r')) {
-    // Escape quotes by doubling them
-    return `"${stringValue.replace(/"/g, '""')}"`;
-  }
-  
-  return stringValue;
+```js
+if (type.startsWith('myprefix:')) {
+  return myHandler(type.slice(10), rowIndex);
 }
 ```
 
 ---
 
-## Type System
+## 10. Known Architectural Smells
 
-### Type Resolution Algorithm
+These are documented trade-offs and known issues that warrant attention in future work.
 
-```javascript
-function generateValue(column, counter) {
-  const type = column.type || column.name;
-  
-  // 1. Check special types
-  if (type === 'autoIncrement') {
-    return handleAutoIncrement(counter);
-  }
-  
-  if (type.startsWith('enum:')) {
-    return handleEnum(type.substring(5));
-  }
-  
-  if (type.startsWith('range:')) {
-    return handleRange(type.substring(6));
-  }
-  
-  if (type.startsWith('pattern:')) {
-    return handlePattern(type.substring(8), counter);
-  }
-  
-  // 2. Check fakerTypes mapping
-  if (fakerTypes[type]) {
-    return fakerTypes[type]();
-  }
-  
-  // 3. Fallback: use type as literal value
-  return type;
-}
-```
+### `node.js` is a God module
 
-### Adding New Types
+At ~600 lines, `src/node.js` imports nearly every other module and serves as both entry point and adapter implementation. It handles file I/O, streaming, watch mode, schema file loading, OpenAPI/GraphQL file loading, database seeding, logging, and re-exports all of `core.js`. This is manageable today but will grow unwieldy. A natural split would be:
+- `src/io.js` — file read/write helpers
+- `src/watcher.js` — watch mode
+- `src/pipeline.js` — `generateAndSave` orchestration
 
-To add a new type, update `fakerTypes`:
+### `toSQL` overload in `formatters.js`
 
-```javascript
-export const fakerTypes = {
-  // ... existing types
-  
-  // Add custom type
-  ipv6: () => getFaker().internet.ipv6(),
-  bitcoinAddress: () => getFaker().finance.bitcoinAddress(),
-  userAgent: () => getFaker().internet.userAgent(),
-};
-```
+`toSQL()` in `src/formatters.js` has an overloaded first-argument signature: it accepts either a `records` array or a `{ddl, tables}` object. The overload is undocumented in type definitions and does not exist in the browser version, creating an asymmetric API surface.
 
----
+### Duplicate topological sort
 
-## Extension Mechanisms
+`sql-schema.js` contains a private `resolveTableDependencies()` and `ddl-parser.js` exports `orderByDependencies()`. These operate on slightly different object shapes. The SQL schema sort was made internal in v1.2.0 but the duplication remains.
 
-### 1. Custom Types via setFaker
+### `formatters.js` / `formatters.browser.js` SQL duplication
 
-```javascript
-import { faker } from '@faker-js/faker';
-import { setFaker, fakerTypes } from 'ficta';
-
-// Extend fakerTypes
-fakerTypes.customType = () => 'custom value';
-
-setFaker(faker);
-```
-
-### 2. Custom Formatters
-
-```javascript
-import { generateData } from 'ficta';
-
-function toYAML(records) {
-  // Custom YAML formatting logic
-  return yamlString;
-}
-
-const { records } = generateData({ columns: 'id,name,email', rows: 100 });
-const yaml = toYAML(records);
-```
-
-### 3. Plugin Architecture (Future)
-
-Potential plugin system design:
-
-```javascript
-// Future API
-import { registerFormatter, registerType } from 'ficta';
-
-registerType('myType', () => 'generated value');
-registerFormatter('yaml', (records) => toYAML(records));
-
-await generateAndSave({
-  columns: 'id:myType,name',
-  rows: 100,
-  output: 'data.yaml'
-});
-```
-
----
-
-## Performance Considerations
-
-### 1. Memory Usage
-
-**Issue:** Large datasets can consume significant memory.
-
-**Mitigation:**
-- Generate in chunks for very large files
-- Stream Excel generation using ExcelJS streaming API
-- Consider pagination for browser generation
-
-**Example (streaming is preferred for very large files):**
-```javascript
-import { generateStream } from 'ficta';
-import { createWriteStream } from 'fs';
-
-// Use the built-in streaming API for large datasets
-const stream = generateStream({
-  columns: options.columns,
-  rows: options.rows,
-  format: 'csv',
-  batchSize: 10000
-});
-stream.pipe(createWriteStream(options.output));
-```
-
-### 2. Faker Performance
-
-**Observation:** Faker.js is fast but repeated calls add up.
-
-**Optimization:**
-- Cache Faker instance (already done)
-- Reuse column definitions
-- Consider memoization for deterministic types
-
-### 3. Bundleize
-
-**Browser bundles:**
-- UMD bundle: ~100KB minified
-- ES Module: ~90KB minified
-- Gzipped: ~30KB
-
-**Optimization:**
-- Tree-shaking with ES modules
-- External Faker (user loads separately)
-- Minimal browser formatters
-
----
-
-## Security Considerations
-
-### 1. CSV Injection
-
-**Risk:** Special characters in CSV can execute in Excel.
-
-**Mitigation:**
-```javascript
-function sanitizeCSVValue(value) {
-  const stringValue = String(value);
-  
-  // Prevent formula injection
-  if (stringValue.startsWith('=') ||
-      stringValue.startsWith('+') ||
-      stringValue.startsWith('-') ||
-      stringValue.startsWith('@')) {
-    return `'${stringValue}`; // Prefix with single quote
-  }
-  
-  return escapeCSVValue(value);
-}
-```
-
-### 2. SQL Injection
-
-**Risk:** Generated SQL could be vulnerable if not using parameterized queries.
-
-**Current:** SQL formatter generates INSERT statements with properly escaped strings.
-
-**Best practice:** Use parameterized queries when executing generated SQL.
-
-### 3. File Path Traversal
-
-**Risk:** User-provided filenames could write outside intended directory.
-
-**Mitigation:**
-```javascript
-import path from 'path';
-
-function sanitizeFilename(filename) {
-  // Remove path separators
-  const basename = path.basename(filename);
-  // Additional validation
-  if (basename.includes('..')) {
-    throw new Error('Invalid filename');
-  }
-  return basename;
-}
-```
-
----
-
-## Future Roadmap
-
-### Implemented (as of 2026-02-23)
-
-1. ✅ **SQL Schema Generation** — DDL, foreign keys, 4 dialects, multi-mode output
-2. ✅ **DDL Import (Schema Import)** — Parse existing `.sql` schemas, generate FK-aware test data
-3. ✅ **Multi-table orchestration** — Topological sort, parent-to-child FK resolution, pkStore
-4. ✅ **Streaming API** — CSV and NDJSON streams for large datasets (`generateStream`)
-5. ✅ **Plugin System** — `registerType()`, `registerTemplate()`, `unregisterType()`, `unregisterTemplate()`
-6. ✅ **Schema Inference** — Auto-detect column types from CSV/JSON files (`inferSchemaFromFile`)
-7. ✅ **OpenAPI Bridge** — Convert OpenAPI 3.x / JSON Schema to `ficta.schema.json`
-8. ✅ **GraphQL Bridge** — Convert GraphQL SDL to `ficta.schema.json`
-9. ✅ **Watch Mode** — Auto-regenerate on DDL file changes (`watchAndGenerate`)
-10. ✅ **Parquet Output** — Apache Parquet columnar storage format (Node.js)
-
-### Potential Future Enhancements
-
-1. **Advanced Types**
-   - Conditional values based on other column values
-   - Computed columns with expressions
-   - Cross-field dependencies
-
-2. **Schema Import Extensions**
-   - PostgreSQL ENUM type DDL creation
-   - Composite primary keys
-   - CHECK constraints
-   - Index definitions
-
-3. **Performance Optimizations**
-   - Worker threads for parallel generation
-   - Streaming Excel generation for very large files
-   - WebAssembly formatters
-
-4. **Additional Formats**
-   - Avro
-   - MessagePack
-   - Protocol Buffers (protobuf)
-
-5. **Schema Registry**
-   - Persist registered custom types/templates across sessions
-   - Share type registries between projects
-
----
-
-## Conclusion
-
-This architecture balances:
-- **Simplicity** - Easy to understand and extend
-- **Flexibility** - Works in multiple environments
-- **Performance** - Efficient for most use cases
-- **Maintainability** - Clear separation of concerns
-
-The universal core with environment adapters pattern allows sharing 80% of code while providing environment-specific optimizations where needed.
-
----
-
-**Last Updated:** 2026-02-23
-**Version:** 1.1.8
+`toSQL()` and `toSQLLegacy()` are nearly verbatim duplicates between the two formatter files (~55 lines). They should be moved to `formatters.shared.js` and re-exported.

@@ -1,4 +1,4 @@
-import { jest } from '@jest/globals';
+import { vi } from 'vitest';
 import {
   generateAndSave,
   writeFile,
@@ -11,7 +11,11 @@ import {
   inferSchemaFromFile,
   fromOpenAPIFile,
   fromGraphQLFile,
-  watchAndGenerate
+  watchAndGenerate,
+  setLogger,
+  getLogger,
+  resetLogger,
+  anonymizeFile,
 } from '../src/node.js';
 import { PassThrough } from 'stream';
 import fs from 'fs';
@@ -163,17 +167,21 @@ describe('Node.js Module', () => {
     });
 
     test('should generate with preview option', async () => {
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
-      
-      await generateAndSave({
-        columns: 'id:autoIncrement,name:fullName',
-        rows: 5,
-        output: testFile,
-        preview: true
-      });
-      
-      expect(consoleSpy).toHaveBeenCalled();
-      consoleSpy.mockRestore();
+      const logCalls = [];
+      setLogger({ log: (...a) => logCalls.push(a), info() {}, warn() {}, error() {} });
+
+      try {
+        await generateAndSave({
+          columns: 'id:autoIncrement,name:fullName',
+          rows: 5,
+          output: testFile,
+          preview: true
+        });
+
+        expect(logCalls.length).toBeGreaterThan(0);
+      } finally {
+        resetLogger();
+      }
     });
 
     test('should default to test-data.csv if no output specified', async () => {
@@ -283,7 +291,9 @@ describe('Node.js Module', () => {
     });
 
     test('writes output file when output option provided', async () => {
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      const logCalls = [];
+      // Status messages now routed through info() (for stderr in CLI)
+      setLogger({ log: (...a) => logCalls.push(a), info: (...a) => logCalls.push(a), warn() {}, error() {} });
       try {
         const sql = await generateFromDDL({
           schemaFile: 'test-schema.sql',
@@ -292,9 +302,9 @@ describe('Node.js Module', () => {
         });
         expect(fs.existsSync(outputDDLFile)).toBe(true);
         expect(typeof sql).toBe('string');
-        expect(consoleSpy).toHaveBeenCalled();
+        expect(logCalls.length).toBeGreaterThan(0);
       } finally {
-        consoleSpy.mockRestore();
+        resetLogger();
       }
     });
 
@@ -336,7 +346,7 @@ describe('Node.js Module', () => {
     });
 
     test('two generateAndSave calls with the same seed produce identical data', async () => {
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       try {
         const r1 = await generateAndSave({
           columns: 'name:fullName,email,score:range:1-100',
@@ -365,7 +375,7 @@ describe('Node.js Module', () => {
 
   describe('locale support', () => {
     test('generateAndSave with locale: en completes without error and produces expected row count', async () => {
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       const outFile = 'test-locale-output.csv';
       try {
         const result = await generateAndSave({
@@ -478,7 +488,7 @@ describe('Node.js Module', () => {
         ]
       };
       fs.writeFileSync(schemaFile, JSON.stringify(schema));
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       try {
         await generateFromSchemaFile({ schemaFile, output: outputFile });
         expect(fs.existsSync(outputFile)).toBe(true);
@@ -1368,3 +1378,253 @@ components:
   });
 });
 
+// ---------------------------------------------------------------------------
+// Logger system tests (Prompt #2)
+// ---------------------------------------------------------------------------
+describe('Logger system', () => {
+  afterEach(() => {
+    // Always restore no-op logger between tests
+    resetLogger();
+  });
+
+  test('by default generateAndSave does NOT call console.log (no-op logger)', async () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      resetLogger(); // ensure no-op
+      const tmpFile = 'test-logger-noop.csv';
+      await generateAndSave({ columns: 'id:autoIncrement', rows: 1, output: tmpFile });
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+      if (import('fs').then) {
+        const fs = await import('fs');
+        if (fs.existsSync('test-logger-noop.csv')) fs.unlinkSync('test-logger-noop.csv');
+      }
+    }
+  });
+
+  test('setLogger causes ✓ Generated status to go via info() (stderr in CLI)', async () => {
+    const logCalls = [];
+    // Status messages now go through info() so stderr-routing loggers capture them
+    const mockLogger = { log: (...args) => logCalls.push(args.join(' ')), info: (...args) => logCalls.push(args.join(' ')), warn() {}, error() {} };
+    setLogger(mockLogger);
+    const tmpFile = 'test-logger-active.csv';
+    try {
+      await generateAndSave({ columns: 'id:autoIncrement', rows: 1, output: tmpFile });
+      expect(logCalls.length).toBeGreaterThan(0);
+      expect(logCalls[0]).toContain('✓ Generated');
+    } finally {
+      const fs = await import('fs');
+      if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
+    }
+  });
+
+  test('generateAndSave result includes message string', async () => {
+    const tmpFile = 'test-logger-msg.csv';
+    try {
+      const result = await generateAndSave({ columns: 'id:autoIncrement', rows: 2, output: tmpFile });
+      expect(typeof result.message).toBe('string');
+      expect(result.message).toContain('✓ Generated');
+      expect(result.message).toContain('2 rows');
+    } finally {
+      const fs = await import('fs');
+      if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
+    }
+  });
+
+  test('listTypes does not call console.log by default', () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    resetLogger();
+    try {
+      listTypes();
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  test('listTemplates does not call console.log by default', () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    resetLogger();
+    try {
+      listTemplates();
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  test('resetLogger restores no-op behavior', () => {
+    const calls = [];
+    setLogger({ log: (...a) => calls.push(a), warn() {}, info() {}, error() {} });
+    expect(getLogger().log).toBeDefined();
+    resetLogger();
+    // After reset, log call should be no-op (no throw, no calls recorded)
+    getLogger().log('test');
+    expect(calls).toHaveLength(0); // logged before reset
+  });
+
+  test('setLogger(null) resets to no-op', () => {
+    const calls = [];
+    setLogger({ log: (...a) => calls.push(a), warn() {}, info() {}, error() {} });
+    setLogger(null);
+    getLogger().log('should not record');
+    expect(calls).toHaveLength(0);
+  });
+
+  test('generateFromDDL with output set calls getLogger().info not console.log', async () => {
+    const tmpSql = 'test-logger-ddl-out.sql';
+    const tmpSchema = 'test-logger-ddl-schema.sql';
+    const logCalls = [];
+    // Status messages now go through info(); log() is for data output (list-types etc.)
+    const mockLogger = { log: (...a) => logCalls.push(a.join(' ')), info: (...a) => logCalls.push(a.join(' ')), warn() {}, error() {} };
+    setLogger(mockLogger);
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      const fs = await import('fs');
+      fs.writeFileSync(tmpSchema, 'CREATE TABLE t1 (id SERIAL PRIMARY KEY);');
+      await generateFromDDL({ schemaFile: tmpSchema, rows: 1, output: tmpSql, outputMode: 'insert', dialect: 'generic' });
+      expect(consoleSpy).not.toHaveBeenCalled();
+      expect(logCalls.length).toBeGreaterThan(0);
+    } finally {
+      consoleSpy.mockRestore();
+      const fs = await import('fs');
+      if (fs.existsSync(tmpSql)) fs.unlinkSync(tmpSql);
+      if (fs.existsSync(tmpSchema)) fs.unlinkSync(tmpSchema);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// anonymizeFile
+// ---------------------------------------------------------------------------
+describe('anonymizeFile', () => {
+  const tmpCsv      = 'test-anon-input.csv';
+  const tmpJsonArr  = 'test-anon-input-array.json';
+  const tmpJsonWrap = 'test-anon-input-wrap.json';
+  const tmpJsonEmpty = 'test-anon-input-empty.json';
+  const tmpOutCsv   = 'test-anon-output.csv';
+  const tmpOutJson  = 'test-anon-output.json';
+
+  afterEach(async () => {
+    for (const f of [tmpCsv, tmpJsonArr, tmpJsonWrap, tmpJsonEmpty, tmpOutCsv, tmpOutJson]) {
+      if (fs.existsSync(f)) await unlink(f).catch(() => {});
+    }
+  });
+
+  test('anonymizes a CSV file and returns records without writing (no outputPath)', async () => {
+    const csv = 'name,email,id\nAlice,alice@example.com,1\nBob,bob@example.com,2\n';
+    await writeFile(csv, tmpCsv);
+    const { records, idMap } = await anonymizeFile(tmpCsv);
+    expect(records).toHaveLength(2);
+    expect(records[0].name).not.toBe('Alice');
+    expect(records[0].email).not.toBe('alice@example.com');
+    expect(idMap).toBeInstanceOf(Map);
+  });
+
+  test('anonymizes a CSV file and writes CSV output', async () => {
+    const csv = 'name,email\nAlice,alice@test.com\n';
+    await writeFile(csv, tmpCsv);
+    await anonymizeFile(tmpCsv, tmpOutCsv);
+    expect(fs.existsSync(tmpOutCsv)).toBe(true);
+    const content = await readFile(tmpOutCsv, 'utf-8');
+    expect(content).not.toContain('Alice');
+    expect(content).not.toContain('alice@test.com');
+  });
+
+  test('reads a JSON array file (Array.isArray branch)', async () => {
+    const data = [{ name: 'Alice', email: 'alice@example.com' }];
+    await writeFile(JSON.stringify(data), tmpJsonArr);
+    const { records } = await anonymizeFile(tmpJsonArr);
+    expect(records).toHaveLength(1);
+    expect(records[0].name).not.toBe('Alice');
+  });
+
+  test('reads a JSON object with records property (raw.records branch, covers lines 652-653)', async () => {
+    // raw is NOT an Array → triggers: records = raw.records || []
+    const wrapped = { records: [{ name: 'Carol', email: 'carol@test.com', id: 3 }] };
+    await writeFile(JSON.stringify(wrapped), tmpJsonWrap);
+    const { records } = await anonymizeFile(tmpJsonWrap);
+    expect(records).toHaveLength(1);
+    expect(records[0].name).not.toBe('Carol');
+  });
+
+  test('reads an empty JSON object (records = [], columns = [] branch, covers line 653)', async () => {
+    // raw.records is undefined → raw.records || [] = []
+    // records.length === 0 → columns = [] (the false branch of the ternary)
+    const emptyWrapped = {};
+    await writeFile(JSON.stringify(emptyWrapped), tmpJsonEmpty);
+    const { records } = await anonymizeFile(tmpJsonEmpty);
+    expect(records).toEqual([]);
+  });
+
+  test('writes JSON output when outputPath ends in .json (covers line 671)', async () => {
+    const csv = 'name,score\nAlice,100\nBob,200\n';
+    await writeFile(csv, tmpCsv);
+    await anonymizeFile(tmpCsv, tmpOutJson);
+    expect(fs.existsSync(tmpOutJson)).toBe(true);
+    const content = await readFile(tmpOutJson, 'utf-8');
+    const parsed = JSON.parse(content);
+    expect(Array.isArray(parsed)).toBe(true);
+    expect(parsed).toHaveLength(2);
+  });
+
+  test('noopLogger methods are all invoked after resetLogger (logger.js 100% functions)', () => {
+    resetLogger();
+    const logger = getLogger();
+    // Calling all four no-op methods ensures full function coverage of noopLogger
+    expect(() => logger.log('test log')).not.toThrow();
+    expect(() => logger.info('test info')).not.toThrow();
+    expect(() => logger.warn('test warn')).not.toThrow();
+    expect(() => logger.error('test error')).not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ficta-schema.v1.json publication validation
+// ---------------------------------------------------------------------------
+describe('ficta-schema.v1.json', () => {
+  let schema;
+
+  beforeAll(async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const { fileURLToPath } = await import('url');
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
+    const raw = fs.readFileSync(path.join(__dirname, '..', 'ficta-schema.v1.json'), 'utf-8');
+    schema = JSON.parse(raw);
+  });
+
+  test('is valid JSON with expected top-level fields', () => {
+    expect(schema).toBeDefined();
+    expect(schema.title).toBe('Ficta Schema File');
+    expect(schema.$schema).toBeDefined();
+    expect(schema.type).toBe('object');
+    expect(schema.required).toContain('tables');
+  });
+
+  test('defines a tables array with SchemaTable items', () => {
+    expect(schema.properties.tables).toBeDefined();
+    expect(schema.properties.tables.type).toBe('array');
+    expect(schema.properties.tables.items['$ref']).toBe('#/definitions/SchemaTable');
+    expect(schema.definitions.SchemaTable).toBeDefined();
+  });
+
+  test('$schema property has updated description with npm install hint', () => {
+    const desc = schema.properties.$schema.description;
+    expect(desc).toContain('node_modules/ficta/ficta-schema.v1.json');
+  });
+
+  test('SchemaTable definition requires name and columns', () => {
+    const required = schema.definitions.SchemaTable.required;
+    expect(required).toContain('name');
+    expect(required).toContain('columns');
+  });
+
+  test('defines SchemaColumn with ficta type and optional SQL options', () => {
+    expect(schema.definitions.SchemaColumn).toBeDefined();
+    const colProps = schema.definitions.SchemaColumn.properties;
+    expect(colProps.name).toBeDefined();
+    expect(colProps.type).toBeDefined();
+  });
+});

@@ -1,4 +1,4 @@
-import { jest } from '@jest/globals';
+import { vi } from 'vitest';
 import { setFaker, templates } from '../src/core.js';
 import { faker } from '@faker-js/faker';
 
@@ -7,31 +7,31 @@ setFaker(faker);
 
 // Mock DOM globals for Node environment
 global.document = {
-  createElement: jest.fn((tag) => ({
+  createElement: vi.fn((tag) => ({
     href: '',
     download: '',
-    click: jest.fn(),
+    click: vi.fn(),
     style: {},
     value: '',
     options: [],
-    addEventListener: jest.fn(),
-    dispatchEvent: jest.fn(),
-    setAttribute: jest.fn()
+    addEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+    setAttribute: vi.fn()
   })),
   body: {
-    appendChild: jest.fn(),
-    removeChild: jest.fn(),
+    appendChild: vi.fn(),
+    removeChild: vi.fn(),
     innerHTML: ''
   },
-  querySelector: jest.fn()
+  querySelector: vi.fn()
 };
 
 global.URL = {
-  createObjectURL: jest.fn(() => 'blob:mock-url'),
-  revokeObjectURL: jest.fn()
+  createObjectURL: vi.fn(() => 'blob:mock-url'),
+  revokeObjectURL: vi.fn()
 };
 
-global.Blob = jest.fn(function(parts, options) {
+global.Blob = vi.fn(function(parts, options) {
   this.parts = parts;
   this.type = options?.type || '';
 });
@@ -46,18 +46,18 @@ import {
 describe('Browser Module', () => {
   beforeEach(() => {
     // Reset mocks
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     // Reset createElement to return link with download support by default
-    global.document.createElement = jest.fn((tag) => ({
+    global.document.createElement = vi.fn((tag) => ({
       href: '',
       download: '',
-      click: jest.fn(),
+      click: vi.fn(),
       style: {},
       value: '',
       options: [],
-      addEventListener: jest.fn(),
-      dispatchEvent: jest.fn(),
-      setAttribute: jest.fn()
+      addEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+      setAttribute: vi.fn()
     }));
   });
 
@@ -82,9 +82,9 @@ describe('Browser Module', () => {
       const mockLink = {
         href: '',
         download: '',
-        click: jest.fn(),
+        click: vi.fn(),
         style: {},
-        setAttribute: jest.fn()
+        setAttribute: vi.fn()
       };
       
       global.document.createElement.mockReturnValue(mockLink);
@@ -98,9 +98,9 @@ describe('Browser Module', () => {
       const mockLink = {
         href: '',
         download: undefined,
-        click: jest.fn(),
+        click: vi.fn(),
         style: {},
-        setAttribute: jest.fn()
+        setAttribute: vi.fn()
       };
       delete mockLink.download;
       
@@ -196,13 +196,13 @@ describe('Browser Module', () => {
     test('should accept HTMLElement as container', () => {
       const mockContainer = {
         innerHTML: '',
-        querySelector: jest.fn((selector) => {
-          if (selector === '#file-format') return { value: 'csv', addEventListener: jest.fn() };
-          if (selector === '#file-format') return { value: 'csv', addEventListener: jest.fn() };
+        querySelector: vi.fn((selector) => {
+          if (selector === '#file-format') return { value: 'csv', addEventListener: vi.fn() };
+          if (selector === '#file-format') return { value: 'csv', addEventListener: vi.fn() };
           if (selector === '#file-columns') return { value: 'id' };
           if (selector === '#file-rows') return { value: '100' };
-          if (selector === '#file-template') return { value: '', addEventListener: jest.fn() };
-          if (selector === '#file-generate') return { addEventListener: jest.fn() };
+          if (selector === '#file-template') return { value: '', addEventListener: vi.fn() };
+          if (selector === '#file-generate') return { addEventListener: vi.fn() };
           if (selector === '#file-filename') return { value: 'data.csv' };
           if (selector === '#file-status') return { style: {}, textContent: '' };
           return null;
@@ -220,7 +220,7 @@ describe('Browser Module', () => {
       let templateChangeHandler;
       const mockTemplateSelect = {
         value: '',
-        addEventListener: jest.fn((event, handler) => {
+        addEventListener: vi.fn((event, handler) => {
           if (event === 'change') templateChangeHandler = handler;
         })
       };
@@ -230,12 +230,12 @@ describe('Browser Module', () => {
       
       const mockContainer = {
         innerHTML: '',
-        querySelector: jest.fn((selector) => {
-          if (selector === '#file-format') return { value: 'csv', addEventListener: jest.fn() };
+        querySelector: vi.fn((selector) => {
+          if (selector === '#file-format') return { value: 'csv', addEventListener: vi.fn() };
           if (selector === '#file-columns') return mockColumnsInput;
           if (selector === '#file-rows') return mockRowsInput;
           if (selector === '#file-template') return mockTemplateSelect;
-          if (selector === '#file-generate') return { addEventListener: jest.fn() };
+          if (selector === '#file-generate') return { addEventListener: vi.fn() };
           if (selector === '#file-filename') return { value: 'data.csv' };
           if (selector === '#file-status') return { style: {}, textContent: '' };
           return null;
@@ -257,7 +257,7 @@ describe('Browser Module', () => {
       let templateChangeHandler;
       const mockTemplateSelect = {
         value: '',
-        addEventListener: jest.fn((event, handler) => {
+        addEventListener: vi.fn((event, handler) => {
           if (event === 'change') templateChangeHandler = handler;
         })
       };
@@ -267,12 +267,12 @@ describe('Browser Module', () => {
       
       const mockContainer = {
         innerHTML: '',
-        querySelector: jest.fn((selector) => {
-          if (selector === '#file-format') return { value: 'csv', addEventListener: jest.fn() };
+        querySelector: vi.fn((selector) => {
+          if (selector === '#file-format') return { value: 'csv', addEventListener: vi.fn() };
           if (selector === '#file-columns') return mockColumnsInput;
           if (selector === '#file-rows') return mockRowsInput;
           if (selector === '#file-template') return mockTemplateSelect;
-          if (selector === '#file-generate') return { addEventListener: jest.fn() };
+          if (selector === '#file-generate') return { addEventListener: vi.fn() };
           if (selector === '#file-filename') return { value: 'data.csv' };
           if (selector === '#file-status') return { style: {}, textContent: '' };
           return null;
@@ -294,7 +294,7 @@ describe('Browser Module', () => {
       let formatChangeHandler;
       const mockFormatSelect = {
         value: 'csv',
-        addEventListener: jest.fn((event, handler) => {
+        addEventListener: vi.fn((event, handler) => {
           if (event === 'change') formatChangeHandler = handler;
         })
       };
@@ -303,12 +303,12 @@ describe('Browser Module', () => {
       
       const mockContainer = {
         innerHTML: '',
-        querySelector: jest.fn((selector) => {
+        querySelector: vi.fn((selector) => {
           if (selector === '#file-format') return mockFormatSelect;
           if (selector === '#file-columns') return { value: 'id' };
           if (selector === '#file-rows') return { value: '10' };
-          if (selector === '#file-template') return { value: '', addEventListener: jest.fn() };
-          if (selector === '#file-generate') return { addEventListener: jest.fn() };
+          if (selector === '#file-template') return { value: '', addEventListener: vi.fn() };
+          if (selector === '#file-generate') return { addEventListener: vi.fn() };
           if (selector === '#file-filename') return mockFilenameInput;
           if (selector === '#file-status') return { style: {}, textContent: '' };
           return null;
@@ -331,13 +331,13 @@ describe('Browser Module', () => {
     });
 
     test('should validate empty columns on generate', () => {
-      jest.useFakeTimers();
+      vi.useFakeTimers();
       
       let generateClickHandler;
       const mockGenerateBtn = {
         disabled: false,
         textContent: '',
-        addEventListener: jest.fn((event, handler) => {
+        addEventListener: vi.fn((event, handler) => {
           if (event === 'click') generateClickHandler = handler;
         })
       };
@@ -346,11 +346,11 @@ describe('Browser Module', () => {
       
       const mockContainer = {
         innerHTML: '',
-        querySelector: jest.fn((selector) => {
-          if (selector === '#file-format') return { value: 'csv', addEventListener: jest.fn() };
+        querySelector: vi.fn((selector) => {
+          if (selector === '#file-format') return { value: 'csv', addEventListener: vi.fn() };
           if (selector === '#file-columns') return { value: '  ' };
           if (selector === '#file-rows') return { value: '100' };
-          if (selector === '#file-template') return { value: '', addEventListener: jest.fn() };
+          if (selector === '#file-template') return { value: '', addEventListener: vi.fn() };
           if (selector === '#file-generate') return mockGenerateBtn;
           if (selector === '#file-filename') return { value: 'data.csv' };
           if (selector === '#file-status') return mockStatusDiv;
@@ -367,17 +367,17 @@ describe('Browser Module', () => {
       expect(mockStatusDiv.style.background).toBe('#f8d7da');
       expect(mockStatusDiv.style.color).toBe('#721c24');
       
-      jest.useRealTimers();
+      vi.useRealTimers();
     });
 
     test('should validate rows less than 1', () => {
-      jest.useFakeTimers();
+      vi.useFakeTimers();
       
       let generateClickHandler;
       const mockGenerateBtn = {
         disabled: false,
         textContent: '',
-        addEventListener: jest.fn((event, handler) => {
+        addEventListener: vi.fn((event, handler) => {
           if (event === 'click') generateClickHandler = handler;
         })
       };
@@ -386,11 +386,11 @@ describe('Browser Module', () => {
       
       const mockContainer = {
         innerHTML: '',
-        querySelector: jest.fn((selector) => {
-          if (selector === '#file-format') return { value: 'csv', addEventListener: jest.fn() };
+        querySelector: vi.fn((selector) => {
+          if (selector === '#file-format') return { value: 'csv', addEventListener: vi.fn() };
           if (selector === '#file-columns') return { value: 'id' };
           if (selector === '#file-rows') return { value: '0' };
-          if (selector === '#file-template') return { value: '', addEventListener: jest.fn() };
+          if (selector === '#file-template') return { value: '', addEventListener: vi.fn() };
           if (selector === '#file-generate') return mockGenerateBtn;
           if (selector === '#file-filename') return { value: 'data.csv' };
           if (selector === '#file-status') return mockStatusDiv;
@@ -405,17 +405,17 @@ describe('Browser Module', () => {
       
       expect(mockStatusDiv.textContent).toBe('Rows must be between 1 and 10,000');
       
-      jest.useRealTimers();
+      vi.useRealTimers();
     });
 
     test('should validate rows greater than 10000', () => {
-      jest.useFakeTimers();
+      vi.useFakeTimers();
       
       let generateClickHandler;
       const mockGenerateBtn = {
         disabled: false,
         textContent: '',
-        addEventListener: jest.fn((event, handler) => {
+        addEventListener: vi.fn((event, handler) => {
           if (event === 'click') generateClickHandler = handler;
         })
       };
@@ -424,11 +424,11 @@ describe('Browser Module', () => {
       
       const mockContainer = {
         innerHTML: '',
-        querySelector: jest.fn((selector) => {
-          if (selector === '#file-format') return { value: 'csv', addEventListener: jest.fn() };
+        querySelector: vi.fn((selector) => {
+          if (selector === '#file-format') return { value: 'csv', addEventListener: vi.fn() };
           if (selector === '#file-columns') return { value: 'id' };
           if (selector === '#file-rows') return { value: '10001' };
-          if (selector === '#file-template') return { value: '', addEventListener: jest.fn() };
+          if (selector === '#file-template') return { value: '', addEventListener: vi.fn() };
           if (selector === '#file-generate') return mockGenerateBtn;
           if (selector === '#file-filename') return { value: 'data.csv' };
           if (selector === '#file-status') return mockStatusDiv;
@@ -443,17 +443,17 @@ describe('Browser Module', () => {
       
       expect(mockStatusDiv.textContent).toBe('Rows must be between 1 and 10,000');
       
-      jest.useRealTimers();
+      vi.useRealTimers();
     });
 
-    test('should generate CSV successfully', (done) => {
-      jest.useFakeTimers();
+    test('should generate CSV successfully', () => {
+      vi.useFakeTimers();
       
       let generateClickHandler;
       const mockGenerateBtn = {
         disabled: false,
         textContent: 'Generate',
-        addEventListener: jest.fn((event, handler) => {
+        addEventListener: vi.fn((event, handler) => {
           if (event === 'click') generateClickHandler = handler;
         })
       };
@@ -462,11 +462,11 @@ describe('Browser Module', () => {
       
       const mockContainer = {
         innerHTML: '',
-        querySelector: jest.fn((selector) => {
-          if (selector === '#file-format') return { value: 'csv', addEventListener: jest.fn() };
+        querySelector: vi.fn((selector) => {
+          if (selector === '#file-format') return { value: 'csv', addEventListener: vi.fn() };
           if (selector === '#file-columns') return { value: 'id:autoIncrement' };
           if (selector === '#file-rows') return { value: '5' };
-          if (selector === '#file-template') return { value: '', addEventListener: jest.fn() };
+          if (selector === '#file-template') return { value: '', addEventListener: vi.fn() };
           if (selector === '#file-generate') return mockGenerateBtn;
           if (selector === '#file-filename') return { value: 'test.csv' };
           if (selector === '#file-status') return mockStatusDiv;
@@ -483,7 +483,7 @@ describe('Browser Module', () => {
       expect(mockGenerateBtn.textContent).toBe('Generating...');
       
       // Fast-forward time to trigger setTimeout
-      jest.advanceTimersByTime(15);
+      vi.advanceTimersByTime(15);
       
       expect(mockGenerateBtn.disabled).toBe(false);
       expect(mockGenerateBtn.textContent).toBe('Generate & Download');
@@ -491,18 +491,17 @@ describe('Browser Module', () => {
       expect(mockStatusDiv.style.background).toBe('#d4edda');
       expect(mockStatusDiv.style.color).toBe('#155724');
       
-      jest.useRealTimers();
-      done();
+      vi.useRealTimers();
     });
 
-    test('should handle generation error in setTimeout', (done) => {
-      jest.useFakeTimers();
+    test('should handle generation error in setTimeout', () => {
+      vi.useFakeTimers();
       
       let generateClickHandler;
       const mockGenerateBtn = {
         disabled: false,
         textContent: 'Generate',
-        addEventListener: jest.fn((event, handler) => {
+        addEventListener: vi.fn((event, handler) => {
           if (event === 'click') generateClickHandler = handler;
         })
       };
@@ -511,17 +510,17 @@ describe('Browser Module', () => {
       
       // Mock generateAndDownload to throw an error
       const originalCreateElement = global.document.createElement;
-      global.document.createElement = jest.fn(() => {
+      global.document.createElement = vi.fn(() => {
         throw new Error('Download failed');
       });
       
       const mockContainer = {
         innerHTML: '',
-        querySelector: jest.fn((selector) => {
-          if (selector === '#file-format') return { value: 'csv', addEventListener: jest.fn() };
+        querySelector: vi.fn((selector) => {
+          if (selector === '#file-format') return { value: 'csv', addEventListener: vi.fn() };
           if (selector === '#file-columns') return { value: 'id:autoIncrement' };
           if (selector === '#file-rows') return { value: '5' };
-          if (selector === '#file-template') return { value: '', addEventListener: jest.fn() };
+          if (selector === '#file-template') return { value: '', addEventListener: vi.fn() };
           if (selector === '#file-generate') return mockGenerateBtn;
           if (selector === '#file-filename') return { value: 'test.csv' };
           if (selector === '#file-status') return mockStatusDiv;
@@ -535,7 +534,7 @@ describe('Browser Module', () => {
       generateClickHandler();
       
       // Fast-forward time to trigger setTimeout
-      jest.advanceTimersByTime(15);
+      vi.advanceTimersByTime(15);
       
       expect(mockGenerateBtn.disabled).toBe(false);
       expect(mockStatusDiv.textContent).toContain('Error:');
@@ -543,18 +542,17 @@ describe('Browser Module', () => {
       
       // Restore original
       global.document.createElement = originalCreateElement;
-      jest.useRealTimers();
-      done();
+      vi.useRealTimers();
     });
 
     test('should handle synchronous error', () => {
-      jest.useFakeTimers();
+      vi.useFakeTimers();
       
       let generateClickHandler;
       const mockGenerateBtn = {
         disabled: false,
         textContent: 'Generate',
-        addEventListener: jest.fn((event, handler) => {
+        addEventListener: vi.fn((event, handler) => {
           if (event === 'click') generateClickHandler = handler;
         })
       };
@@ -568,11 +566,11 @@ describe('Browser Module', () => {
       
       const mockContainer = {
         innerHTML: '',
-        querySelector: jest.fn((selector) => {
-          if (selector === '#file-format') return { value: 'csv', addEventListener: jest.fn() };
+        querySelector: vi.fn((selector) => {
+          if (selector === '#file-format') return { value: 'csv', addEventListener: vi.fn() };
           if (selector === '#file-columns') return mockColumnsInput;
           if (selector === '#file-rows') return { value: '5' };
-          if (selector === '#file-template') return { value: '', addEventListener: jest.fn() };
+          if (selector === '#file-template') return { value: '', addEventListener: vi.fn() };
           if (selector === '#file-generate') return mockGenerateBtn;
           if (selector === '#file-filename') return { value: 'test.csv' };
           if (selector === '#file-status') return mockStatusDiv;
@@ -588,7 +586,7 @@ describe('Browser Module', () => {
       expect(mockStatusDiv.textContent).toBe('Error: Test error');
       expect(mockGenerateBtn.disabled).toBe(false);
       
-      jest.useRealTimers();
+      vi.useRealTimers();
     });
 
     test('should allow setting filename', () => {
@@ -596,12 +594,12 @@ describe('Browser Module', () => {
       
       const mockContainer = {
         innerHTML: '',
-        querySelector: jest.fn((selector) => {
-          if (selector === '#file-format') return { value: 'csv', addEventListener: jest.fn() };
+        querySelector: vi.fn((selector) => {
+          if (selector === '#file-format') return { value: 'csv', addEventListener: vi.fn() };
           if (selector === '#file-columns') return { value: 'id' };
           if (selector === '#file-rows') return { value: '100' };
-          if (selector === '#file-template') return { value: '', addEventListener: jest.fn() };
-          if (selector === '#file-generate') return { addEventListener: jest.fn() };
+          if (selector === '#file-template') return { value: '', addEventListener: vi.fn() };
+          if (selector === '#file-generate') return { addEventListener: vi.fn() };
           if (selector === '#file-filename') return mockFilenameInput;
           if (selector === '#file-status') return { style: {}, textContent: '' };
           return null;
@@ -619,12 +617,12 @@ describe('Browser Module', () => {
     test('should destroy UI', () => {
       const mockContainer = {
         innerHTML: 'content',
-        querySelector: jest.fn((selector) => {
-          if (selector === '#file-format') return { value: 'csv', addEventListener: jest.fn() };
+        querySelector: vi.fn((selector) => {
+          if (selector === '#file-format') return { value: 'csv', addEventListener: vi.fn() };
           if (selector === '#file-columns') return { value: 'id' };
           if (selector === '#file-rows') return { value: '100' };
-          if (selector === '#file-template') return { value: '', addEventListener: jest.fn() };
-          if (selector === '#file-generate') return { addEventListener: jest.fn() };
+          if (selector === '#file-template') return { value: '', addEventListener: vi.fn() };
+          if (selector === '#file-generate') return { addEventListener: vi.fn() };
           if (selector === '#file-filename') return { value: 'data.csv' };
           if (selector === '#file-status') return { style: {}, textContent: '' };
           return null;
@@ -646,12 +644,12 @@ describe('Browser Module', () => {
       
       const mockContainer = {
         innerHTML: '',
-        querySelector: jest.fn((selector) => {
-          if (selector === '#file-format') return { value: 'csv', addEventListener: jest.fn() };
+        querySelector: vi.fn((selector) => {
+          if (selector === '#file-format') return { value: 'csv', addEventListener: vi.fn() };
           if (selector === '#file-columns') return mockColumnsInput;
           if (selector === '#file-rows') return mockRowsInput;
-          if (selector === '#file-template') return { value: '', addEventListener: jest.fn() };
-          if (selector === '#file-generate') return { addEventListener: jest.fn() };
+          if (selector === '#file-template') return { value: '', addEventListener: vi.fn() };
+          if (selector === '#file-generate') return { addEventListener: vi.fn() };
           if (selector === '#file-filename') return mockFilenameInput;
           if (selector === '#file-status') return { style: {}, textContent: '' };
           return null;
@@ -671,16 +669,16 @@ describe('Browser Module', () => {
     });
 
     test('should allow setting format via setFormat method', () => {
-      const mockFormatSelect = { value: 'csv', addEventListener: jest.fn() };
+      const mockFormatSelect = { value: 'csv', addEventListener: vi.fn() };
       
       const mockContainer = {
         innerHTML: '',
-        querySelector: jest.fn((selector) => {
+        querySelector: vi.fn((selector) => {
           if (selector === '#file-format') return mockFormatSelect;
           if (selector === '#file-columns') return { value: '' };
           if (selector === '#file-rows') return { value: '10' };
-          if (selector === '#file-template') return { value: '', addEventListener: jest.fn() };
-          if (selector === '#file-generate') return { addEventListener: jest.fn() };
+          if (selector === '#file-template') return { value: '', addEventListener: vi.fn() };
+          if (selector === '#file-generate') return { addEventListener: vi.fn() };
           if (selector === '#file-filename') return { value: 'data.csv' };
           if (selector === '#file-status') return { style: {}, textContent: '' };
           return null;
@@ -696,13 +694,13 @@ describe('Browser Module', () => {
     });
 
     test('should use empty filename when not provided', () => {
-      jest.useFakeTimers();
+      vi.useFakeTimers();
       
       let generateClickHandler;
       const mockGenerateBtn = {
         disabled: false,
         textContent: 'Generate',
-        addEventListener: jest.fn((event, handler) => {
+        addEventListener: vi.fn((event, handler) => {
           if (event === 'click') generateClickHandler = handler;
         })
       };
@@ -711,11 +709,11 @@ describe('Browser Module', () => {
       
       const mockContainer = {
         innerHTML: '',
-        querySelector: jest.fn((selector) => {
-          if (selector === '#file-format') return { value: 'csv', addEventListener: jest.fn() };
+        querySelector: vi.fn((selector) => {
+          if (selector === '#file-format') return { value: 'csv', addEventListener: vi.fn() };
           if (selector === '#file-columns') return { value: 'id:autoIncrement' };
           if (selector === '#file-rows') return { value: '2' };
-          if (selector === '#file-template') return { value: '', addEventListener: jest.fn() };
+          if (selector === '#file-template') return { value: '', addEventListener: vi.fn() };
           if (selector === '#file-generate') return mockGenerateBtn;
           if (selector === '#file-filename') return { value: '  ' };
           if (selector === '#file-status') return mockStatusDiv;
@@ -729,11 +727,11 @@ describe('Browser Module', () => {
       generateClickHandler();
       
       // Fast-forward time to trigger setTimeout
-      jest.advanceTimersByTime(15);
+      vi.advanceTimersByTime(15);
       
       expect(mockStatusDiv.textContent).toContain('Generated');
       
-      jest.useRealTimers();
+      vi.useRealTimers();
     });
 
     test('should render yaml and toml format options dynamically', () => {
@@ -741,12 +739,12 @@ describe('Browser Module', () => {
       const mockContainer = {
         get innerHTML() { return capturedHTML; },
         set innerHTML(html) { capturedHTML = html; },
-        querySelector: jest.fn((selector) => {
-          if (selector === '#file-format') return { value: 'csv', addEventListener: jest.fn() };
-          if (selector === '#file-template') return { value: '', addEventListener: jest.fn() };
+        querySelector: vi.fn((selector) => {
+          if (selector === '#file-format') return { value: 'csv', addEventListener: vi.fn() };
+          if (selector === '#file-template') return { value: '', addEventListener: vi.fn() };
           if (selector === '#file-columns') return { value: '' };
           if (selector === '#file-rows') return { value: '100' };
-          if (selector === '#file-generate') return { addEventListener: jest.fn() };
+          if (selector === '#file-generate') return { addEventListener: vi.fn() };
           if (selector === '#file-filename') return { value: 'data.csv' };
           if (selector === '#file-status') return { style: {}, textContent: '' };
           return null;
@@ -764,12 +762,12 @@ describe('Browser Module', () => {
       const mockContainer = {
         get innerHTML() { return capturedHTML; },
         set innerHTML(html) { capturedHTML = html; },
-        querySelector: jest.fn((selector) => {
-          if (selector === '#file-format') return { value: 'csv', addEventListener: jest.fn() };
-          if (selector === '#file-template') return { value: '', addEventListener: jest.fn() };
+        querySelector: vi.fn((selector) => {
+          if (selector === '#file-format') return { value: 'csv', addEventListener: vi.fn() };
+          if (selector === '#file-template') return { value: '', addEventListener: vi.fn() };
           if (selector === '#file-columns') return { value: '' };
           if (selector === '#file-rows') return { value: '100' };
-          if (selector === '#file-generate') return { addEventListener: jest.fn() };
+          if (selector === '#file-generate') return { addEventListener: vi.fn() };
           if (selector === '#file-filename') return { value: 'data.csv' };
           if (selector === '#file-status') return { style: {}, textContent: '' };
           return null;

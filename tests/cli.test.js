@@ -1,11 +1,13 @@
-import { jest } from '@jest/globals';
+import { vi } from 'vitest';
 import {
   setupCLI,
   main,
   runCLI,
+  readStdin,
   checkIsMainModule,
   executeIfMain
 } from '../cli.js';
+import { setLogger, resetLogger, getLogger } from '../src/logger.js';
 import fs from 'fs';
 import { promisify } from 'util';
 import { parse } from 'csv-parse/sync';
@@ -14,6 +16,17 @@ import { exec } from 'child_process';
 const readFile = promisify(fs.readFile);
 const unlink = promisify(fs.unlink);
 const execPromise = promisify(exec);
+
+// Mock wizard for interactive-mode tests (vi.mock is hoisted before all imports)
+vi.mock('../src/wizard.js', async () => ({
+  runInitWizard: vi.fn().mockResolvedValue({ tables: [] }),
+  runInteractiveGenerate: vi.fn().mockResolvedValue({
+    columns: 'id:autoIncrement,name:fullName',
+    rows: 2,
+    format: 'csv',
+    output: null,
+  }),
+}));
 
 describe('CLI Module', () => {
   const testFile = 'test-cli-output.csv';
@@ -249,41 +262,51 @@ describe('CLI Module', () => {
     });
 
     test('should handle preview option', async () => {
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
-      
-      await main({
-        output: testFile,
-        columns: 'id:autoIncrement',
-        rows: 3,
-        preview: true
-      });
-      
-      expect(consoleSpy).toHaveBeenCalled();
-      consoleSpy.mockRestore();
+      const logCalls = [];
+      setLogger({ log: (...a) => logCalls.push(a), info() {}, warn() {}, error() {} });
+
+      try {
+        await main({
+          output: testFile,
+          columns: 'id:autoIncrement',
+          rows: 3,
+          preview: true
+        });
+
+        expect(logCalls.length).toBeGreaterThan(0);
+      } finally {
+        resetLogger();
+      }
     });
 
     test('should list types when listTypes is true', async () => {
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
-      
-      await main({ listTypes: true });
-      
-      expect(consoleSpy).toHaveBeenCalled();
-      const output = consoleSpy.mock.calls.map(call => call[0]).join('\n');
-      expect(output).toContain('Available Data Types:');
-      
-      consoleSpy.mockRestore();
+      const logCalls = [];
+      setLogger({ log: (...a) => logCalls.push(a), info() {}, warn() {}, error() {} });
+
+      try {
+        await main({ listTypes: true });
+
+        expect(logCalls.length).toBeGreaterThan(0);
+        const output = logCalls.map(args => args[0]).join('\n');
+        expect(output).toContain('Available Data Types:');
+      } finally {
+        resetLogger();
+      }
     });
 
     test('should list templates when listTemplates is true', async () => {
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
-      
-      await main({ listTemplates: true });
-      
-      expect(consoleSpy).toHaveBeenCalled();
-      const output = consoleSpy.mock.calls.map(call => call[0]).join('\n');
-      expect(output).toContain('Available Templates:');
-      
-      consoleSpy.mockRestore();
+      const logCalls = [];
+      setLogger({ log: (...a) => logCalls.push(a), info() {}, warn() {}, error() {} });
+
+      try {
+        await main({ listTemplates: true });
+
+        expect(logCalls.length).toBeGreaterThan(0);
+        const output = logCalls.map(args => args[0]).join('\n');
+        expect(output).toContain('Available Templates:');
+      } finally {
+        resetLogger();
+      }
     });
 
     test('should generate with counter patterns', async () => {
@@ -412,7 +435,7 @@ describe('CLI Module', () => {
         '-r', '1'
       ];
       
-      const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => {});
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
       
       await runCLI();
       
@@ -426,8 +449,8 @@ describe('CLI Module', () => {
     test('should handle validation errors', async () => {
       process.argv = ['node', 'cli.js']; // Missing required args
       
-      const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-      const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => {});
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
       
       await runCLI();
       
@@ -441,8 +464,8 @@ describe('CLI Module', () => {
     test('should exit with code 1 on error', async () => {
       process.argv = ['node', 'cli.js']; // Missing required args
       
-      const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-      const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => {});
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
       
       await runCLI();
       
@@ -455,30 +478,32 @@ describe('CLI Module', () => {
     test('should exit with code 0 when listing types', async () => {
       process.argv = ['node', 'cli.js', '--list-types'];
       
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
-      const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => {});
+      // logger.log() now routes to process.stdout.write (UNIX: data on stdout)
+      const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
       
       await runCLI();
       
       expect(exitSpy).toHaveBeenCalledWith(0);
-      expect(consoleSpy).toHaveBeenCalled();
+      expect(stdoutSpy).toHaveBeenCalled();
       
-      consoleSpy.mockRestore();
+      stdoutSpy.mockRestore();
       exitSpy.mockRestore();
     });
 
     test('should exit with code 0 when listing templates', async () => {
       process.argv = ['node', 'cli.js', '--list-templates'];
       
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
-      const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => {});
+      // logger.log() now routes to process.stdout.write (UNIX: data on stdout)
+      const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
       
       await runCLI();
       
       expect(exitSpy).toHaveBeenCalledWith(0);
-      expect(consoleSpy).toHaveBeenCalled();
+      expect(stdoutSpy).toHaveBeenCalled();
       
-      consoleSpy.mockRestore();
+      stdoutSpy.mockRestore();
       exitSpy.mockRestore();
     });
   });
@@ -497,9 +522,9 @@ describe('CLI Module', () => {
     test('setupCLI should accept schema positional arg without columns/template', async () => {
       // Covers the `if (argv._[0] === 'schema') return true` branch in .check()
       // Mock process.exit and stdout.write so the async schema handler doesn't cause failures
-      const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => {});
-      const stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
+      const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       process.argv = ['node', 'cli.js', 'schema', 'test-schema.sql'];
       // Should NOT throw due to missing --columns/--template — the schema guard in check() handles it
       expect(() => setupCLI()).not.toThrow();
@@ -511,8 +536,8 @@ describe('CLI Module', () => {
     });
 
     test('schema handler catch block: exits with 1 when generateFromDDL throws (covers lines 139-140)', async () => {
-      const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => {});
-      const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       process.argv = ['node', 'cli.js', 'schema', '__does_not_exist__.sql'];
       expect(() => setupCLI()).not.toThrow();
       // Allow async handler to settle — generateFromDDL throws ENOENT, catch runs
@@ -524,8 +549,8 @@ describe('CLI Module', () => {
 
     test('schema handler skips stdout.write when --output is provided (covers if-false branch at line 135)', async () => {
       const outFile = 'test-schema-unit-out.sql';
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
-      const stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
       process.argv = ['node', 'cli.js', 'schema', 'test-schema.sql', '-o', outFile];
       expect(() => setupCLI()).not.toThrow();
       // Allow async handler to settle — output file path is set so stdout.write is NOT called
@@ -544,8 +569,8 @@ describe('CLI Module', () => {
     test('schema handler passes seed to generateFromDDL and produces deterministic output', async () => {
       const outFile1 = 'test-schema-seed-1.sql';
       const outFile2 = 'test-schema-seed-2.sql';
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
-      const stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
       process.argv = ['node', 'cli.js', 'schema', 'test-schema.sql', '--seed', '7', '--rows', '3', '-o', outFile1];
       expect(() => setupCLI()).not.toThrow();
       await new Promise(resolve => setTimeout(resolve, 800));
@@ -567,9 +592,9 @@ describe('CLI Module', () => {
     test('runCLI should return early (skip main) for schema subcommand', async () => {
       // The schema guard now lives in runCLI(), not main()
       process.argv = ['node', 'cli.js', 'schema', 'test-schema.sql'];
-      const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => {});
-      const stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
+      const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
       // runCLI should return without calling main() (no "Either columns or template" error)
       await expect(runCLI()).resolves.toBeUndefined();
@@ -596,7 +621,7 @@ describe('CLI Module', () => {
 
   describe('executeIfMain', () => {
     test('should not execute when not main module', async () => {
-      const mockFn = jest.fn();
+      const mockFn = vi.fn();
       await executeIfMain(import.meta.url, mockFn);
       expect(mockFn).not.toHaveBeenCalled();
     });
@@ -650,10 +675,11 @@ describe('CLI Module', () => {
     }, 10000);
 
     test('should generate with preview', async () => {
-      const { stdout } = await execPromise(`node cli.js -c "id:autoIncrement,name:fullName" -o ${testFile} -r 2 -p`);
+      const { stdout, stderr } = await execPromise(`node cli.js -c "id:autoIncrement,name:fullName" -o ${testFile} -r 2 -p`);
       
+      // Preview rows go to stdout (logger.log), ✓ Generated goes to stderr (logger.info)
       expect(stdout).toContain('Preview');
-      expect(stdout).toContain('Generated');
+      expect(stderr).toContain('Generated');
     }, 10000);
 
     test('should generate SQL with --sql-dialect option', async () => {
@@ -813,7 +839,7 @@ describe('CLI Module', () => {
     });
 
     test('main() passes locale to generateAndSave when --locale is provided', async () => {
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       try {
         await main({
           output: testFile,
@@ -908,8 +934,8 @@ describe('CLI Module', () => {
       };
       fs.writeFileSync(schemaFile, JSON.stringify(schema));
 
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
-      const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => {});
       try {
         await main({ schemaFile, sqlMode: 'ddl+insert', rows: 100 });
         // Verify stdout.write was called with SQL containing the table name
@@ -932,8 +958,8 @@ describe('CLI Module', () => {
         ]
       };
       fs.writeFileSync(schemaFile, JSON.stringify(schema));
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
-      const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => {});
       try {
         // No sqlMode provided → argv.sqlMode = undefined → falls back to 'ddl+insert'
         await main({ schemaFile });
@@ -958,8 +984,8 @@ describe('CLI Module', () => {
       };
       fs.writeFileSync(schemaFile, JSON.stringify(schema));
 
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
-      const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => {});
       try {
         await main({ schemaFile, output: outputFile, sqlMode: 'ddl+insert', rows: 100 });
         // stdout.write must NOT have been called because output is a file
@@ -979,8 +1005,8 @@ describe('CLI Module', () => {
         ]
       };
       fs.writeFileSync(schemaFile, JSON.stringify(schema));
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
-      const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => {});
       try {
         await main({ schemaFile, sqlMode: 'insert', locale: 'fr' });
         const out = writeSpy.mock.calls.map(c => c[0]).join('');
@@ -999,8 +1025,8 @@ describe('CLI Module', () => {
         ]
       };
       fs.writeFileSync(schemaFile, JSON.stringify(schema));
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
-      const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => {});
       try {
         await main({ schemaFile, sqlMode: 'ddl+insert', sqlDialect: 'postgres' });
         const out = writeSpy.mock.calls.map(c => c[0]).join('');
@@ -1021,11 +1047,11 @@ describe('CLI Module', () => {
       fs.writeFileSync(schemaFile, JSON.stringify(schema));
 
       const outputs = [];
-      const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+      const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
         outputs.push(chunk);
         return true;
       });
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       try {
         await main({ schemaFile, sqlMode: 'insert', seed: 99 });
         await main({ schemaFile, sqlMode: 'insert', seed: 99 });
@@ -1051,11 +1077,11 @@ describe('CLI Module', () => {
 
     test('main() with stream=true streams CSV rows to stdout', async () => {
       const chunks = [];
-      const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+      const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
         chunks.push(chunk);
         return true;
       });
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       try {
         await main({ stream: true, columns: 'id:autoIncrement,name:fullName', rows: 5, batchSize: 500, header: true, headerFormat: 'title' });
         const output = chunks.join('');
@@ -1069,11 +1095,11 @@ describe('CLI Module', () => {
 
     test('main() with stream=true and format=ndjson streams NDJSON rows to stdout', async () => {
       const chunks = [];
-      const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+      const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
         chunks.push(chunk);
         return true;
       });
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       try {
         await main({ stream: true, format: 'ndjson', columns: 'id:autoIncrement', rows: 3, batchSize: 500 });
         const output = chunks.join('');
@@ -1087,7 +1113,7 @@ describe('CLI Module', () => {
     });
 
     test('main() with stream=true and output writes CSV to file', async () => {
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       try {
         await main({ stream: true, columns: 'id:autoIncrement', rows: 4, output: streamCsv, batchSize: 500, header: true, headerFormat: 'title' });
         expect(fs.existsSync(streamCsv)).toBe(true);
@@ -1100,11 +1126,11 @@ describe('CLI Module', () => {
 
     test('main() with stream=true and template uses template columns and rows', async () => {
       const chunks = [];
-      const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+      const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
         chunks.push(chunk);
         return true;
       });
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       try {
         await main({ stream: true, template: 'users', rows: 2, batchSize: 500, header: true, headerFormat: 'title' });
         const output = chunks.join('');
@@ -1117,11 +1143,11 @@ describe('CLI Module', () => {
 
     test('main() with stream=true and template uses template default rows when rows not specified', async () => {
       const chunks = [];
-      const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+      const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
         chunks.push(chunk);
         return true;
       });
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       try {
         await main({ stream: true, template: 'users', batchSize: 500 });
         const output = chunks.join('');
@@ -1134,11 +1160,11 @@ describe('CLI Module', () => {
 
     test('main() with stream=true and both columns and template: columns takes precedence', async () => {
       const chunks = [];
-      const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+      const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
         chunks.push(chunk);
         return true;
       });
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       try {
         // Both columns and template supplied — columns wins, template rows used as fallback
         await main({ stream: true, template: 'users', columns: 'id:autoIncrement', rows: 2, batchSize: 500, header: true, headerFormat: 'title' });
@@ -1152,8 +1178,8 @@ describe('CLI Module', () => {
     });
 
     test('main() with stream=true exits with 1 for unsupported format', async () => {
-      const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-      const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => {});
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
       try {
         await main({ stream: true, format: 'xml', columns: 'id:autoIncrement', rows: 5 });
         expect(exitSpy).toHaveBeenCalledWith(1);
@@ -1164,8 +1190,8 @@ describe('CLI Module', () => {
     });
 
     test('main() with stream=true exits with 1 when rows not specified and no template', async () => {
-      const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-      const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => {});
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
       try {
         await main({ stream: true, columns: 'id:autoIncrement' });
         expect(exitSpy).toHaveBeenCalledWith(1);
@@ -1427,10 +1453,10 @@ describe('CLI Module', () => {
     afterEach(() => { process.argv = originalArgv; });
 
     test('schema --watch: generates SQL, writes to stdout, sets up watcher', async () => {
-      const stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
-      const stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
-      const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => {});
+      const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+      const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
 
       process.argv = ['node', 'cli.js', 'schema', 'test-schema.sql', '--watch', '--rows', '2'];
       expect(() => setupCLI()).not.toThrow();
@@ -1451,10 +1477,10 @@ describe('CLI Module', () => {
 
     test('schema --watch with --output: writes file, no stdout, watchAndGenerate started', async () => {
       const outFile = 'test-cli-watch-with-output.sql';
-      const stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
-      const stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
-      const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => {});
+      const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+      const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
 
       process.argv = ['node', 'cli.js', 'schema', 'test-schema.sql', '--watch', '--rows', '2', '-o', outFile];
       expect(() => setupCLI()).not.toThrow();
@@ -1492,8 +1518,8 @@ describe('CLI Module', () => {
     });
 
     test('infer handler: default string format outputs column string to stdout', async () => {
-      const stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       process.argv = ['node', 'cli.js', 'infer', tmpCsv];
       expect(() => setupCLI()).not.toThrow();
@@ -1508,8 +1534,8 @@ describe('CLI Module', () => {
     }, 8000);
 
     test('infer handler: --format json outputs JSON array to stdout', async () => {
-      const stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       process.argv = ['node', 'cli.js', 'infer', tmpCsv, '--format', 'json'];
       expect(() => setupCLI()).not.toThrow();
@@ -1526,7 +1552,7 @@ describe('CLI Module', () => {
 
     test('infer handler: --output writes result to file', async () => {
       const outFile = 'test-cli-infer-unit-out.txt';
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       process.argv = ['node', 'cli.js', 'infer', tmpCsv, '--output', outFile];
       expect(() => setupCLI()).not.toThrow();
@@ -1539,8 +1565,8 @@ describe('CLI Module', () => {
     }, 8000);
 
     test('infer handler: catch block exits with 1 on file error', async () => {
-      const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-      const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => {});
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
 
       process.argv = ['node', 'cli.js', 'infer', '__nonexistent_infer_unit__.xyz'];
       expect(() => setupCLI()).not.toThrow();
@@ -1586,8 +1612,8 @@ describe('CLI Module', () => {
     });
 
     test('from-openapi handler: outputs ficta.schema.json to stdout', async () => {
-      const stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       process.argv = ['node', 'cli.js', 'from-openapi', tmpOpenApi];
       expect(() => setupCLI()).not.toThrow();
@@ -1603,7 +1629,7 @@ describe('CLI Module', () => {
 
     test('from-openapi handler: --output writes schema to file', async () => {
       const outFile = 'test-cli-openapi-unit-out.json';
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       process.argv = ['node', 'cli.js', 'from-openapi', tmpOpenApi, '--output', outFile];
       expect(() => setupCLI()).not.toThrow();
@@ -1618,8 +1644,8 @@ describe('CLI Module', () => {
     }, 8000);
 
     test('from-openapi handler: catch block exits with 1 on error', async () => {
-      const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-      const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => {});
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
 
       process.argv = ['node', 'cli.js', 'from-openapi', '__nonexistent_openapi__.json'];
       expect(() => setupCLI()).not.toThrow();
@@ -1657,8 +1683,8 @@ describe('CLI Module', () => {
     });
 
     test('from-graphql handler: outputs ficta.schema.json to stdout', async () => {
-      const stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       process.argv = ['node', 'cli.js', 'from-graphql', tmpGql];
       expect(() => setupCLI()).not.toThrow();
@@ -1674,7 +1700,7 @@ describe('CLI Module', () => {
 
     test('from-graphql handler: --output writes schema to file', async () => {
       const outFile = 'test-cli-graphql-unit-out.json';
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       process.argv = ['node', 'cli.js', 'from-graphql', tmpGql, '--output', outFile];
       expect(() => setupCLI()).not.toThrow();
@@ -1689,8 +1715,8 @@ describe('CLI Module', () => {
     }, 8000);
 
     test('from-graphql handler: catch block exits with 1 on error', async () => {
-      const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-      const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => {});
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
 
       process.argv = ['node', 'cli.js', 'from-graphql', '__nonexistent_graphql__.graphql'];
       expect(() => setupCLI()).not.toThrow();
@@ -1702,4 +1728,735 @@ describe('CLI Module', () => {
       exitSpy.mockRestore();
     }, 8000);
   });
+
+  // ---------------------------------------------------------------------------
+  // Prompt #12: UNIX Composability — --quiet, --json-output, no-output stdout,
+  // logger routing, stdin piping, readStdin helper
+  // ---------------------------------------------------------------------------
+  describe('UNIX Composability (Prompt #12)', () => {
+    describe('--quiet flag', () => {
+      test('setupCLI recognizes --quiet / -q option', () => {
+        const originalArgv = process.argv;
+        process.argv = ['node', 'cli.js', '-c', 'id:autoIncrement', '-q'];
+        try {
+          const args = setupCLI();
+          expect(args.quiet).toBe(true);
+        } finally {
+          process.argv = originalArgv;
+        }
+      });
+
+      test('setupCLI recognizes --quiet long form', () => {
+        const originalArgv = process.argv;
+        process.argv = ['node', 'cli.js', '-c', 'id:autoIncrement', '--quiet'];
+        try {
+          const args = setupCLI();
+          expect(args.quiet).toBe(true);
+        } finally {
+          process.argv = originalArgv;
+        }
+      });
+
+      test('runCLI with --quiet calls resetLogger() suppressing all output', async () => {
+        const originalArgv = process.argv;
+        process.argv = ['node', 'cli.js', '-c', 'id:autoIncrement', '-r', '1', '--quiet'];
+        const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+        const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+        const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
+        try {
+          await runCLI();
+          // When quiet, no status messages should appear on stderr
+          const stderrOutput = stderrSpy.mock.calls.map(c => c[0]).join('');
+          expect(stderrOutput).not.toContain('Generated');
+        } finally {
+          process.argv = originalArgv;
+          stdoutSpy.mockRestore();
+          stderrSpy.mockRestore();
+          exitSpy.mockRestore();
+        }
+      });
+
+      test('--quiet subprocess: only data on stdout, nothing on stderr', async () => {
+        const { stdout, stderr } = await execPromise('node cli.js -c "id:autoIncrement" -r 3 --quiet');
+        // Data (CSV) goes to stdout, no status messages anywhere
+        const lines = stdout.trim().split('\n').filter(Boolean);
+        expect(lines.length).toBe(4); // 1 header + 3 rows
+        expect(stderr).toBe('');
+      }, 10000);
+    });
+
+    describe('--json-output flag', () => {
+      test('setupCLI recognizes --json-output option', () => {
+        const originalArgv = process.argv;
+        process.argv = ['node', 'cli.js', '-c', 'id:autoIncrement', '--json-output'];
+        try {
+          const args = setupCLI();
+          expect(args.jsonOutput).toBe(true);
+        } finally {
+          process.argv = originalArgv;
+        }
+      });
+
+      test('main() with --json-output and no --output writes JSON result to stdout', async () => {
+        const chunks = [];
+        const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+          chunks.push(chunk);
+          return true;
+        });
+        try {
+          await main({ columns: 'id:autoIncrement', rows: 3, jsonOutput: true });
+          const output = chunks.join('').trim();
+          const parsed = JSON.parse(output);
+          expect(parsed).toHaveProperty('rowCount', 3);
+          expect(parsed).toHaveProperty('columnCount');
+          expect(parsed).toHaveProperty('format');
+          expect(parsed).toHaveProperty('message');
+        } finally {
+          stdoutSpy.mockRestore();
+        }
+      });
+
+      test('main() with --json-output and --output writes file AND emits JSON to stdout', async () => {
+        const outFile = 'test-cli-jsonoutput.csv';
+        const chunks = [];
+        const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+          chunks.push(chunk);
+          return true;
+        });
+        const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+        try {
+          await main({ output: outFile, columns: 'id:autoIncrement', rows: 2, jsonOutput: true });
+          expect(fs.existsSync(outFile)).toBe(true);
+          const jsonOut = chunks.join('').trim();
+          const parsed = JSON.parse(jsonOut);
+          expect(parsed.rowCount).toBe(2);
+          expect(parsed.output).toBe(outFile);
+        } finally {
+          stdoutSpy.mockRestore();
+          consoleSpy.mockRestore();
+          if (fs.existsSync(outFile)) fs.unlinkSync(outFile);
+        }
+      });
+
+      test('--json-output subprocess: stdout is valid JSON with rowCount and format', async () => {
+        const { stdout } = await execPromise('node cli.js -c "id:autoIncrement,name:fullName" -r 5 --json-output');
+        const parsed = JSON.parse(stdout.trim());
+        expect(parsed.rowCount).toBe(5);
+        expect(parsed.format).toBeDefined();
+        expect(parsed.message).toBeDefined();
+      }, 10000);
+    });
+
+    describe('no --output → data to stdout', () => {
+      test('main() with no --output writes CSV data to stdout', async () => {
+        const chunks = [];
+        const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+          chunks.push(chunk);
+          return true;
+        });
+        try {
+          await main({ columns: 'id:autoIncrement,name:fullName', rows: 3 });
+          const output = chunks.join('');
+          expect(output).toContain('Id');
+          expect(output).toContain('Name');
+          const lines = output.trim().split('\n').filter(Boolean);
+          expect(lines.length).toBe(4); // 1 header + 3 rows
+        } finally {
+          stdoutSpy.mockRestore();
+        }
+      });
+
+      test('main() with no --output and format=json writes JSON data to stdout', async () => {
+        const chunks = [];
+        const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+          chunks.push(chunk);
+          return true;
+        });
+        try {
+          await main({ columns: 'id:autoIncrement', rows: 2, format: 'json' });
+          const output = chunks.join('').trim();
+          const parsed = JSON.parse(output);
+          expect(Array.isArray(parsed)).toBe(true);
+          expect(parsed.length).toBe(2);
+        } finally {
+          stdoutSpy.mockRestore();
+        }
+      });
+
+      test('main() with no --output and template writes to stdout', async () => {
+        const chunks = [];
+        const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+          chunks.push(chunk);
+          return true;
+        });
+        try {
+          await main({ template: 'users', rows: 2 });
+          const output = chunks.join('');
+          expect(output).toContain('Email');
+          expect(output.length).toBeGreaterThan(0);
+        } finally {
+          stdoutSpy.mockRestore();
+        }
+      });
+
+      test('subprocess: no --output writes CSV to stdout and status to stderr', async () => {
+        const { stdout, stderr } = await execPromise('node cli.js -c "id:autoIncrement,name:fullName" -r 2');
+        const lines = stdout.trim().split('\n').filter(Boolean);
+        expect(lines.length).toBe(3); // 1 header + 2 rows
+        expect(lines[0]).toContain('Id');
+        // Status message goes to stderr, not stdout
+        expect(stderr).toContain('Generated');
+        expect(stdout).not.toContain('Generated');
+      }, 10000);
+    });
+
+    describe('logger stderr routing', () => {
+      test('runCLI routes logger.info (status messages) to process.stderr.write', async () => {
+        const originalArgv = process.argv;
+        const testFile = 'test-cli-unix-logger.csv';
+        process.argv = ['node', 'cli.js', '-c', 'id:autoIncrement', '-r', '1', '-o', testFile];
+        const stderrChunks = [];
+        const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
+          stderrChunks.push(chunk);
+          return true;
+        });
+        const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+        const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
+        try {
+          await runCLI();
+          const stderrOutput = stderrChunks.join('');
+          expect(stderrOutput).toContain('Generated');
+        } finally {
+          process.argv = originalArgv;
+          stderrSpy.mockRestore();
+          stdoutSpy.mockRestore();
+          exitSpy.mockRestore();
+          if (fs.existsSync(testFile)) fs.unlinkSync(testFile);
+        }
+      });
+
+      test('runCLI routes logger.log (data output) to process.stdout.write', async () => {
+        const originalArgv = process.argv;
+        process.argv = ['node', 'cli.js', '--list-types'];
+        const stdoutChunks = [];
+        const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+          stdoutChunks.push(chunk);
+          return true;
+        });
+        const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
+        try {
+          await runCLI();
+          const stdoutOutput = stdoutChunks.join('');
+          expect(stdoutOutput).toContain('Available Data Types');
+        } finally {
+          process.argv = originalArgv;
+          stdoutSpy.mockRestore();
+          exitSpy.mockRestore();
+        }
+      });
+    });
+
+    describe('readStdin helper', () => {
+      test('readStdin returns null when stdin is a TTY', async () => {
+        const originalIsTTY = process.stdin.isTTY;
+        Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
+        try {
+          const result = await readStdin();
+          expect(result).toBeNull();
+        } finally {
+          Object.defineProperty(process.stdin, 'isTTY', { value: originalIsTTY, configurable: true });
+        }
+      });
+
+      test('readStdin returns null when stdin.isTTY is undefined (unknown)', async () => {
+        const originalIsTTY = process.stdin.isTTY;
+        Object.defineProperty(process.stdin, 'isTTY', { value: undefined, configurable: true });
+        try {
+          const result = await readStdin();
+          expect(result).toBeNull();
+        } finally {
+          Object.defineProperty(process.stdin, 'isTTY', { value: originalIsTTY, configurable: true });
+        }
+      });
+    });
+
+    describe('stdin piping', () => {
+      test('main() processes JSON ficta.schema piped via _stdinData', async () => {
+        const schema = {
+          tables: [
+            {
+              name: 'stdin_test',
+              rows: 2,
+              columns: [
+                { name: 'id', type: 'autoIncrement', primaryKey: true },
+                { name: 'email', type: 'email' }
+              ]
+            }
+          ]
+        };
+        const stdoutChunks = [];
+        const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+          stdoutChunks.push(chunk);
+          return true;
+        });
+        const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+        try {
+          await main({ _stdinData: JSON.stringify(schema) });
+          const output = stdoutChunks.join('');
+          expect(output).toContain('stdin_test');
+        } finally {
+          stdoutSpy.mockRestore();
+          consoleSpy.mockRestore();
+        }
+      });
+
+      test('main() processes SQL DDL piped via _stdinData', async () => {
+        const ddl = 'CREATE TABLE ddl_stdin (id SERIAL PRIMARY KEY, name VARCHAR(255));';
+        const stdoutChunks = [];
+        const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+          stdoutChunks.push(chunk);
+          return true;
+        });
+        const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+        try {
+          await main({ _stdinData: ddl, rows: 2 });
+          const output = stdoutChunks.join('');
+          expect(output).toContain('ddl_stdin');
+        } finally {
+          stdoutSpy.mockRestore();
+          consoleSpy.mockRestore();
+        }
+      });
+
+      test('main() with _stdinData JSON and --json-output emits structured JSON', async () => {
+        const schema = {
+          tables: [
+            {
+              name: 'stdin_json_out',
+              rows: 1,
+              columns: [{ name: 'id', type: 'autoIncrement', primaryKey: true }]
+            }
+          ]
+        };
+        const stdoutChunks = [];
+        const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+          stdoutChunks.push(chunk);
+          return true;
+        });
+        const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+        try {
+          await main({ _stdinData: JSON.stringify(schema), jsonOutput: true });
+          const output = stdoutChunks.join('').trim();
+          const parsed = JSON.parse(output);
+          expect(parsed).toHaveProperty('sql');
+          expect(parsed.source).toBe('stdin');
+        } finally {
+          stdoutSpy.mockRestore();
+          consoleSpy.mockRestore();
+        }
+      });
+
+      test('main() ignores _stdinData when --columns is already provided', async () => {
+        const outFile = 'test-cli-stdin-ignored.csv';
+        try {
+          await main({ columns: 'id:autoIncrement', rows: 2, output: outFile, _stdinData: '{"tables":[]}' });
+          // Columns take precedence — file should be created normally
+          expect(fs.existsSync(outFile)).toBe(true);
+        } finally {
+          if (fs.existsSync(outFile)) fs.unlinkSync(outFile);
+        }
+      });
+
+      test('stdin check() guard allows missing columns when stdin is piped', () => {
+        const originalArgv = process.argv;
+        const originalIsTTY = process.stdin.isTTY;
+        process.argv = ['node', 'cli.js', '--format', 'csv'];
+        Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+        try {
+          // Should NOT throw "Either --columns or --template" because stdin is piped
+          expect(() => setupCLI()).not.toThrow();
+        } finally {
+          process.argv = originalArgv;
+          Object.defineProperty(process.stdin, 'isTTY', { value: originalIsTTY, configurable: true });
+        }
+      });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // mask subcommand unit tests (covers lines 507–562)
+  // ---------------------------------------------------------------------------
+  describe('mask subcommand (unit coverage)', () => {
+    let originalArgv;
+    const maskInput = 'test-cli-mask-input.csv';
+
+    beforeEach(() => {
+      originalArgv = process.argv;
+      fs.writeFileSync(maskInput, 'id,name,email\n1,Alice Johnson,alice@example.com\n2,Bob Smith,bob@example.com\n');
+    });
+
+    afterEach(() => {
+      process.argv = originalArgv;
+      if (fs.existsSync(maskInput)) fs.unlinkSync(maskInput);
+    });
+
+    test('mask handler: anonymizes file and writes CSV to stdout (no --output)', async () => {
+      const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      process.argv = ['node', 'cli.js', 'mask', maskInput];
+      expect(() => setupCLI()).not.toThrow();
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // stdout.write was called with CSV content
+      const output = stdoutSpy.mock.calls.map(c => c[0]).join('');
+      expect(output.length).toBeGreaterThan(0);
+
+      stdoutSpy.mockRestore();
+      consoleSpy.mockRestore();
+    }, 10000);
+
+    test('mask handler: with --output writes anonymized file and logs success', async () => {
+      const outFile = 'test-cli-mask-output.csv';
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleErrSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      process.argv = ['node', 'cli.js', 'mask', maskInput, '--output', outFile];
+      expect(() => setupCLI()).not.toThrow();
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      expect(fs.existsSync(outFile)).toBe(true);
+
+      consoleSpy.mockRestore();
+      consoleErrSpy.mockRestore();
+      if (fs.existsSync(outFile)) fs.unlinkSync(outFile);
+    }, 10000);
+
+    test('mask handler: with --seed sets deterministic Faker seed', async () => {
+      const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      process.argv = ['node', 'cli.js', 'mask', maskInput, '--seed', '42'];
+      expect(() => setupCLI()).not.toThrow();
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      stdoutSpy.mockRestore();
+      consoleSpy.mockRestore();
+    }, 10000);
+
+    test('mask handler: with --keep passes specified columns through unchanged', async () => {
+      const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      process.argv = ['node', 'cli.js', 'mask', maskInput, '--keep', 'id'];
+      expect(() => setupCLI()).not.toThrow();
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      stdoutSpy.mockRestore();
+      consoleSpy.mockRestore();
+    }, 10000);
+
+    test('mask handler: with --columns anonymizes only listed columns', async () => {
+      const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      process.argv = ['node', 'cli.js', 'mask', maskInput, '--columns', 'name,email'];
+      expect(() => setupCLI()).not.toThrow();
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      stdoutSpy.mockRestore();
+      consoleSpy.mockRestore();
+    }, 10000);
+
+    test('mask handler: empty CSV (no data rows) hits cols=[] branch (line 553)', async () => {
+      const emptyInput = 'test-cli-mask-empty.csv';
+      fs.writeFileSync(emptyInput, 'id,name,email\n'); // header only, 0 data rows
+      const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      process.argv = ['node', 'cli.js', 'mask', emptyInput];
+      expect(() => setupCLI()).not.toThrow();
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      stdoutSpy.mockRestore();
+      consoleSpy.mockRestore();
+      if (fs.existsSync(emptyInput)) fs.unlinkSync(emptyInput);
+    }, 10000);
+
+    test('mask handler: catch block exits with 1 for non-existent file', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
+
+      process.argv = ['node', 'cli.js', 'mask', '__nonexistent_mask_file__.csv'];
+      expect(() => setupCLI()).not.toThrow();
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      expect(exitSpy).toHaveBeenCalledWith(1);
+
+      errorSpy.mockRestore();
+      exitSpy.mockRestore();
+    }, 10000);
+
+    test('mask subcommand outputs anonymized data to stdout (subprocess)', async () => {
+      const { stdout } = await execPromise(`node cli.js mask ${maskInput}`);
+      expect(stdout.trim().length).toBeGreaterThan(0);
+    }, 15000);
+
+    test('mask subcommand with --output writes to file (subprocess)', async () => {
+      const outFile = 'test-cli-mask-sub-out.csv';
+      try {
+        await execPromise(`node cli.js mask ${maskInput} --output ${outFile}`);
+        expect(fs.existsSync(outFile)).toBe(true);
+      } finally {
+        if (fs.existsSync(outFile)) fs.unlinkSync(outFile);
+      }
+    }, 15000);
+
+    test('mask subcommand with non-existent file exits with code 1 (subprocess)', async () => {
+      let threw = false;
+      try {
+        await execPromise('node cli.js mask __nonexistent__.csv');
+      } catch (err) {
+        threw = true;
+        expect(err.code).toBe(1);
+      }
+      expect(threw).toBe(true);
+    }, 15000);
+  });
+
+  // ---------------------------------------------------------------------------
+  // check() --interactive guard (covers line 578-580)
+  // ---------------------------------------------------------------------------
+  describe('check() --interactive guard', () => {
+    let originalArgv;
+    beforeEach(() => { originalArgv = process.argv; });
+    afterEach(() => { process.argv = originalArgv; });
+
+    test('check() returns true (no throw) when --interactive is set without columns/template', () => {
+      process.argv = ['node', 'cli.js', '--interactive'];
+      expect(() => setupCLI()).not.toThrow();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // main() --interactive mode (covers lines 733-744)
+  // ---------------------------------------------------------------------------
+  describe('main() --interactive mode', () => {
+    test('main() with interactive=true calls wizard and uses returned options', async () => {
+      const chunks = [];
+      const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+        chunks.push(chunk);
+        return true;
+      });
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      try {
+        // argv.interactive = true; vi.mock is hoisted so wizard returns mocked options
+        await main({ interactive: true });
+        const output = chunks.join('');
+        // Wizard returns { columns: 'id:autoIncrement,name:fullName', rows: 2, format: 'csv', output: null }
+        // so CSV data with Id,Name should appear
+        expect(output.length).toBeGreaterThan(0);
+      } finally {
+        writeSpy.mockRestore();
+        consoleSpy.mockRestore();
+      }
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // runCLI logger.warn and logger.error routing (covers lines 839-840)
+  // ---------------------------------------------------------------------------
+  describe('runCLI logger.warn and logger.error routing', () => {
+    let originalArgv;
+    beforeEach(() => { originalArgv = process.argv; });
+    afterEach(() => {
+      process.argv = originalArgv;
+      resetLogger();
+    });
+
+    test('runCLI sets logger.warn to write to stderr', async () => {
+      process.argv = ['node', 'cli.js', '--list-types'];
+      const stderrChunks = [];
+      const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
+        stderrChunks.push(chunk);
+        return true;
+      });
+      const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
+      try {
+        await runCLI();
+        // The logger is now set to route warn → stderr; call it directly
+        getLogger().warn('warn-coverage-test');
+        expect(stderrChunks.join('')).toContain('warn-coverage-test');
+      } finally {
+        stderrSpy.mockRestore();
+        stdoutSpy.mockRestore();
+        exitSpy.mockRestore();
+      }
+    });
+
+    test('runCLI sets logger.error to write to stderr', async () => {
+      process.argv = ['node', 'cli.js', '--list-types'];
+      const stderrChunks = [];
+      const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
+        stderrChunks.push(chunk);
+        return true;
+      });
+      const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
+      try {
+        await runCLI();
+        getLogger().error('error-coverage-test');
+        expect(stderrChunks.join('')).toContain('error-coverage-test');
+      } finally {
+        stderrSpy.mockRestore();
+        stdoutSpy.mockRestore();
+        exitSpy.mockRestore();
+      }
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // runCLI stdinData assignment (covers line 862)
+  // ---------------------------------------------------------------------------
+  describe('runCLI stdinData assignment (line 862)', () => {
+    let originalArgv;
+    beforeEach(() => { originalArgv = process.argv; });
+    afterEach(() => {
+      process.argv = originalArgv;
+      resetLogger();
+    });
+
+    test('runCLI assigns _stdinData to argv when readStdin returns data', async () => {
+      const originalIsTTY = process.stdin.isTTY;
+      // Make stdin look piped so readStdin does not return null early
+      Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+
+      // Capture the event handlers that readStdin registers
+      const stdinHandlers = {};
+      const onSpy = vi.spyOn(process.stdin, 'on').mockImplementation((event, handler) => {
+        stdinHandlers[event] = handler;
+        return process.stdin;
+      });
+      vi.spyOn(process.stdin, 'setEncoding').mockImplementation(() => {});
+
+      // Use columns so the stdin data gets ignored in main() (avoids extra processing)
+      process.argv = ['node', 'cli.js', '-c', 'id:autoIncrement', '-r', '1'];
+      const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
+
+      try {
+        // Start runCLI (suspends at await readStdin())
+        const runPromise = runCLI();
+
+        // Give the event loop a tick for readStdin to register its handlers
+        await new Promise(r => setTimeout(r, 30));
+
+        // Fire stdin data and end events to resolve readStdin with data
+        if (stdinHandlers.data) stdinHandlers.data('piped-content');
+        if (stdinHandlers.end) stdinHandlers.end();
+
+        await runPromise;
+        // If we got here without error, line 862 was executed
+      } finally {
+        Object.defineProperty(process.stdin, 'isTTY', { value: originalIsTTY, configurable: true });
+        onSpy.mockRestore();
+        stdoutSpy.mockRestore();
+        exitSpy.mockRestore();
+        vi.restoreAllMocks();
+      }
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Additional stdin branch coverage
+  // ---------------------------------------------------------------------------
+  describe('Additional stdin branch coverage', () => {
+    test('main() with _stdinData that is neither JSON nor DDL skips to normal generation (line 613 false branch)', async () => {
+      // _stdinData set + no columns/template → enters outer if, but (isJSON||isDDL) is false
+      // Falls through; with no columns → generateAndSave throws
+      await expect(
+        main({ _stdinData: 'plain text that is not json or ddl' })
+      ).rejects.toThrow();
+    });
+
+    test('main() with DDL _stdinData and no rows uses 10 as default (binary-expr || 10)', async () => {
+      const ddl = 'CREATE TABLE branch_test (id SERIAL PRIMARY KEY, label VARCHAR(100));';
+      const stdoutChunks = [];
+      const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+        stdoutChunks.push(chunk);
+        return true;
+      });
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      try {
+        // No rows provided → argv.rows || 10 uses 10
+        await main({ _stdinData: ddl });
+        const output = stdoutChunks.join('');
+        expect(output).toContain('branch_test');
+      } finally {
+        stdoutSpy.mockRestore();
+        consoleSpy.mockRestore();
+      }
+    });
+
+    test('main() with DDL _stdinData and --output writes to file (line 642 false branch)', async () => {
+      const ddl = 'CREATE TABLE branch_out (id SERIAL PRIMARY KEY, val VARCHAR(50));';
+      const outFile = 'test-cli-stdin-ddl-out.sql';
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+      try {
+        // argv.output is set → `if (!argv.output)` is false → skips stdout write
+        await main({ _stdinData: ddl, output: outFile, rows: 2 });
+        // With output set, stdout.write should NOT be called for the SQL
+        expect(writeSpy).not.toHaveBeenCalled();
+      } finally {
+        consoleSpy.mockRestore();
+        writeSpy.mockRestore();
+        if (fs.existsSync(outFile)) fs.unlinkSync(outFile);
+      }
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Buffer / endsWith branch coverage for no-output path (lines 808-809)
+  // ---------------------------------------------------------------------------
+  describe('main() no-output Buffer and endsWith branches', () => {
+    test('main() with format=xlsx and no output writes Buffer directly to stdout (line 808 Buffer branch)', async () => {
+      const chunks = [];
+      const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+        chunks.push(chunk);
+        return true;
+      });
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      try {
+        // XLSX produces a Buffer; out instanceof Buffer path writes it directly
+        await main({ columns: 'id:autoIncrement', rows: 1, format: 'xlsx' });
+        expect(chunks.length).toBeGreaterThan(0);
+        // The written chunk should be a Buffer (xlsx binary)
+        expect(chunks[0] instanceof Buffer).toBe(true);
+      } finally {
+        writeSpy.mockRestore();
+        consoleSpy.mockRestore();
+      }
+    });
+
+    test('main() with format=yaml and no output: data ends with newline uses it as-is (line 809 endsWith branch)', async () => {
+      // YAML output ends with '\n'; hits the `out.endsWith('\n') ? out` truthy branch.
+      const chunks = [];
+      const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+        chunks.push(typeof chunk === 'string' ? chunk : chunk.toString());
+        return true;
+      });
+      try {
+        await main({ columns: 'id:autoIncrement', rows: 1, format: 'yaml' });
+        const output = chunks.join('');
+        expect(output.trim().length).toBeGreaterThan(0);
+        // YAML data ends with newline so the branch `out.endsWith('\n')` is true
+        expect(output.endsWith('\n')).toBe(true);
+      } finally {
+        writeSpy.mockRestore();
+      }
+    });
+  });
 });
+

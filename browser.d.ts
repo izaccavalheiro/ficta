@@ -12,10 +12,17 @@
 // Node-only symbols that are not available in the browser bundle.
 export type {
   ColumnDefinition,
+  SchemaColumn,
   GenerateResult,
   ColumnOptions,
   TableBuilderInterface,
   SchemaBuilderInterface,
+  SQLSchemaOptions,
+  TableDef,
+  TableDefForeignKey,
+  GenerateFromSchemaOptions,
+  BuildInsertOptions,
+  InferResult,
 } from './index';
 
 export {
@@ -23,6 +30,8 @@ export {
   seedFaker,
   setLocale,
   parseColumns,
+  columnStringToSchema,
+  schemaToColumnString,
   generateData,
   listTypes,
   listTemplates,
@@ -36,10 +45,18 @@ export {
   toCSV,
   toJSON,
   toTSV,
+  toSQLLegacy,
   detectFormat,
   getFileExtension,
   table,
   schema,
+  // DDL / schema-generator universals
+  parseDDL,
+  orderByDependencies,
+  generateFromSchema,
+  buildInsertStatements,
+  // Schema inference
+  inferSchema,
 } from './index';
 
 // ---------------------------------------------------------------------------
@@ -58,6 +75,28 @@ export function toXML(
   rootElement?: string,
   recordElement?: string,
 ): Promise<string>;
+
+/**
+ * Convert records to SQL INSERT statements (browser synchronous implementation).
+ * @param records - Array of generated row objects
+ * @param columns - Column definitions
+ * @param tableNameOrOptions - Target table name string or SQL schema options
+ */
+export function toSQL(
+  records: Record<string, unknown>[],
+  columns: import('./index').ColumnDefinition[],
+  tableNameOrOptions?: string | import('./index').SQLSchemaOptions,
+): string;
+
+/**
+ * Convert records to a YAML string (browser synchronous implementation).
+ */
+export function toYAML(records: Record<string, unknown>[]): string;
+
+/**
+ * Convert records to a TOML string (browser synchronous implementation).
+ */
+export function toTOML(records: Record<string, unknown>[]): string;
 
 // ---------------------------------------------------------------------------
 // Browser download helpers

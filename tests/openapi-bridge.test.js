@@ -1,7 +1,6 @@
 /**
  * Tests for src/openapi-bridge.js — OpenAPI → Ficta Schema Bridge
  */
-import { describe, expect, test } from '@jest/globals';
 import { fromOpenAPISchema, openAPIToFictaSchema } from '../src/openapi-bridge.js';
 
 // Minimal OpenAPI 3.x fixture

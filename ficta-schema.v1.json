@@ -9,7 +9,7 @@
   "properties": {
     "$schema": {
       "type": "string",
-      "description": "Optional pointer to this schema for IDE autocompletion."
+      "description": "Optional pointer to this schema for IDE autocompletion. Use: \"$schema\": \"node_modules/ficta/ficta-schema.v1.json\" or \"$schema\": \"https://raw.githubusercontent.com/izaccavalheiro/ficta/main/ficta-schema.v1.json\""
     },
     "tables": {
       "type": "array",
@@ -111,6 +111,80 @@
               "description": "Referenced column name."
             }
           }
+        },
+        "depends": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["column"],
+              "additionalProperties": false,
+              "description": "Cross-column dependency: value is picked based on another column's value.",
+              "properties": {
+                "column": {
+                  "type": "string",
+                  "description": "Name of the column this depends on."
+                },
+                "mapping": {
+                  "type": "object",
+                  "description": "Map of parent column values to arrays of valid child values.",
+                  "additionalProperties": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  }
+                }
+              }
+            },
+            {
+              "type": "boolean",
+              "enum": [false],
+              "description": "Set to false to disable auto-wired geographic dependency."
+            }
+          ]
+        },
+        "distribution": {
+          "type": "object",
+          "description": "Statistical distribution applied during value generation.",
+          "required": ["type"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["uniform", "normal", "exponential", "zipf"],
+              "description": "Distribution type."
+            },
+            "min": {
+              "type": "number",
+              "description": "Uniform: lower bound."
+            },
+            "max": {
+              "type": "number",
+              "description": "Uniform: upper bound."
+            },
+            "mean": {
+              "type": "number",
+              "description": "Normal: mean (μ)."
+            },
+            "stddev": {
+              "type": "number",
+              "description": "Normal: standard deviation (σ). Must be > 0."
+            },
+            "lambda": {
+              "type": "number",
+              "description": "Exponential: rate parameter (λ). Must be > 0."
+            },
+            "n": {
+              "type": "integer",
+              "description": "Zipf: number of distinct items. Must be ≥ 1."
+            },
+            "s": {
+              "type": "number",
+              "description": "Zipf: exponent parameter. Must be > 0. Higher = more skewed."
+            }
+          },
+          "additionalProperties": false
+        },
+        "constraint": {
+          "type": "string",
+          "description": "Additional constraint expression (reserved for future use)."
         }
       }
     }

@@ -4,22 +4,33 @@ import { Readable } from 'stream';
 import * as core from './core.js';
 import * as formatters from './formatters.js';
 import { generateFromSchema } from './schema-generator.js';
-import { parseDDL as parseDDLStatic, orderByDependencies as orderByDepsStatic } from './ddl-parser.js';
-import { generateDDL as genDDLStatic, generateInserts as genInsertsStatic, generateUpserts as genUpsertStatic } from './sql-schema.js';
 import { inferSchema } from './infer.js';
 import { openAPIToFictaSchema } from './openapi-bridge.js';
 import { graphQLToFictaSchema } from './graphql-bridge.js';
+import { getLogger } from './logger.js';
+import { anonymizeRecords } from './anonymizer.js';
 
 // Re-export schema inference, openapi-bridge and graphql-bridge for consumers
 export { inferSchema } from './infer.js';
 export { fromOpenAPISchema, openAPIToFictaSchema } from './openapi-bridge.js';
 export { fromGraphQLSDL, graphQLToFictaSchema } from './graphql-bridge.js';
 
+// Re-export logger utilities so consumers can configure logging
+export { setLogger, getLogger, resetLogger } from './logger.js';
+
 // Initialize faker for the core module
 core.setFaker(faker);
 
 // Re-export core functionality (including seedFaker)
 export * from './core.js';
+
+// Re-export dependency utilities
+export { resolveDependencyOrder, resolveDependentValue, autoWireGeographicDependencies } from './dependencies.js';
+export { COUNTRY_STATE_MAP, COUNTRY_CITY_MAP, BUILT_IN_DEPENDENCY_MAPS } from './dependency-maps.js';
+
+// Re-export factory builder
+export { createFactory } from './factory.js';
+export { sampleUniform, sampleNormal, sampleExponential, sampleZipf, sampleFromDistribution } from './distributions.js';
 
 // Re-export formatters
 export * from './formatters.js';
@@ -55,9 +66,9 @@ export async function generateAndSave(options) {
   }
   format = format || 'csv';
   
-  // Generate default output filename if not specified
+  // Generate default output filename if not specified (skip when noFile=true)
   let output = options.output;
-  if (!output) {
+  if (!output && !options.noFile) {
     const ext = formatters.getFileExtension(format);
     output = `test-data.${ext}`;
   }
@@ -84,21 +95,30 @@ export async function generateAndSave(options) {
     formatOptions
   );
   
-  // Write to file
-  await writeFile(formattedData, output);
-  
-  console.log(`✓ Generated ${output} with ${result.rowCount} rows and ${result.columnCount} columns (${format.toUpperCase()} format)`);
-  
-  if (options.preview) {
-    console.log('\nPreview (first 3 rows):');
-    console.table(result.records.slice(0, 3));
+  let message;
+  if (!options.noFile) {
+    // Write to file
+    await writeFile(formattedData, output);
+    message = `✓ Generated ${output} with ${result.rowCount} rows and ${result.columnCount} columns (${format.toUpperCase()} format)`;
+    // Status messages go to info() (stderr in CLI) to keep stdout clean for data
+    getLogger().info(message);
+  } else {
+    message = `Generated ${result.rowCount} rows (${format.toUpperCase()} format)`;
+    // Still emit status to stderr so users know generation succeeded
+    getLogger().info(message);
   }
-  
+
+  if (options.preview) {
+    getLogger().log('\nPreview (first 3 rows):');
+    getLogger().log(result.records.slice(0, 3).map(r => JSON.stringify(r)).join('\n'));
+  }
+
   return {
     ...result,
     format,
-    output,
-    data: formattedData
+    output: output || '<stdout>',
+    data: formattedData,
+    message,
   };
 }
 
@@ -138,7 +158,7 @@ export function listTypes() {
   lines.push('  - pattern:user+{COUNTER}@example.com  Email pattern with auto-increment');
   
   const output = lines.join('\n');
-  console.log(output);
+  getLogger().log(output);
   return output;
 }
 
@@ -156,7 +176,7 @@ export function listTemplates() {
   }
   
   const output = lines.join('\n');
-  console.log(output);
+  getLogger().log(output);
   return output;
 }
 
@@ -214,11 +234,31 @@ export async function generateFromDDL({
 
   if (output) {
     await fs.promises.writeFile(output, sql, 'utf-8');
-    console.log(`✓ Generated ${output} from schema ${schemaFile} (${outputMode}, ${dialect})`);
+    getLogger().info(`✓ Generated ${output} from schema ${schemaFile} (${outputMode}, ${dialect})`);
   }
 
   return sql;
 }
+
+/**
+ * Ficta type → SQL type fallback map used when no explicit sqlType is provided.
+ * @private
+ */
+const FICTA_TO_SQL_TYPE = {
+  autoIncrement: 'SERIAL',
+  integer: 'INTEGER',
+  int: 'INTEGER',
+  number: 'INTEGER',
+  float: 'FLOAT',
+  boolean: 'BOOLEAN',
+  uuid: 'UUID',
+  timestamp: 'TIMESTAMP',
+  pastDate: 'DATE',
+  futureDate: 'DATE',
+  recentDate: 'DATE',
+  date: 'DATE',
+  json: 'TEXT',
+};
 
 /**
  * Read a ficta.schema.json file and generate SQL test data.
@@ -274,56 +314,41 @@ export async function generateFromSchemaFile({ schemaFile, rows, outputMode = 'd
     tableRows[tbl.name] = rows ?? tbl.rows ?? defaultRows;
   }
 
-  // Build a synthetic DDL string from the JSON table definitions
-  const ddlLines = [];
-  for (const tbl of schema.tables) {
+  // Convert JSON schema tables directly to TableDef objects for generateFromSchema
+  const tableDefs = schema.tables.map(tbl => {
     if (!tbl.name || !Array.isArray(tbl.columns)) {
       throw new Error(`generateFromSchemaFile: table "${tbl.name || '?'}" must have a name and columns array`);
     }
-    const colDefs = tbl.columns.map(col => {
-      let def = `  ${col.name} `;
-      // Map ficta type to a sensible SQL type
-      const typeMap = {
-        autoIncrement: 'SERIAL',
-        integer: 'INTEGER',
-        int: 'INTEGER',
-        number: 'INTEGER',
-        float: 'FLOAT',
-        boolean: 'BOOLEAN',
-        uuid: 'UUID',
-        timestamp: 'TIMESTAMP',
-        pastDate: 'DATE',
-        futureDate: 'DATE',
-        recentDate: 'DATE',
-        date: 'DATE',
-        json: 'TEXT',
+    const primaryKey = [];
+    const foreignKeys = [];
+    const columns = tbl.columns.map(col => {
+      if (col.primaryKey) primaryKey.push(col.name);
+      if (col.references) {
+        foreignKeys.push({
+          column: col.name,
+          refTable: col.references.table,
+          refColumn: col.references.column,
+        });
+      }
+      return {
+        name: col.name,
+        fictaType: col.type,
+        sqlType: col.sqlType || FICTA_TO_SQL_TYPE[col.type] || 'VARCHAR(255)',
+        nullable: col.nullable !== false,
+        autoIncrement: col.type === 'autoIncrement',
+        defaultValue: col.default != null ? col.default : null,
+        enumValues: null,
       };
-      const sqlType = col.sqlType || typeMap[col.type] || 'VARCHAR(255)';
-      def += sqlType;
-      if (col.primaryKey) def += ' PRIMARY KEY';
-      if (col.nullable === false || col.notNull) def += ' NOT NULL';
-      if (col.default !== undefined) def += ` DEFAULT ${col.default}`;
-      if (col.references) def += ` REFERENCES ${col.references.table}(${col.references.column})`;
-      return def;
     });
-    ddlLines.push(`CREATE TABLE ${tbl.name} (\n${colDefs.join(',\n')}\n);`);
-  }
-  const ddl = ddlLines.join('\n\n');
+    return { tableName: tbl.name, columns, primaryKey, foreignKeys };
+  });
 
-  // Use generateFromSchema with per-table row map (no duplicated orchestration)
-  const sql = generateFromSchema({ ddl, rows: tableRows, outputMode, dialect });
-
-  // (Keep static imports tickled for coverage of parseDDLStatic / orderByDepsStatic—
-  //  they are used by generateFromSchema internally via schema-generator.js)
-  void parseDDLStatic;
-  void orderByDepsStatic;
-  void genDDLStatic;
-  void genInsertsStatic;
-  void genUpsertStatic;
+  // Pass pre-parsed TableDef objects — no synthetic DDL construction needed
+  const sql = generateFromSchema({ tables: tableDefs, rows: tableRows, outputMode, dialect });
 
   if (output) {
     await fs.promises.writeFile(output, sql, 'utf-8');
-    console.log(`✓ Generated ${output} from schema file ${schemaFile} (${outputMode}, ${dialect})`);
+    getLogger().info(`✓ Generated ${output} from schema file ${schemaFile} (${outputMode}, ${dialect})`);
   }
 
   return sql;
@@ -514,7 +539,7 @@ export async function fromOpenAPIFile(filePath, options = {}) {
 export async function fromGraphQLFile(filePath, options = {}) {
   const fs = await import('fs');
   const raw = await fs.promises.readFile(filePath, 'utf-8');
-  return graphQLToFictaSchema(raw, options);
+  return await graphQLToFictaSchema(raw, options);
 }
 
 /**
@@ -596,4 +621,61 @@ export function watchAndGenerate(options) {
   };
 
   return watcherRef;
+}
+
+// Re-export anonymizeRecords for universal (browser) use
+export { anonymizeRecords, categorizeColumns, buildIdMap, computeStats } from './anonymizer.js';
+
+/**
+ * Anonymize a CSV or JSON file by replacing PII columns with Faker-generated data.
+ *
+ * @param {string} inputPath - Path to the input file (.csv or .json)
+ * @param {string} outputPath - Path for the anonymized output file
+ * @param {Object} [options={}]
+ * @param {string[]} [options.keepColumns=[]] - Column names to pass through unchanged
+ * @param {string[]} [options.onlyColumns] - If set, only anonymize these columns
+ * @param {boolean} [options.preserveDistributions=true] - Preserve numeric distributions
+ * @param {Map<string,string>} [options.idMap] - Existing ID map for cross-file consistency
+ * @returns {Promise<{ records: Object[], idMap: Map<string,string> }>}
+ */
+export async function anonymizeFile(inputPath, outputPath, options = {}) {
+  const fs = await import('fs');
+  const path = await import('path');
+  const ext = path.extname(inputPath).toLowerCase();
+
+  let records;
+  let columns;
+
+  if (ext === '.json') {
+    const raw = JSON.parse(await fs.promises.readFile(inputPath, 'utf-8'));
+    records = Array.isArray(raw) ? raw : (raw.records || []);
+    columns = records.length > 0
+      ? Object.keys(records[0]).map(name => ({ name, type: '' }))
+      : [];
+  } else {
+    // Default: treat as CSV
+    const { parse: csvParse } = await import('csv-parse/sync');
+    const content = await fs.promises.readFile(inputPath, 'utf-8');
+    records = csvParse(content, { columns: true, skip_empty_lines: true });
+    columns = records.length > 0
+      ? Object.keys(records[0]).map(name => ({ name, type: '' }))
+      : [];
+  }
+
+  const { records: anonymized, idMap } = anonymizeRecords({ records, columns, options });
+
+  if (outputPath) {
+    const outExt = path.extname(outputPath).toLowerCase();
+    let content;
+    if (outExt === '.json') {
+      content = JSON.stringify(anonymized, null, 2);
+    } else {
+      const { toCSV } = await import('./formatters.shared.js');
+      content = toCSV(anonymized, columns);
+    }
+    await fs.promises.writeFile(outputPath, content, 'utf-8');
+    getLogger().info(`✓ Anonymized ${anonymized.length} records → ${outputPath}`);
+  }
+
+  return { records: anonymized, idMap };
 }

@@ -3,6 +3,9 @@
  * Platform-portable: Works in browsers and Node.js
  */
 
+import { getLogger } from './logger.js';
+import { orderByDependencies } from './ddl-parser.js';
+
 /**
  * SQL type mapping from Faker types to SQL types
  */
@@ -386,65 +389,6 @@ export function generateUpserts(tableName, records, columns, options = {}) {
 }
 
 /**
- * Resolve table dependencies for correct INSERT order
- * @param {Array} tables - Array of table schemas
- * @returns {Array} Ordered array of table names
- */
-export function resolveTableDependencies(tables) {
-  const graph = new Map();
-  const inDegree = new Map();
-  
-  // Build dependency graph
-  tables.forEach(table => {
-    graph.set(table.table, []);
-    inDegree.set(table.table, 0);
-  });
-  
-  tables.forEach(table => {
-    const fkColumns = table.columns.filter(col => col.references);
-    fkColumns.forEach(col => {
-      const refTable = col.references.table;
-      if (refTable !== table.table) { // Avoid self-references
-        if (graph.has(refTable)) {
-          graph.get(refTable).push(table.table);
-          inDegree.set(table.table, inDegree.get(table.table) + 1);
-        }
-      }
-    });
-  });
-  
-  // Topological sort (Kahn's algorithm)
-  const queue = [];
-  const result = [];
-  
-  inDegree.forEach((degree, table) => {
-    if (degree === 0) {
-      queue.push(table);
-    }
-  });
-  
-  while (queue.length > 0) {
-    const current = queue.shift();
-    result.push(current);
-    
-    const neighbors = graph.get(current);
-    neighbors.forEach(neighbor => {
-      inDegree.set(neighbor, inDegree.get(neighbor) - 1);
-      if (inDegree.get(neighbor) === 0) {
-        queue.push(neighbor);
-      }
-    });
-  }
-  
-  // Check for cycles
-  if (result.length !== tables.length) {
-    throw new Error('Circular foreign key dependencies detected');
-  }
-  
-  return result;
-}
-
-/**
  * Generate complete SQL schema with DDL and INSERT statements
  * @param {Object} schema - Schema definition
  * @returns {string} Complete SQL script
@@ -476,12 +420,17 @@ export function generateSchema(schema) {
   let orderedTables = schema.tables;
   if (schema.insertOrder !== 'manual') {
     try {
-      const tableOrder = resolveTableDependencies(schema.tables);
-      orderedTables = tableOrder.map(name => 
-        schema.tables.find(t => t.table === name)
-      );
+      // Adapt `schema.tables` shape to the TableDef shape expected by orderByDependencies
+      const tableDefs = schema.tables.map(t => ({
+        tableName: t.table,
+        foreignKeys: (t.columns || [])
+          .filter(c => c.references)
+          .map(c => ({ column: c.name, refTable: c.references.table, refColumn: c.references.column || 'id' }))
+      }));
+      const orderedDefs = orderByDependencies(tableDefs);
+      orderedTables = orderedDefs.map(td => schema.tables.find(t => t.table === td.tableName));
     } catch (err) {
-      console.warn('Could not resolve dependencies:', err.message);
+      getLogger().warn('Could not resolve dependencies:', err.message);
       // Fall back to original order
     }
   }
